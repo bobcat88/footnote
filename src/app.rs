@@ -222,6 +222,26 @@ fn is_link(p: &Path) -> bool {
         m.file_type().is_symlink()
     }
 }
+/// Private scratch directory for helper input/output: `TMPDIR`, else a per-user
+/// folder (`%LOCALAPPDATA%` on Windows, `~/.cache` elsewhere). Created on demand,
+/// never behind a link.
+pub(crate) fn scratch_dir() -> Result<std::path::PathBuf> {
+    let scratch = std::env::var_os("TMPDIR")
+        .map(std::path::PathBuf::from)
+        .or_else(|| {
+            std::env::var_os("LOCALAPPDATA")
+                .map(|p| std::path::PathBuf::from(p).join("BorgKnowledge/scratch"))
+        })
+        .or_else(|| {
+            std::env::var_os("HOME")
+                .map(|p| std::path::PathBuf::from(p).join(".cache/BorgKnowledge/scratch"))
+        })
+        .ok_or_else(|| anyhow::anyhow!("configure TMPDIR for helper scratch space"))?;
+    no_links(&scratch)?;
+    std::fs::create_dir_all(&scratch)?;
+    Ok(scratch)
+}
+
 pub fn no_links(p: &Path) -> Result<()> {
     let abs = std::path::absolute(p)?;
     if abs.ancestors().any(is_link) {
@@ -498,6 +518,13 @@ pub(crate) fn hit(r: &rusqlite::Row<'_>, full: bool) -> rusqlite::Result<Value> 
     )
 }
 pub(crate) const HIT: &str = "SELECT c.id,s.path,s.sha256,s.revision,s.status,s.extractor,c.heading,c.page,c.line,c.text FROM chunks c JOIN sources s ON s.id=c.source_id";
+/// FTS5 expression matching any of the query's words, each quoted so punctuation and operators in user text stay literal.
+pub(crate) fn match_expr(q: &str) -> String {
+    q.split_whitespace()
+        .map(|s| format!("\"{}\"", s.replace('"', "\"\"")))
+        .collect::<Vec<_>>()
+        .join(" OR ")
+}
 pub(crate) fn search(
     c: &Connection,
     q: &str,
@@ -507,11 +534,10 @@ pub(crate) fn search(
     if q.len() > 512 || q.trim().is_empty() || !(1..=20).contains(&limit) {
         bail!("query must be 1..512 bytes and limit 1..20");
     }
-    let terms: Vec<_> = q
-        .split_whitespace()
-        .map(|s| format!("\"{}\"", s.replace('"', "\"\"")))
-        .collect();
-    let records = crate::records::search(c, &terms.join(" AND "), limit, filters)?;
+    // Any query word may match and BM25 ranks the chunks. Requiring every word returned nothing for natural-language questions
+    // (bench v1: SciFact nDCG@10 0.017 with AND, 0.663 with OR).
+    let expr = match_expr(q);
+    let records = crate::records::search(c, &expr, limit, filters)?;
     if filters.technology.is_some()
         || filters.project.is_some()
         || filters.tested_version.is_some()
@@ -525,9 +551,7 @@ pub(crate) fn search(
     );
     let mut s = c.prepare(&sql)?;
     let results: Vec<Value> = s
-        .query_map(params![terms.join(" AND "), text_limit as i64], |r| {
-            hit(r, false)
-        })?
+        .query_map(params![expr, text_limit as i64], |r| hit(r, false))?
         .collect::<rusqlite::Result<_>>()?;
     Ok(json!({"mode":"lexical_fts5","results":results,"records":records}))
 }
@@ -563,7 +587,11 @@ fn audit_command(action: &AuditAction) -> Result<Value> {
         } => {
             let key = match mac_key.as_deref() {
                 Some(path) => Some(crate::audit::load_key(path)?),
-                None => None,
+                // Default: this machine's managed key, so MACs are checked without a flag.
+                None => match crate::state::key_path() {
+                    Ok(path) if path.is_file() => Some(crate::audit::load_key(&path)?),
+                    _ => None,
+                },
             };
             let (entries, last_hash) = crate::audit::verify(file, key.as_deref())?;
             let head = match expect_last.as_deref() {

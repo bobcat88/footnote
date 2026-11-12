@@ -66,7 +66,7 @@ pub fn load_key(path: &Path) -> Result<Vec<u8>> {
 }
 
 /// HMAC-SHA256 (RFC 2104), so keyed integrity needs no extra dependency.
-fn hmac_sha256(key: &[u8], data: &[u8]) -> String {
+pub(crate) fn hmac_sha256(key: &[u8], data: &[u8]) -> String {
     const BLOCK: usize = 64;
     let mut k = if key.len() > BLOCK {
         Sha256::digest(key).to_vec()

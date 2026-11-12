@@ -34,7 +34,18 @@ fn title_context_is_searchable_within_child_sections() {
         "--allow",
         root.to_str().unwrap(),
     ]);
-    let v = call(&["search", "SQLite checkpoint"]);
-    assert_eq!(v["results"].as_array().unwrap().len(), 1);
-    assert_eq!(v["results"][0]["heading"], "WAL");
+    // Any word may match, so the WAL chunk is returned among the results (BM25 decides the order).
+    let has_wal = |v: &Value| {
+        v["results"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|r| r["heading"] == "WAL")
+    };
+    assert!(has_wal(&call(&["search", "SQLite checkpoint"])));
+    // A natural-language question with filler words used to return nothing (every word had to match).
+    assert!(has_wal(&call(&[
+        "search",
+        "how is the checkpoint latency amortized in practice"
+    ])));
 }

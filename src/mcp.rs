@@ -109,12 +109,12 @@ pub fn session_loop<R: BufRead, W: Write>(
     authenticate: bool,
 ) -> Result<()> {
     if authenticate {
-        let mut first = Vec::new();
-        if reader.read_until(b'\n', &mut first)? == 0 {
-            bail!("connection closed before authentication");
-        }
-        let line = std::str::from_utf8(&first).context("authentication line is not UTF-8")?;
-        verify_token(shared.token.as_deref(), line)?;
+        // Fail closed: a daemon without a token must not serve anyone.
+        let token = shared
+            .token
+            .as_deref()
+            .context("daemon has no token; refusing to serve unauthenticated clients")?;
+        server_handshake(reader, out, token, &crate::state::random_hex(32)?)?;
     }
     let session = crate::audit::session_id();
     let mut buf = Vec::new();
@@ -165,23 +165,91 @@ pub fn session_loop<R: BufRead, W: Write>(
     Ok(())
 }
 
-/// Constant-time token check: a wrong token must reveal no prefix information.
-fn verify_token(expected: Option<&str>, line: &str) -> Result<()> {
-    let Some(expected) = expected else {
-        return Ok(());
-    };
-    let value: Value =
-        serde_json::from_str(line.trim()).context("authentication line must be a JSON object")?;
-    let provided = value
-        .get("borg")
-        .and_then(|borg| borg.get("token"))
-        .and_then(Value::as_str)
-        .unwrap_or_default();
-    if ct_eq(expected.as_bytes(), provided.as_bytes()) {
-        Ok(())
-    } else {
-        bail!("authentication failed")
+/// Longest handshake line accepted before authentication (they are ~150 bytes).
+const MAX_HANDSHAKE_LINE: u64 = 4096;
+
+/// Read one bounded line. Used before the peer is authenticated, so it can never
+/// make the daemon buffer more than `MAX_HANDSHAKE_LINE` bytes.
+fn handshake_line(reader: &mut impl BufRead) -> Result<Value> {
+    let mut buf = Vec::new();
+    let n = (&mut *reader)
+        .take(MAX_HANDSHAKE_LINE)
+        .read_until(b'\n', &mut buf)?;
+    if n == 0 {
+        bail!("connection closed during authentication");
     }
+    if !buf.ends_with(b"\n") {
+        bail!("authentication line is too long or incomplete");
+    }
+    serde_json::from_slice(&buf).context("authentication line must be a JSON object")
+}
+
+fn is_nonce(value: &str) -> bool {
+    value.len() == 64 && value.bytes().all(|b| b.is_ascii_hexdigit())
+}
+
+pub(crate) fn proof(token: &str, side: &str, server_nonce: &str, client_nonce: &str) -> String {
+    crate::audit::hmac_sha256(
+        token.as_bytes(),
+        format!("{side}|{server_nonce}|{client_nonce}").as_bytes(),
+    )
+}
+
+/// Daemon side of the handshake. The server speaks first with a fresh nonce; the
+/// client answers with its own nonce and an HMAC of both under the token; only
+/// then does the server prove, in turn, that it knows the token. The token itself
+/// never crosses the pipe, so a process squatting on the pipe name learns
+/// nothing, and a recorded exchange cannot be replayed against a new nonce.
+pub fn server_handshake<R: BufRead, W: Write>(
+    reader: &mut R,
+    out: &mut W,
+    token: &str,
+    server_nonce: &str,
+) -> Result<()> {
+    emit(out, &json!({"borg": {"hello": {"nonce": server_nonce}}}))?;
+    let reply = handshake_line(reader)?;
+    let auth = &reply["borg"]["auth"];
+    let client_nonce = auth["nonce"].as_str().unwrap_or_default();
+    let provided = auth["proof"].as_str().unwrap_or_default();
+    let expected = proof(token, "c", server_nonce, client_nonce);
+    // Both checks always run, so a malformed nonce is not distinguishable by timing.
+    let valid = is_nonce(client_nonce) & ct_eq(expected.as_bytes(), provided.as_bytes());
+    if !valid {
+        bail!("authentication failed");
+    }
+    emit(
+        out,
+        &json!({"borg": {"ready": {"proof": proof(token, "s", server_nonce, client_nonce)}}}),
+    )
+}
+
+/// Client side: answer the daemon's hello, then insist that the daemon proves it
+/// holds the token before anything is forwarded to it.
+pub fn client_handshake<R: BufRead, W: Write>(
+    reader: &mut R,
+    out: &mut W,
+    token: &str,
+    client_nonce: &str,
+) -> Result<()> {
+    let hello = handshake_line(reader)?;
+    let server_nonce = hello["borg"]["hello"]["nonce"].as_str().unwrap_or_default();
+    if !is_nonce(server_nonce) {
+        bail!("peer did not send a valid hello; not a borg-knowledge daemon");
+    }
+    emit(
+        out,
+        &json!({"borg": {"auth": {
+            "nonce": client_nonce,
+            "proof": proof(token, "c", server_nonce, client_nonce),
+        }}}),
+    )?;
+    let ready = handshake_line(reader)?;
+    let provided = ready["borg"]["ready"]["proof"].as_str().unwrap_or_default();
+    let expected = proof(token, "s", server_nonce, client_nonce);
+    if !ct_eq(expected.as_bytes(), provided.as_bytes()) {
+        bail!("daemon failed to prove it holds the token; refusing to talk to it");
+    }
+    Ok(())
 }
 
 fn ct_eq(a: &[u8], b: &[u8]) -> bool {

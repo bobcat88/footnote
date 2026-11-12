@@ -40,30 +40,84 @@ fn ensure_parent(path: &Path) -> Result<()> {
     if let Some(parent) = path.parent()
         && !parent.as_os_str().is_empty()
     {
-        std::fs::create_dir_all(parent)
-            .with_context(|| format!("create state directory {}", parent.display()))?;
+        ensure_private_dir(parent)?;
     }
     Ok(())
 }
 
-/// Create a file readable only by the current user (0600 on Unix; on Windows the
-/// per-user state directory already carries a user-only ACL).
+/// Create the state directory and, when this call creates it, make it private to
+/// the current user. On Windows the profile's inherited ACL is not enough: groups
+/// such as the Codex sandbox users can read `%LOCALAPPDATA%`, which would expose
+/// the token and the MAC key to sandboxed agents. Inheritance is removed and only
+/// the user and SYSTEM keep access; files created inside inherit that.
+pub fn ensure_private_dir(dir: &Path) -> Result<()> {
+    let existed = dir.exists();
+    std::fs::create_dir_all(dir)
+        .with_context(|| format!("create state directory {}", dir.display()))?;
+    #[cfg(windows)]
+    if !existed {
+        restrict_to_current_user(dir)?;
+    }
+    #[cfg(not(windows))]
+    if !existed {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700))?;
+    }
+    Ok(())
+}
+
+#[cfg(windows)]
+fn restrict_to_current_user(dir: &Path) -> Result<()> {
+    let user = std::env::var("USERNAME").context("USERNAME is not set")?;
+    let who = match std::env::var("USERDOMAIN") {
+        Ok(domain) if !domain.is_empty() => format!("{domain}\\{user}"),
+        _ => user,
+    };
+    let out = std::process::Command::new("icacls")
+        .arg(dir)
+        .args(["/inheritance:r", "/grant:r"])
+        .arg(format!("{who}:(OI)(CI)F"))
+        .args(["/grant:r", "SYSTEM:(OI)(CI)F"])
+        .output()
+        .context("run icacls to restrict the state directory")?;
+    if !out.status.success() {
+        bail!(
+            "could not restrict {} to the current user: {}",
+            dir.display(),
+            String::from_utf8_lossy(&out.stderr).trim()
+        );
+    }
+    Ok(())
+}
+
+/// Create `path` with `bytes` unless it already exists, and never expose a partial
+/// file: the content is written to a private temp file, then hard-linked into
+/// place (the link fails if the target exists, so two first runs cannot overwrite
+/// each other and a reader never sees an empty file). 0600 on Unix; on Windows the
+/// per-user state directory carries a user-only ACL. Returns true when this call
+/// created it.
 fn write_private(path: &Path, bytes: &[u8]) -> Result<bool> {
     ensure_parent(path)?;
+    let temp = path.with_extension(format!("tmp{}", std::process::id()));
     let mut options = std::fs::OpenOptions::new();
-    options.write(true).create_new(true);
+    options.write(true).create(true).truncate(true);
     #[cfg(unix)]
     {
         use std::os::unix::fs::OpenOptionsExt;
         options.mode(0o600);
     }
-    match options.open(path) {
-        Ok(mut file) => {
-            use std::io::Write;
-            file.write_all(bytes)?;
-            file.flush()?;
-            Ok(true)
-        }
+    {
+        use std::io::Write;
+        let mut file = options
+            .open(&temp)
+            .with_context(|| format!("create {}", temp.display()))?;
+        file.write_all(bytes)?;
+        file.sync_all()?;
+    }
+    let linked = std::fs::hard_link(&temp, path);
+    let _ = std::fs::remove_file(&temp);
+    match linked {
+        Ok(()) => Ok(true),
         Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => Ok(false),
         Err(e) => Err(e).with_context(|| format!("create {}", path.display())),
     }
@@ -78,15 +132,15 @@ pub fn random_hex(bytes: usize) -> Result<String> {
 /// The audit MAC key, generated on first use.
 pub fn load_or_create_key() -> Result<PathBuf> {
     let path = key_path()?;
-    let fresh = write_private(&path, random_hex(32)?.as_bytes())?;
+    write_private(&path, random_hex(32)?.as_bytes())?;
     let raw = std::fs::read_to_string(&path)
         .with_context(|| format!("read MAC key {}", path.display()))?;
     if raw.trim().len() < 32 {
-        if fresh {
-            bail!("generated MAC key is malformed at {}", path.display());
-        }
-        // An empty/partial file from an interrupted first run: rewrite it.
-        std::fs::write(&path, random_hex(32)?)?;
+        // Never overwrite: replacing a key silently invalidates the whole audit chain.
+        bail!(
+            "MAC key {} is malformed; restore it from backup (or delete it together with the audit log to start over)",
+            path.display()
+        );
     }
     Ok(path)
 }
@@ -100,9 +154,64 @@ pub fn load_or_create_token() -> Result<String> {
         .with_context(|| format!("read daemon token {}", path.display()))?;
     let token = raw.trim().to_string();
     if token.len() < 32 {
-        let regenerated = random_hex(32)?;
-        std::fs::write(&path, &regenerated)?;
-        return Ok(regenerated);
+        bail!(
+            "daemon token {} is malformed; delete it and restart the daemon to issue a new one",
+            path.display()
+        );
     }
     Ok(token)
+}
+
+#[cfg(all(test, windows))]
+mod tests {
+    use super::*;
+
+    /// The state directory and the secrets in it must be readable by the current
+    /// user and SYSTEM only, whatever the parent directory's ACL grants.
+    #[test]
+    fn state_files_are_private_to_the_current_user() {
+        let parent = std::env::temp_dir().join(format!("borg-acl-{}", std::process::id()));
+        let dir = parent.join("state");
+        std::fs::create_dir_all(&parent).unwrap();
+        ensure_private_dir(&dir).unwrap();
+        let secret = dir.join("daemon.token");
+        assert!(write_private(&secret, b"s".repeat(64).as_slice()).unwrap());
+        let listing = std::process::Command::new("icacls")
+            .arg(&secret)
+            .output()
+            .unwrap();
+        let listing = String::from_utf8_lossy(&listing.stdout).to_string();
+        let user = std::env::var("USERNAME").unwrap().to_lowercase();
+        let listing = listing.to_lowercase();
+        // Only the current user and SYSTEM may appear; no inherited group survives.
+        assert!(
+            listing.contains(&format!("\\{user}:")),
+            "user missing: {listing}"
+        );
+        assert!(listing.contains("system:"), "SYSTEM missing: {listing}");
+        for broad in [
+            "codexsandbox",
+            "everyone",
+            "users:",
+            "administrators",
+            "authenticated",
+        ] {
+            assert!(
+                !listing.contains(broad),
+                "{broad} can reach the secret: {listing}"
+            );
+        }
+        std::fs::remove_dir_all(&parent).ok();
+    }
+
+    #[test]
+    fn creating_the_same_secret_twice_never_overwrites() {
+        let dir = std::env::temp_dir().join(format!("borg-once-{}", std::process::id()));
+        ensure_private_dir(&dir).unwrap();
+        let path = dir.join("k");
+        assert!(write_private(&path, b"first").unwrap());
+        assert!(!write_private(&path, b"second").unwrap());
+        assert_eq!(std::fs::read(&path).unwrap(), b"first");
+        std::fs::remove_dir_all(&dir).ok();
+    }
 }

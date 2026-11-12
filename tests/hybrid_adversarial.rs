@@ -12,7 +12,10 @@ fn run(db: &Path, args: &[&str]) -> Value {
 const MODEL: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/artifacts/models/minilm");
 #[test]
 fn zero_norm_derived_vectors_are_refused_instead_of_ranked() {
-    let t = tempfile::tempdir_in(std::env::var("TMPDIR").unwrap()).unwrap();
+    let t = tempfile::tempdir_in(
+        std::env::var("TMPDIR").unwrap_or_else(|_| std::env::temp_dir().to_string_lossy().into()),
+    )
+    .unwrap();
     let root = t.path().join("notes");
     fs::create_dir(&root).unwrap();
     fs::write(
@@ -40,7 +43,10 @@ fn zero_norm_derived_vectors_are_refused_instead_of_ranked() {
 }
 #[test]
 fn changes_deletions_duplicates_and_missing_index_do_not_reuse_stale_vectors() {
-    let t = tempfile::tempdir_in(std::env::var("TMPDIR").unwrap()).unwrap();
+    let t = tempfile::tempdir_in(
+        std::env::var("TMPDIR").unwrap_or_else(|_| std::env::temp_dir().to_string_lossy().into()),
+    )
+    .unwrap();
     let root = t.path().join("notes");
     fs::create_dir(&root).unwrap();
     let a = root.join("a.md");
@@ -98,7 +104,10 @@ fn changes_deletions_duplicates_and_missing_index_do_not_reuse_stale_vectors() {
 
 #[test]
 fn corrupt_model_rebuild_rolls_back_and_bound_is_enforced() {
-    let t = tempfile::tempdir_in(std::env::var("TMPDIR").unwrap()).unwrap();
+    let t = tempfile::tempdir_in(
+        std::env::var("TMPDIR").unwrap_or_else(|_| std::env::temp_dir().to_string_lossy().into()),
+    )
+    .unwrap();
     let root = t.path().join("notes");
     fs::create_dir(&root).unwrap();
     fs::write(

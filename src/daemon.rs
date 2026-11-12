@@ -21,6 +21,10 @@ use std::{
     time::{Duration, Instant},
 };
 
+/// Sessions served at once. A handful of agents is normal; this only stops floods.
+const MAX_SESSIONS: usize = 64;
+static ACTIVE: AtomicUsize = AtomicUsize::new(0);
+
 /// Endpoint name derived from the corpus path, so separate databases never share
 /// a daemon and a moved corpus gets its own.
 pub fn endpoint_name(db: &Path) -> String {
@@ -49,7 +53,7 @@ pub fn run(shared: Shared) -> Result<()> {
     // Record the pid so operators (and tests) can stop an owned daemon without
     // killing every other borg-knowledge process on the machine.
     if let Ok(state) = crate::state::state_dir() {
-        let _ = std::fs::create_dir_all(&state);
+        let _ = crate::state::ensure_private_dir(&state);
         let _ = std::fs::write(state.join("daemon.pid"), std::process::id().to_string());
     }
     let shared = Arc::new(shared);
@@ -61,6 +65,13 @@ pub fn run(shared: Shared) -> Result<()> {
                 continue;
             }
         };
+        // Bound the number of concurrent sessions so a flood of connections
+        // cannot exhaust threads or memory. Real use is a handful of agents.
+        if ACTIVE.fetch_add(1, Ordering::SeqCst) >= MAX_SESSIONS {
+            ACTIVE.fetch_sub(1, Ordering::SeqCst);
+            eprintln!("borg-knowledge daemon: refused a connection (limit {MAX_SESSIONS})");
+            continue;
+        }
         let shared = Arc::clone(&shared);
         std::thread::spawn(move || {
             let mut reader = BufReader::new(&stream);
@@ -69,6 +80,7 @@ pub fn run(shared: Shared) -> Result<()> {
                 // A rejected handshake or a dropped agent is routine, not fatal.
                 eprintln!("borg-knowledge daemon: session ended: {e:#}");
             }
+            ACTIVE.fetch_sub(1, Ordering::SeqCst);
         });
     }
     Ok(())
@@ -109,12 +121,20 @@ pub fn proxy(shared: &Shared) -> Result<()> {
     }
 }
 
-fn proxy_over_stream(mut stream: Stream) -> Result<()> {
+fn proxy_over_stream(stream: Stream) -> Result<()> {
     let token = crate::state::load_or_create_token()?;
-    let handshake = serde_json::json!({"borg":{"token":token}});
-    writeln!(stream, "{handshake}")?;
-    stream.flush()?;
-
+    {
+        // Mutual challenge-response: the token is never sent, and nothing is
+        // forwarded to a peer that cannot prove it holds the token.
+        let mut reader = BufReader::new(&stream);
+        let mut writer = &stream;
+        crate::mcp::client_handshake(
+            &mut reader,
+            &mut writer,
+            &token,
+            &crate::state::random_hex(32)?,
+        )?;
+    }
     let stream = Arc::new(stream);
     let requests = Arc::new(AtomicUsize::new(0));
     let responses = Arc::new(AtomicUsize::new(0));
@@ -180,52 +200,103 @@ mod tests {
     use super::*;
     use std::io::BufReader;
 
-    fn shared(token: &str) -> Shared {
-        let dir = std::env::temp_dir().join(format!("borg-handshake-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        let audit = crate::audit::Audit::open(&dir.join("audit.jsonl"), None).unwrap();
-        Shared::new(&dir.join("corpus.db"), Some(audit), Some(token.to_string()))
+    use crate::mcp::{client_handshake, proof, server_handshake};
+
+    const SN: &str = "1111111111111111111111111111111111111111111111111111111111111111";
+    const CN: &str = "2222222222222222222222222222222222222222222222222222222222222222";
+
+    fn auth_line(token: &str, client_nonce: &str) -> String {
+        format!(
+            "{{\"borg\":{{\"auth\":{{\"nonce\":\"{client_nonce}\",\"proof\":\"{}\"}}}}}}\n",
+            proof(token, "c", SN, client_nonce)
+        )
     }
 
-    fn run(input: &str, token: &str) -> (Result<()>, String) {
-        let shared = shared(token);
+    fn serve(input: &str, token: &str) -> (Result<()>, String) {
         let mut reader = BufReader::new(input.as_bytes());
         let mut out: Vec<u8> = Vec::new();
-        let result = session_loop(&mut reader, &mut out, &shared, true);
+        let result = server_handshake(&mut reader, &mut out, token, SN);
         (result, String::from_utf8_lossy(&out).to_string())
     }
 
     #[test]
-    fn a_correct_token_is_accepted_and_served() {
+    fn a_correct_proof_is_accepted_and_the_server_proves_itself_back() {
         let token = "a".repeat(64);
-        let input = format!(
-            "{{\"borg\":{{\"token\":\"{token}\"}}}}\n{}\n",
-            r#"{"jsonrpc":"2.0","id":1,"method":"tools/list"}"#
-        );
-        let (result, out) = run(&input, &token);
+        let (result, out) = serve(&auth_line(&token, CN), &token);
         assert!(result.is_ok(), "{result:?}");
-        assert!(out.contains("\"tools\""), "{out}");
+        assert!(out.contains("\"hello\""), "{out}");
+        assert!(out.contains(&proof(&token, "s", SN, CN)), "{out}");
+        assert!(!out.contains(&token), "the token must never be sent");
     }
 
     #[test]
-    fn a_wrong_token_is_rejected_before_any_tool_runs() {
+    fn a_wrong_token_is_rejected_and_gets_no_server_proof() {
         let token = "a".repeat(64);
-        let wrong = "b".repeat(64);
-        let input = format!(
-            "{{\"borg\":{{\"token\":\"{wrong}\"}}}}\n{}\n",
-            r#"{"jsonrpc":"2.0","id":1,"method":"tools/list"}"#
-        );
-        let (result, out) = run(&input, &token);
+        let (result, out) = serve(&auth_line(&"b".repeat(64), CN), &token);
         assert!(result.is_err(), "wrong token accepted");
-        assert!(out.is_empty(), "server replied before authenticating");
+        assert!(
+            !out.contains("\"ready\""),
+            "server proved itself to a stranger"
+        );
     }
 
     #[test]
-    fn a_connection_that_skips_the_handshake_is_rejected() {
+    fn a_proof_for_another_nonce_cannot_be_replayed() {
         let token = "a".repeat(64);
-        let input = format!("{}\n", r#"{"jsonrpc":"2.0","id":1,"method":"tools/list"}"#);
-        let (result, out) = run(&input, &token);
-        assert!(result.is_err(), "unauthenticated connection accepted");
-        assert!(out.is_empty());
+        let other = "3333333333333333333333333333333333333333333333333333333333333333";
+        let recorded = format!(
+            "{{\"borg\":{{\"auth\":{{\"nonce\":\"{CN}\",\"proof\":\"{}\"}}}}}}\n",
+            proof(&token, "c", other, CN)
+        );
+        assert!(serve(&recorded, &token).0.is_err(), "replay accepted");
+    }
+
+    #[test]
+    fn skipping_oversized_or_malformed_handshakes_is_rejected() {
+        let token = "a".repeat(64);
+        let mcp = format!("{}\n", r#"{"jsonrpc":"2.0","id":1,"method":"tools/list"}"#);
+        assert!(
+            serve(&mcp, &token).0.is_err(),
+            "unauthenticated request accepted"
+        );
+        assert!(serve(&auth_line(&token, "short"), &token).0.is_err());
+        assert!(
+            serve(&"x".repeat(10_000), &token).0.is_err(),
+            "oversized line accepted"
+        );
+        assert!(serve("", &token).0.is_err(), "closed connection accepted");
+    }
+
+    #[test]
+    fn a_daemon_without_a_token_fails_closed() {
+        let dir = std::env::temp_dir().join(format!("borg-notoken-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let shared = Shared::new(&dir.join("corpus.db"), None, None);
+        let mut reader = BufReader::new(&b""[..]);
+        let mut out: Vec<u8> = Vec::new();
+        assert!(session_loop(&mut reader, &mut out, &shared, true).is_err());
+    }
+
+    #[test]
+    fn the_client_refuses_a_server_that_does_not_know_the_token() {
+        let token = "a".repeat(64);
+        let hello = format!("{{\"borg\":{{\"hello\":{{\"nonce\":\"{SN}\"}}}}}}\n");
+        let ready = |t: &str| {
+            format!(
+                "{{\"borg\":{{\"ready\":{{\"proof\":\"{}\"}}}}}}\n",
+                proof(t, "s", SN, CN)
+            )
+        };
+        let run = |t: &str| {
+            let input = format!("{hello}{}", ready(t));
+            let mut reader = BufReader::new(input.as_bytes());
+            let mut out: Vec<u8> = Vec::new();
+            let result = client_handshake(&mut reader, &mut out, &token, CN);
+            (result, String::from_utf8_lossy(&out).to_string())
+        };
+        let (good, sent) = run(&token);
+        assert!(good.is_ok(), "{good:?}");
+        assert!(!sent.contains(&token), "the client leaked the token");
+        assert!(run(&"b".repeat(64)).0.is_err(), "impostor server accepted");
     }
 }

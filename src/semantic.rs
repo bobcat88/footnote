@@ -49,9 +49,7 @@ fn encode(model: &Path, texts: &[String], kind: &str) -> Result<Encoded> {
     if texts.is_empty() || texts.len() > MAX_ENTRIES {
         bail!("embedding batch must contain 1..10000 entries");
     }
-    let scratch = std::env::var_os("TMPDIR").context("configure TMPDIR for embedding scratch")?;
-    crate::app::no_links(Path::new(&scratch))?;
-    let dir = tempfile::tempdir_in(scratch)?;
+    let dir = tempfile::tempdir_in(crate::app::scratch_dir()?)?;
     let input = dir.path().join("input.json");
     let output = dir.path().join("output.json");
     let request = json!({"kind":kind,"texts":texts}).to_string();

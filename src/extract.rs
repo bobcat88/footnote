@@ -21,19 +21,7 @@ pub struct Extraction {
 }
 
 pub fn extract(bytes: &[u8], ext: &str) -> Result<Extraction> {
-    let scratch = std::env::var_os("TMPDIR")
-        .map(std::path::PathBuf::from)
-        .or_else(|| {
-            std::env::var_os("LOCALAPPDATA")
-                .map(|p| std::path::PathBuf::from(p).join("BorgKnowledge/scratch"))
-        })
-        .or_else(|| {
-            std::env::var_os("HOME")
-                .map(|p| std::path::PathBuf::from(p).join(".cache/BorgKnowledge/scratch"))
-        })
-        .ok_or_else(|| anyhow::anyhow!("configure TMPDIR for extraction scratch"))?;
-    crate::app::no_links(&scratch)?;
-    fs::create_dir_all(&scratch)?;
+    let scratch = crate::app::scratch_dir()?;
     let dir = tempfile::tempdir_in(scratch)?;
     let source = dir.path().join(format!("snapshot.{ext}"));
     fs::write(&source, bytes)?;

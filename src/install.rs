@@ -47,6 +47,7 @@ fn backup(path: &Path) -> Result<()> {
 }
 
 fn write_json(path: &Path, entry: &Value, dry_run: bool) -> Result<&'static str> {
+    let stamp = file_stamp(path);
     let mut root: Value = if path.exists() {
         let raw =
             std::fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?;
@@ -79,9 +80,44 @@ fn write_json(path: &Path, entry: &Value, dry_run: bool) -> Result<&'static str>
         {
             std::fs::create_dir_all(parent)?;
         }
-        std::fs::write(path, format!("{}\n", serde_json::to_string_pretty(&root)?))?;
+        replace_atomically(
+            path,
+            &stamp,
+            format!("{}\n", serde_json::to_string_pretty(&root)?),
+        )?;
     }
     Ok("registered")
+}
+
+/// (modified time, length) of a file, to notice a concurrent writer.
+fn file_stamp(path: &Path) -> Option<(std::time::SystemTime, u64)> {
+    let meta = std::fs::metadata(path).ok()?;
+    Some((meta.modified().ok()?, meta.len()))
+}
+
+/// Replace `path` through a temp file and a rename, so a crash never leaves a
+/// half-written agent config. Agents such as Claude Code rewrite their own file
+/// while running: if it changed since we read it, stop instead of overwriting.
+fn replace_atomically(
+    path: &Path,
+    read_stamp: &Option<(std::time::SystemTime, u64)>,
+    text: String,
+) -> Result<()> {
+    if &file_stamp(path) != read_stamp {
+        bail!(
+            "{} changed while it was being updated (the agent is probably running); close it and re-run install",
+            path.display()
+        );
+    }
+    let mut temp = path.to_path_buf();
+    temp.set_file_name(format!(
+        "{}.borg-tmp",
+        path.file_name()
+            .map(|n| n.to_string_lossy())
+            .unwrap_or_default()
+    ));
+    std::fs::write(&temp, text).with_context(|| format!("write {}", temp.display()))?;
+    std::fs::rename(&temp, path).with_context(|| format!("replace {}", path.display()))
 }
 
 fn write_codex_toml(path: &Path, db: &Path, dry_run: bool) -> Result<&'static str> {
