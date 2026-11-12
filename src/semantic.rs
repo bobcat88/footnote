@@ -286,7 +286,6 @@ struct Matrix {
     q: Vec<i8>,
 }
 type MatrixKey = (String, String);
-type Scored = HashMap<(u8, i64), (Arc<str>, f64)>;
 type MatrixEntry = ((i64, i64), Arc<Matrix>);
 static MATRICES: OnceLock<Mutex<HashMap<MatrixKey, MatrixEntry>>> = OnceLock::new();
 
@@ -315,7 +314,9 @@ fn matrix(c: &Connection, identity: &str) -> Result<Arc<Matrix>> {
         scale: Vec::new(),
         q: Vec::new(),
     };
-    let mut s = c.prepare("SELECT kind,id,signature,vector FROM embeddings WHERE model=?1")?;
+    let mut s = c.prepare(
+        "SELECT kind,id,signature,vector FROM embeddings WHERE model=?1 ORDER BY kind,id",
+    )?;
     let mut rows = s.query([identity])?;
     while let Some(r) = rows.next()? {
         let (kind, id, sig, blob): (String, i64, String, Vec<u8>) =
@@ -472,6 +473,142 @@ pub fn rebuild(c: &mut Connection, models: &[PathBuf]) -> Result<Value> {
     )
 }
 
+// ------------------------------------------------------------------ dense scores
+/// The blended dense score of every entry that has a current vector in every model: per model the cosines are z-scored over those
+/// entries, then averaged. `z` is NaN where an entry has no usable vector (missing from a model, other signature, filtered out).
+/// Keys are sorted, so a lookup is a binary search and a query never builds a hash map over the corpus.
+struct Dense {
+    keys: Vec<(u8, i64)>,
+    sigs: Vec<Arc<str>>,
+    z: Vec<f64>,
+}
+impl Dense {
+    fn blend(keys: Vec<(u8, i64)>, sigs: Vec<Arc<str>>, cos: Vec<Vec<f32>>) -> Dense {
+        let mut z = vec![0.0; keys.len()];
+        for per_model in &cos {
+            let ok: Vec<f64> = per_model
+                .iter()
+                .filter(|c| !c.is_nan())
+                .map(|c| *c as f64)
+                .collect();
+            let n = ok.len().max(1) as f64;
+            let mean = ok.iter().sum::<f64>() / n;
+            let var = ok.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / n;
+            let sd = if var > 0.0 { var.sqrt() } else { 1.0 };
+            for (zi, c) in z.iter_mut().zip(per_model) {
+                *zi += (*c as f64 - mean) / sd / cos.len() as f64; // NaN stays NaN
+            }
+        }
+        Dense { keys, sigs, z }
+    }
+    /// Exact: score every stored vector of every model (eligible entries only).
+    fn scan(mats: &[Arc<Matrix>], qvecs: &[Vec<f64>], keep: impl Fn(&str, i64) -> bool) -> Dense {
+        let m0 = &mats[0];
+        let mut cos: Vec<Vec<f32>> = Vec::with_capacity(mats.len());
+        let mut valid: Vec<bool> = m0
+            .keys
+            .iter()
+            .map(|(kind, id)| keep(if *kind == 1 { "record" } else { "chunk" }, *id))
+            .collect();
+        for (mi, (m, qv)) in mats.iter().zip(qvecs).enumerate() {
+            let qf: Vec<f32> = qv.iter().map(|x| *x as f32).collect();
+            let mut v = vec![f32::NAN; m0.keys.len()];
+            for i in 0..m0.keys.len() {
+                if !valid[i] {
+                    continue;
+                }
+                let j = if mi == 0 {
+                    Some(i)
+                } else {
+                    m.keys.binary_search(&m0.keys[i]).ok()
+                };
+                match j {
+                    Some(j) if m.sigs[j] == m0.sigs[i] => {
+                        let row = &m.q[j * DIM..(j + 1) * DIM];
+                        v[i] = row.iter().zip(&qf).map(|(b, x)| *b as f32 * x).sum::<f32>()
+                            * m.scale[j];
+                    }
+                    _ => valid[i] = false,
+                }
+            }
+            cos.push(v);
+        }
+        for v in &mut cos {
+            for (c, ok) in v.iter_mut().zip(&valid) {
+                if !ok {
+                    *c = f32::NAN;
+                }
+            }
+        }
+        Dense::blend(m0.keys.clone(), m0.sigs.clone(), cos)
+    }
+    /// Large corpora: only the lexical shortlist is scored, from vectors fetched by id.
+    fn shortlist(
+        c: &Connection,
+        recipes: &[(PathBuf, String, String)],
+        qvecs: &[Vec<f64>],
+        lex: &HashMap<(u8, i64), f64>,
+    ) -> Result<Dense> {
+        let mut keys: Vec<(u8, i64)> = lex.keys().cloned().collect();
+        keys.sort();
+        let mut s = c.prepare(
+            "SELECT signature,vector FROM embeddings WHERE model=?1 AND kind=?2 AND id=?3",
+        )?;
+        let mut sigs: Vec<Arc<str>> = vec![Arc::from(""); keys.len()];
+        let mut cos: Vec<Vec<f32>> = vec![vec![f32::NAN; keys.len()]; recipes.len()];
+        let mut ok = vec![true; keys.len()];
+        for (mi, ((_, identity, _), qv)) in recipes.iter().zip(qvecs).enumerate() {
+            for (i, (kind, id)) in keys.iter().enumerate() {
+                if !ok[i] {
+                    continue;
+                }
+                let name = if *kind == 1 { "record" } else { "chunk" };
+                let row: Option<(String, Vec<u8>)> = s
+                    .query_row(params![identity, name, id], |r| Ok((r.get(0)?, r.get(1)?)))
+                    .optional()?;
+                match row {
+                    Some((sig, blob)) if mi == 0 || *sigs[i] == *sig => {
+                        if mi == 0 {
+                            sigs[i] = Arc::from(sig);
+                        }
+                        cos[mi][i] = dot_q(&blob, qv)? as f32;
+                    }
+                    _ => ok[i] = false,
+                }
+            }
+        }
+        for v in &mut cos {
+            for (c, good) in v.iter_mut().zip(&ok) {
+                if !good {
+                    *c = f32::NAN;
+                }
+            }
+        }
+        Ok(Dense::blend(keys, sigs, cos))
+    }
+    fn get(&self, key: &(u8, i64)) -> Option<(f64, &Arc<str>)> {
+        let i = self.keys.binary_search(key).ok()?;
+        (!self.z[i].is_nan()).then(|| (self.z[i], &self.sigs[i]))
+    }
+    /// The `n` best keys by blended score (ties by key).
+    fn top(&self, n: usize) -> Vec<(u8, i64)> {
+        let mut idx: Vec<usize> = (0..self.keys.len())
+            .filter(|i| !self.z[*i].is_nan())
+            .collect();
+        let cmp = |a: &usize, b: &usize| {
+            self.z[*b]
+                .total_cmp(&self.z[*a])
+                .then(self.keys[*a].cmp(&self.keys[*b]))
+        };
+        if idx.len() > n {
+            idx.select_nth_unstable_by(n, cmp);
+            idx.truncate(n);
+        }
+        idx.sort_by(cmp);
+        idx.into_iter().map(|i| self.keys[i]).collect()
+    }
+}
+
 // ------------------------------------------------------------------ fusion
 #[derive(Debug, Clone)]
 struct Cand {
@@ -604,67 +741,23 @@ pub fn search(
         "record" => eligible.contains(&id),
         _ => !structured,
     };
-    let mut per_model: Vec<Scored> = Vec::new();
-    for ((_, identity, _), qv) in recipes.iter().zip(&qvecs) {
-        let mut found: Scored = HashMap::new();
-        if scan {
-            let m = matrix(c, identity)?;
-            let qf: Vec<f32> = qv.iter().map(|x| *x as f32).collect();
-            for (i, (kind, id)) in m.keys.iter().enumerate() {
-                if !keep(if *kind == 1 { "record" } else { "chunk" }, *id) {
-                    continue;
-                }
-                let row = &m.q[i * DIM..(i + 1) * DIM];
-                let cos = row.iter().zip(&qf).map(|(b, x)| *b as f32 * x).sum::<f32>() * m.scale[i];
-                found.insert((*kind, *id), (m.sigs[i].clone(), cos as f64));
-            }
-        } else {
-            let mut s = c.prepare(
-                "SELECT signature,vector FROM embeddings WHERE model=?1 AND kind=?2 AND id=?3",
-            )?;
-            for (kind, id) in lex.keys() {
-                let name = if *kind == 1 { "record" } else { "chunk" };
-                if let Some((sig, blob)) = s
-                    .query_row(params![identity, name, id], |r| {
-                        Ok((r.get::<_, String>(0)?, r.get::<_, Vec<u8>>(1)?))
-                    })
-                    .optional()?
-                {
-                    found.insert((*kind, *id), (Arc::from(sig), dot_q(&blob, qv)?));
-                }
-            }
-        }
-        per_model.push(found);
-    }
-    // blend the models: each model's cosines are z-scored over the entries every model has (same signature), then averaged
     let n = recipes.len();
-    let mut keys: Vec<(u8, i64)> = per_model[0]
-        .iter()
-        .filter(|(k, (sig, _))| {
-            per_model
-                .iter()
-                .all(|m| m.get(*k).is_some_and(|(s2, _)| s2 == sig))
-        })
-        .map(|(k, _)| *k)
-        .collect();
-    keys.sort();
-    let mut blended = vec![0.0; keys.len()];
-    for m in &per_model {
-        let z = zscore(&keys.iter().map(|k| m[k].1).collect::<Vec<_>>());
-        for (b, v) in blended.iter_mut().zip(&z) {
-            *b += v / n as f64;
-        }
-    }
-    let dense: HashMap<(u8, i64), (f64, &Arc<str>)> = keys
-        .iter()
-        .zip(&blended)
-        .map(|(k, b)| (*k, (*b, &per_model[0][k].0)))
-        .collect();
+    let dense = if scan {
+        let mats = recipes
+            .iter()
+            .map(|(_, identity, _)| matrix(c, identity))
+            .collect::<Result<Vec<_>>>()?;
+        Dense::scan(&mats, &qvecs, |kind, id| keep(kind, id))
+    } else {
+        Dense::shortlist(c, &recipes, &qvecs, &lex)?
+    };
     // 4. candidates: the lexical shortlist plus the best dense entries, each checked against the live source and its signature
-    let mut order: Vec<((u8, i64), f64)> = dense.iter().map(|(k, (b, _))| (*k, *b)).collect();
-    order.sort_by(|a, b| b.1.total_cmp(&a.1).then(a.0.cmp(&b.0)));
-    let mut wanted: Vec<(u8, i64)> = lex.keys().cloned().collect();
-    wanted.extend(order.iter().take(POOL).map(|(k, _)| *k));
+    // Only the best lexical entries can reach the fusion (it keeps the top POOL by score); twice that many are checked so that
+    // entries dropped as stale or deleted are replaced by the next ones. Validating the whole shortlist cost one query and one hash each.
+    let mut lex_order: Vec<((u8, i64), f64)> = lex.iter().map(|(k, v)| (*k, *v)).collect();
+    lex_order.sort_by(|a, b| b.1.total_cmp(&a.1).then(a.0.cmp(&b.0)));
+    let mut wanted: Vec<(u8, i64)> = lex_order.iter().take(2 * POOL).map(|(k, _)| *k).collect();
+    wanted.extend(dense.top(POOL));
     wanted.sort();
     wanted.dedup();
     let mut cands: Vec<Cand> = Vec::new();
@@ -700,7 +793,7 @@ pub fn search(
         let d = dense
             .get(&(kind, id))
             .filter(|(_, sig)| ***sig == *signature)
-            .map(|(b, _)| *b);
+            .map(|(b, _)| b);
         with_vectors += usize::from(d.is_some());
         cands.push(Cand {
             kind,
