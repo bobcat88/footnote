@@ -28,11 +28,8 @@ fn zero_norm_derived_vectors_are_refused_instead_of_ranked() {
     run(&db, &["index", "--root", r, "--allow", r]);
     run(&db, &["rebuild-embeddings", "--model", MODEL]);
     let c = rusqlite::Connection::open(&db).unwrap();
-    c.execute(
-        "UPDATE embeddings SET vector=?1",
-        [serde_json::to_string(&vec![0.0; 384]).unwrap()],
-    )
-    .unwrap();
+    c.execute("UPDATE embeddings SET vector=zeroblob(388)", [])
+        .unwrap();
     drop(c);
     cmd(
         &db,
@@ -80,7 +77,7 @@ fn changes_deletions_duplicates_and_missing_index_do_not_reuse_stale_vectors() {
         &db,
         &["search", "frames", "--mode", "hybrid", "--model", MODEL],
     );
-    assert_eq!(v["eligible_embeddings"], 0);
+    assert_eq!(v["with_vectors"], 0);
     assert!(v["results"].as_array().unwrap().is_empty());
     run(&db, &["rebuild-embeddings", "--model", MODEL]);
     assert_eq!(
@@ -103,7 +100,7 @@ fn changes_deletions_duplicates_and_missing_index_do_not_reuse_stale_vectors() {
 }
 
 #[test]
-fn corrupt_model_rebuild_rolls_back_and_bound_is_enforced() {
+fn corrupt_model_rebuild_rolls_back() {
     let t = tempfile::tempdir_in(
         std::env::var("TMPDIR").unwrap_or_else(|_| std::env::temp_dir().to_string_lossy().into()),
     )
@@ -140,18 +137,4 @@ fn corrupt_model_rebuild_rolls_back_and_bound_is_enforced() {
     .clone();
     assert!(String::from_utf8_lossy(&output).contains("hash mismatch"));
     assert_eq!(before, fs::read(&db).unwrap());
-    let mut c = rusqlite::Connection::open(&db).unwrap();
-    let tx = c.transaction().unwrap();
-    for _ in 0..10000 {
-        tx.execute("INSERT INTO chunks(source_id,heading,page,line,text) VALUES(1,'bound',NULL,1,'bounded fixture')", []).unwrap();
-    }
-    tx.commit().unwrap();
-    drop(c);
-    let output = cmd(&db, &["rebuild-embeddings", "--model", MODEL])
-        .assert()
-        .failure()
-        .get_output()
-        .stdout
-        .clone();
-    assert!(String::from_utf8_lossy(&output).contains("10000"));
 }

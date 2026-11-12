@@ -141,8 +141,8 @@ fn open(c: &Connection) -> Result<Option<Open>> {
         body,
     }))
 }
-/// Chunk ids matching any of the query's words, best BM25 first. `Ok(None)`: no derived index here, use FTS5.
-pub fn top_ids(c: &Connection, query: &str, n: usize) -> Result<Option<Vec<i64>>> {
+/// Chunk ids and BM25 scores matching any of the query's words, best first. `Ok(None)`: no derived index here, use FTS5.
+pub fn top_hits(c: &Connection, query: &str, n: usize) -> Result<Option<Vec<(i64, f32)>>> {
     let seq = sequence(c)?;
     let Some(dir) = dir_of(c) else {
         return Ok(None);
@@ -190,13 +190,18 @@ pub fn top_ids(c: &Connection, query: &str, n: usize) -> Result<Option<Vec<i64>>
         &TopDocs::with_limit(n.max(1)).order_by_score(),
     )?;
     let mut ids = Vec::with_capacity(hits.len());
-    for (_, addr) in hits {
+    for (score, addr) in hits {
         let d: TantivyDocument = searcher.doc(addr)?;
         if let Some(v) = d.get_first(o.id).and_then(|v| v.as_u64()) {
-            ids.push(v as i64);
+            ids.push((v as i64, score));
         }
     }
     Ok(Some(ids))
+}
+
+/// Same as `top_hits`, ids only.
+pub fn top_ids(c: &Connection, query: &str, n: usize) -> Result<Option<Vec<i64>>> {
+    Ok(top_hits(c, query, n)?.map(|h| h.into_iter().map(|(id, _)| id).collect()))
 }
 
 #[cfg(test)]

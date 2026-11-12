@@ -15,6 +15,7 @@
 use anyhow::{Context, Result, bail};
 use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::{Value, json};
+use std::path::PathBuf;
 use std::{
     io::{BufRead, BufReader, Read, Write},
     path::Path,
@@ -476,6 +477,31 @@ fn read_db(db: &Path) -> Result<Connection> {
     app::open(db, false)
 }
 
+/// `model`: one local embedding directory, or an array of up to three (an ensemble, blended equally).
+fn model_args(args: &Value) -> Result<Vec<PathBuf>> {
+    let list: Vec<String> = match &args["model"] {
+        Value::String(s) => vec![s.clone()],
+        Value::Array(a) => a
+            .iter()
+            .map(|v| {
+                v.as_str()
+                    .map(str::to_string)
+                    .context("`model` entries must be strings")
+            })
+            .collect::<Result<_>>()?,
+        _ => bail!(
+            "mode=hybrid requires `model`, the local embedding model directory (same as CLI --model)"
+        ),
+    };
+    if list.is_empty()
+        || list.len() > 3
+        || list.iter().any(|m| m.is_empty() || m.len() > MAX_FILTER)
+    {
+        bail!("`model` takes 1 to 3 directories of at most {MAX_FILTER} bytes");
+    }
+    Ok(list.into_iter().map(PathBuf::from).collect())
+}
+
 fn recall(db: &Path, args: &Value) -> Result<Value> {
     let query = query_arg(args)?;
     let mode = enum_arg(args, "mode", &["lexical", "hybrid"], "lexical")?;
@@ -483,10 +509,8 @@ fn recall(db: &Path, args: &Value) -> Result<Value> {
     let filters = filters_arg(args)?;
     let c = read_db(db)?;
     if mode == "hybrid" {
-        let model = optional_text(args, "model", MAX_FILTER)?.context(
-            "mode=hybrid requires `model`, the local embedding model directory (same as CLI --model)",
-        )?;
-        return crate::semantic::search(&c, &query, limit, &filters, Path::new(&model));
+        let models = model_args(args)?;
+        return crate::semantic::search(&c, &query, limit, &filters, &models);
     }
     app::search(&c, &query, limit, &filters)
 }
@@ -748,7 +772,7 @@ fn tool_definitions() -> Value {
                     "project": {"type": "string", "maxLength": 200},
                     "tested_version": {"type": "string", "maxLength": 200, "description": "component=exact-version"},
                     "status": {"type": "string", "enum": ["proposal", "validated", "superseded"]},
-                    "model": {"type": "string", "maxLength": 200, "description": "Local embedding model directory; required when mode=hybrid (mirrors CLI --model)."}
+                    "model": {"oneOf": [{"type": "string", "maxLength": 200}, {"type": "array", "items": {"type": "string", "maxLength": 200}, "minItems": 1, "maxItems": 3}], "description": "Local embedding model directory, or up to three for an ensemble; required when mode=hybrid (mirrors CLI --model)."}
                 },
                 "required": ["query"],
                 "additionalProperties": false

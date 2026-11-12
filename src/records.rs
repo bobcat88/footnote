@@ -245,6 +245,39 @@ pub fn eligible(c: &Connection, f: &Filters) -> Result<std::collections::HashSet
     )?
     .collect::<rusqlite::Result<_>>()?)
 }
+/// Record ids and BM25 scores (higher is better) for the hybrid shortlist.
+pub fn lexical_hits(
+    c: &Connection,
+    query: &str,
+    limit: usize,
+    f: &Filters,
+) -> Result<Vec<(i64, f64)>> {
+    if limit == 0 {
+        return Ok(vec![]);
+    }
+    let version = f
+        .tested_version
+        .as_deref()
+        .map(|s| {
+            s.split_once('=')
+                .context("tested-version requires component=exact-version")
+        })
+        .transpose()?;
+    let mut s=c.prepare("SELECT r.id,-bm25(records_fts) FROM records r JOIN records_fts f ON f.rowid=r.id WHERE records_fts MATCH ?1 AND (?2 IS NULL OR json_extract(r.payload,'$.technology')=?2) AND (?3 IS NULL OR json_extract(r.payload,'$.project')=?3) AND (?4 IS NULL OR r.status=?4) AND (?5 IS NULL OR EXISTS(SELECT 1 FROM json_each(r.payload,'$.tested_versions') WHERE key=?5 AND value=?6)) ORDER BY bm25(records_fts),r.id LIMIT ?7")?;
+    Ok(s.query_map(
+        params![
+            query,
+            f.technology,
+            f.project,
+            f.status,
+            version.map(|(k, _)| k),
+            version.map(|(_, v)| v),
+            limit as i64
+        ],
+        |r| Ok((r.get(0)?, r.get(1)?)),
+    )?
+    .collect::<rusqlite::Result<_>>()?)
+}
 pub fn search(c: &Connection, query: &str, limit: usize, f: &Filters) -> Result<Vec<Value>> {
     if limit == 0 {
         return Ok(vec![]);

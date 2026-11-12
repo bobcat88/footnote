@@ -47,7 +47,7 @@ fn local_embeddings_retrieve_bilingual_paraphrase_and_search_is_read_only() {
             "1",
         ],
     );
-    assert_eq!(v["mode"], "hybrid_rrf");
+    assert_eq!(v["mode"], "hybrid_cc");
     assert!(
         v["results"][0]["path"]
             .as_str()

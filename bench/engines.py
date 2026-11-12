@@ -93,10 +93,10 @@ class CliEngine:
         except Exception:
             v["binary_sqlite"] = None
         if self.hybrid:
-            manifest = json.loads((self.model_dir / "manifest.json").read_text())
-            v["model_repository"] = manifest["repository"]
-            v["model_revision"] = manifest["revision"]
-            v["model_files_sha256"] = {n: f["sha256"] for n, f in manifest["files"].items()}
+            manifests = [json.loads((d / "manifest.json").read_text()) for d in getattr(self, "model_dirs", [self.model_dir])]
+            v["model_repository"] = [m["repository"] for m in manifests] if len(manifests) > 1 else manifests[0]["repository"]
+            v["model_revision"] = [m["revision"] for m in manifests] if len(manifests) > 1 else manifests[0]["revision"]
+            v["model_files_sha256"] = [{n: f["sha256"] for n, f in m["files"].items()} for m in manifests] if len(manifests) > 1                 else {n: f["sha256"] for n, f in manifests[0]["files"].items()}
         return v
 
     def prepare(self, dataset: str, corpus: dict) -> dict:
@@ -120,7 +120,8 @@ class CliEngine:
         embed_ms = None
         if self.hybrid:
             e = time.perf_counter()
-            run_cli(self.db, "rebuild-embeddings", "--model", str(self.model_dir))
+            models = [a for d in getattr(self, "model_dirs", [self.model_dir]) for a in ("--model", str(d))]
+            run_cli(self.db, "rebuild-embeddings", *models)
             embed_ms = (time.perf_counter() - e) * 1000
         stats = run_cli(self.db, "stats")
         info = {"exe_sha256": exe_hash, "documents": len(corpus), "build_ms": (time.perf_counter() - t) * 1000,
@@ -198,4 +199,73 @@ class ShippedHybridE5(ShippedHybrid):
               "model_max_tokens": 512}
 
 
-ENGINES = {e.id: e for e in (ShippedLexical, Bm25OrLexical, ShippedHybrid, ShippedHybridE5)}
+class ShippedEnsemble(CliEngine):
+    """The product as an agent uses it: ONE resident `mcp` session per index (JSON-RPC over stdio), hybrid mode with the default
+    model pair. The first call pays the model load; every other query is what the agent sees. The state directory (audit log, MAC key,
+    token) is a scratch folder, never the user's real one."""
+
+    id = "shipped-ensemble-mcp"
+    latency_scope = "one resident `mcp` session (models loaded once, helpers resident): JSON-RPC over stdio, per-query wall time"
+    family = "ens"
+    hybrid = True
+    model_dirs = [REPO / "artifacts" / "models" / "bekko-a8m", REPO / "artifacts" / "models" / "gte-small"]
+    config = {"lexical": "any word (OR), Tantivy BM25 en_stem, accents folded", "dense": "bekko-a8m + gte-small, 384d int8, blended 50/50",
+              "fusion": "convex combination alpha 0.55 (z-scores over top 100)", "strategy": "full dense scan up to 50000 entries, else BM25 shortlist 1000",
+              "chunk_chars": 2000, "k": 20, "process": "resident mcp session", "query_clip_bytes": QUERY_CLIP_BYTES}
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._proc = None
+        self._n = 0
+
+    def close(self) -> None:
+        if self._proc is not None:
+            try:
+                self._proc.stdin.close()
+                self._proc.wait(timeout=10)
+            except Exception:
+                self._proc.kill()
+            self._proc = None
+
+    def prepare(self, dataset: str, corpus: dict) -> dict:
+        self.close()
+        return super().prepare(dataset, corpus)
+
+    def _rpc(self, method: str, params: dict | None = None, notify: bool = False):
+        self._n += 1
+        msg = {"jsonrpc": "2.0", "method": method, **({"params": params} if params is not None else {})}
+        if not notify:
+            msg["id"] = self._n
+        self._proc.stdin.write(json.dumps(msg) + "\n")
+        self._proc.stdin.flush()
+        if notify:
+            return None
+        while True:
+            line = self._proc.stdout.readline()
+            if not line:
+                raise RuntimeError("mcp session ended")
+            reply = json.loads(line)
+            if reply.get("id") == self._n:
+                if "error" in reply:
+                    raise RuntimeError(f"mcp error: {reply['error']}")
+                return reply["result"]
+
+    def _start(self) -> None:
+        state = WORK / "state" / self.family
+        state.mkdir(parents=True, exist_ok=True)
+        env = {**os.environ, "BORG_STATE_DIR": str(state)}
+        self._proc = subprocess.Popen([str(EXE), "--db", str(self.db), "mcp"], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                      stderr=subprocess.DEVNULL, text=True, encoding="utf-8", bufsize=1, env=env)
+        self._rpc("initialize", {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "bench", "version": "1"}})
+        self._rpc("notifications/initialized", notify=True)
+
+    def search(self, qid: str, text: str, k: int) -> list[str]:
+        if self._proc is None:
+            self._start()
+        args = {"query": clip(text), "mode": "hybrid", "limit": min(k, 20), "model": [str(d) for d in self.model_dirs]}
+        result = self._rpc("tools/call", {"name": "borg_recall", "arguments": args})
+        payload = json.loads(result["content"][0]["text"]) if "content" in result else result["structuredContent"]
+        return [doc_id_of(r["path"]) for r in payload["results"]]
+
+
+ENGINES = {e.id: e for e in (ShippedLexical, Bm25OrLexical, ShippedHybrid, ShippedHybridE5, ShippedEnsemble)}

@@ -34,15 +34,17 @@ enum Action {
         allow: Vec<PathBuf>,
     },
     RebuildEmbeddings {
-        #[arg(long)]
-        model: PathBuf,
+        /// Local embedding model directory; repeat for an ensemble (1 to 3 models, blended equally)
+        #[arg(long, required = true)]
+        model: Vec<PathBuf>,
     },
     Search {
         query: String,
         #[arg(long, default_value = "lexical", value_parser = ["lexical", "hybrid"])]
         mode: String,
+        /// Local embedding model directory, hybrid mode only; repeat for an ensemble
         #[arg(long)]
-        model: Option<PathBuf>,
+        model: Vec<PathBuf>,
         #[arg(long, default_value_t = 8)]
         limit: usize,
         #[arg(long)]
@@ -518,6 +520,17 @@ pub(crate) fn hit(r: &rusqlite::Row<'_>, full: bool) -> rusqlite::Result<Value> 
     )
 }
 pub(crate) const HIT: &str = "SELECT c.id,s.path,s.sha256,s.revision,s.status,s.extractor,c.heading,c.page,c.line,c.text FROM chunks c JOIN sources s ON s.id=c.source_id";
+/// Chunk ids with BM25 scores (higher is better) for any-word matching: Tantivy when its derived index is available, else FTS5.
+pub(crate) fn lexical_chunks(c: &Connection, q: &str, n: usize) -> Result<Vec<(i64, f64)>> {
+    if let Some(hits) = crate::lexical::top_hits(c, q, n).ok().flatten() {
+        return Ok(hits.into_iter().map(|(id, s)| (id, s as f64)).collect());
+    }
+    let mut s = c.prepare("SELECT rowid,-bm25(search_fts) FROM search_fts WHERE search_fts MATCH ?1 ORDER BY bm25(search_fts),rowid LIMIT ?2")?;
+    Ok(s.query_map(params![match_expr(q), n as i64], |r| {
+        Ok((r.get(0)?, r.get(1)?))
+    })?
+    .collect::<rusqlite::Result<_>>()?)
+}
 /// FTS5 expression matching any of the query's words, each quoted so punctuation and operators in user text stay literal.
 pub(crate) fn match_expr(q: &str) -> String {
     q.split_whitespace()
@@ -705,17 +718,12 @@ fn execute(cli: Cli) -> Result<Value> {
                 status,
             };
             if mode == "hybrid" {
-                crate::semantic::search(
-                    &c,
-                    &query,
-                    limit,
-                    &filters,
-                    model.as_deref().ok_or_else(|| {
-                        anyhow::anyhow!("hybrid requires --model local directory")
-                    })?,
-                )
+                if model.is_empty() {
+                    bail!("hybrid requires --model local directory");
+                }
+                crate::semantic::search(&c, &query, limit, &filters, &model)
             } else {
-                if model.is_some() {
+                if !model.is_empty() {
                     bail!("--model requires --mode hybrid");
                 }
                 search(&c, &query, limit, &filters)
