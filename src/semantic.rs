@@ -14,7 +14,7 @@ use std::{
     io::{BufRead, BufReader, Read, Write},
     path::{Path, PathBuf},
     process::{Child, ChildStdin, Command, Stdio},
-    sync::{Mutex, OnceLock, mpsc},
+    sync::{Arc, Mutex, OnceLock, mpsc},
     thread,
     time::Duration,
 };
@@ -244,21 +244,29 @@ fn quantize(v: &[f64]) -> Vec<u8> {
     );
     out
 }
-/// Cosine of a stored vector with a unit query vector. `Err` when the stored vector is not a plausible unit vector
-/// (wrong length, non-finite or zero scale, norm far from 1): derived data that was damaged is refused, never ranked.
-fn dot_q(blob: &[u8], q: &[f64]) -> Result<f64> {
-    if blob.len() != 4 + DIM || q.len() != DIM {
+/// The scale of a stored vector, or `Err` when it is not a plausible unit vector (wrong length, non-finite or zero scale, norm far
+/// from 1): derived data that was damaged is refused, never ranked.
+fn check_blob(blob: &[u8]) -> Result<f32> {
+    if blob.len() != 4 + DIM {
         bail!("corrupt derived vector; rebuild embeddings");
     }
-    let scale = f32::from_le_bytes(blob[..4].try_into()?) as f64;
+    let scale = f32::from_le_bytes(blob[..4].try_into()?);
     let norm = blob[4..]
         .iter()
         .map(|b| ((*b as i8) as f64).powi(2))
         .sum::<f64>()
         .sqrt()
-        * scale;
+        * scale as f64;
     if !scale.is_finite() || scale <= 0.0 || (norm - 1.0).abs() > 0.05 {
         bail!("corrupt derived vector; rebuild embeddings");
+    }
+    Ok(scale)
+}
+/// Cosine of a stored vector with a unit query vector (see `check_blob` for what is refused).
+fn dot_q(blob: &[u8], q: &[f64]) -> Result<f64> {
+    let scale = check_blob(blob)? as f64;
+    if q.len() != DIM {
+        bail!("query vector has the wrong dimension");
     }
     Ok(blob[4..]
         .iter()
@@ -266,6 +274,66 @@ fn dot_q(blob: &[u8], q: &[f64]) -> Result<f64> {
         .map(|(b, x)| (*b as i8) as f64 * x)
         .sum::<f64>()
         * scale)
+}
+
+// ------------------------------------------------------------------ resident vector matrix
+/// Every stored vector of one model, decoded once per process: a long-lived session (the MCP front-end, the daemon) pays the load on the
+/// first hybrid query and then scores 50,000 entries in a few milliseconds instead of re-reading them from SQLite on every query.
+struct Matrix {
+    keys: Vec<(u8, i64)>,
+    sigs: Vec<Arc<str>>,
+    scale: Vec<f32>,
+    q: Vec<i8>,
+}
+type MatrixKey = (String, String);
+type Scored = HashMap<(u8, i64), (Arc<str>, f64)>;
+type MatrixEntry = ((i64, i64), Arc<Matrix>);
+static MATRICES: OnceLock<Mutex<HashMap<MatrixKey, MatrixEntry>>> = OnceLock::new();
+
+/// The vectors of `identity`, from the cache when its fingerprint (row count, highest rowid) still matches. Every rebuild that adds,
+/// replaces or removes a vector changes one of the two; damaged vectors are refused while loading, never ranked.
+fn matrix(c: &Connection, identity: &str) -> Result<Arc<Matrix>> {
+    let fingerprint: (i64, i64) = c.query_row(
+        "SELECT count(*),COALESCE(max(rowid),0) FROM embeddings WHERE model=?1",
+        [identity],
+        |r| Ok((r.get(0)?, r.get(1)?)),
+    )?;
+    let key = (c.path().unwrap_or("").to_string(), identity.to_string());
+    let cache = MATRICES.get_or_init(|| Mutex::new(HashMap::new()));
+    if !key.0.is_empty()
+        && let Some((fp, m)) = cache
+            .lock()
+            .map_err(|_| anyhow::anyhow!("vector cache poisoned"))?
+            .get(&key)
+        && *fp == fingerprint
+    {
+        return Ok(m.clone());
+    }
+    let mut m = Matrix {
+        keys: Vec::new(),
+        sigs: Vec::new(),
+        scale: Vec::new(),
+        q: Vec::new(),
+    };
+    let mut s = c.prepare("SELECT kind,id,signature,vector FROM embeddings WHERE model=?1")?;
+    let mut rows = s.query([identity])?;
+    while let Some(r) = rows.next()? {
+        let (kind, id, sig, blob): (String, i64, String, Vec<u8>) =
+            (r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?);
+        let scale = check_blob(&blob)?;
+        m.keys.push((u8::from(kind == "record"), id));
+        m.sigs.push(Arc::from(sig));
+        m.scale.push(scale);
+        m.q.extend(blob[4..].iter().map(|b| *b as i8));
+    }
+    let m = Arc::new(m);
+    if !key.0.is_empty() {
+        cache
+            .lock()
+            .map_err(|_| anyhow::anyhow!("vector cache poisoned"))?
+            .insert(key, (fingerprint, m.clone()));
+    }
+    Ok(m)
 }
 
 // ------------------------------------------------------------------ entries
@@ -536,19 +604,19 @@ pub fn search(
         "record" => eligible.contains(&id),
         _ => !structured,
     };
-    let mut per_model: Vec<HashMap<(u8, i64), (String, f64)>> = Vec::new();
+    let mut per_model: Vec<Scored> = Vec::new();
     for ((_, identity, _), qv) in recipes.iter().zip(&qvecs) {
-        let mut found: HashMap<(u8, i64), (String, f64)> = HashMap::new();
+        let mut found: Scored = HashMap::new();
         if scan {
-            let mut s =
-                c.prepare("SELECT kind,id,signature,vector FROM embeddings WHERE model=?1")?;
-            let mut rows = s.query([identity])?;
-            while let Some(r) = rows.next()? {
-                let (kind, id, sig, blob): (String, i64, String, Vec<u8>) =
-                    (r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?);
-                if keep(&kind, id) {
-                    found.insert((u8::from(kind == "record"), id), (sig, dot_q(&blob, qv)?));
+            let m = matrix(c, identity)?;
+            let qf: Vec<f32> = qv.iter().map(|x| *x as f32).collect();
+            for (i, (kind, id)) in m.keys.iter().enumerate() {
+                if !keep(if *kind == 1 { "record" } else { "chunk" }, *id) {
+                    continue;
                 }
+                let row = &m.q[i * DIM..(i + 1) * DIM];
+                let cos = row.iter().zip(&qf).map(|(b, x)| *b as f32 * x).sum::<f32>() * m.scale[i];
+                found.insert((*kind, *id), (m.sigs[i].clone(), cos as f64));
             }
         } else {
             let mut s = c.prepare(
@@ -562,7 +630,7 @@ pub fn search(
                     })
                     .optional()?
                 {
-                    found.insert((*kind, *id), (sig, dot_q(&blob, qv)?));
+                    found.insert((*kind, *id), (Arc::from(sig), dot_q(&blob, qv)?));
                 }
             }
         }
@@ -587,7 +655,7 @@ pub fn search(
             *b += v / n as f64;
         }
     }
-    let dense: HashMap<(u8, i64), (f64, &String)> = keys
+    let dense: HashMap<(u8, i64), (f64, &Arc<str>)> = keys
         .iter()
         .zip(&blended)
         .map(|(k, b)| (*k, (*b, &per_model[0][k].0)))
@@ -631,7 +699,7 @@ pub fn search(
         };
         let d = dense
             .get(&(kind, id))
-            .filter(|(_, sig)| **sig == signature)
+            .filter(|(_, sig)| ***sig == *signature)
             .map(|(b, _)| *b);
         with_vectors += usize::from(d.is_some());
         cands.push(Cand {
@@ -767,6 +835,43 @@ mod tests {
             .collect();
         assert_eq!(out, vec![2, 1]);
         assert!(fuse(&[], 100, 0.55).is_empty());
+    }
+    #[test]
+    fn the_vector_matrix_is_cached_and_follows_rebuilds() {
+        let t = tempfile::tempdir().unwrap();
+        let c = Connection::open(t.path().join("k.db")).unwrap();
+        c.execute_batch(MIGRATION).unwrap();
+        c.execute("INSERT INTO embedding_models VALUES('m','{}','h',384)", [])
+            .unwrap();
+        let unit: Vec<f64> = (0..DIM).map(|i| if i == 0 { 1.0 } else { 0.0 }).collect();
+        let add = |id: i64| {
+            c.execute(
+                "INSERT INTO embeddings VALUES('m','chunk',?1,'sig',?2)",
+                params![id, quantize(&unit)],
+            )
+            .unwrap();
+        };
+        add(1);
+        let first = matrix(&c, "m").unwrap();
+        assert!(
+            Arc::ptr_eq(&first, &matrix(&c, "m").unwrap()),
+            "same fingerprint, same matrix"
+        );
+        assert_eq!(first.keys, vec![(0, 1)]);
+        add(2);
+        let second = matrix(&c, "m").unwrap();
+        assert!(
+            !Arc::ptr_eq(&first, &second),
+            "a new vector must invalidate the cache"
+        );
+        assert_eq!(second.keys.len(), 2);
+        c.execute("UPDATE embeddings SET vector=zeroblob(388) WHERE id=2", [])
+            .unwrap();
+        c.execute("DELETE FROM embeddings WHERE id=1", []).unwrap();
+        assert!(
+            matrix(&c, "m").is_err(),
+            "a damaged vector is refused while loading"
+        );
     }
     #[test]
     fn zscore_of_a_constant_is_zero_not_nan() {
