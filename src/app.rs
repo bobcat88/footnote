@@ -11,6 +11,9 @@ use std::{
 use walkdir::WalkDir;
 
 pub const MAX_FILE: u64 = 16 * 1024 * 1024;
+/// Scan bounds per `index` run: a mistake such as pointing at a whole disk aborts and rolls back instead of filling the database.
+const DEFAULT_MAX_FILES: usize = 250_000;
+const DEFAULT_MAX_MIB: u64 = 4096;
 const SCHEMA: i64 = 4;
 #[derive(Parser)]
 #[command(
@@ -32,6 +35,12 @@ enum Action {
         root: PathBuf,
         #[arg(long, required = true)]
         allow: Vec<PathBuf>,
+        /// Abort and roll back if the scan accepts more files than this
+        #[arg(long, default_value_t = DEFAULT_MAX_FILES)]
+        max_files: usize,
+        /// Abort and roll back if the accepted source bytes exceed this many MiB
+        #[arg(long, default_value_t = DEFAULT_MAX_MIB)]
+        max_mib: u64,
     },
     RebuildEmbeddings {
         /// Local embedding model directory; repeat for an ensemble (1 to 3 models, blended equally)
@@ -286,7 +295,13 @@ pub fn bounded_read(p: &Path) -> Result<Vec<u8>> {
     }
     Ok(bytes)
 }
-fn index(c: &mut Connection, root: &Path, allow: &[PathBuf]) -> Result<Value> {
+fn index(
+    c: &mut Connection,
+    root: &Path,
+    allow: &[PathBuf],
+    max_files: usize,
+    max_mib: u64,
+) -> Result<Value> {
     no_links(root)?;
     let root = fs::canonicalize(root)?;
     if !root.is_dir() {
@@ -341,13 +356,13 @@ fn index(c: &mut Connection, root: &Path, allow: &[PathBuf]) -> Result<Value> {
         }
         let path = e.path().to_string_lossy().to_string();
         seen.insert(path.clone());
-        if seen.len() > 10_000 {
-            bail!("index file limit exceeded (10,000)");
+        if seen.len() > max_files {
+            bail!("index file limit exceeded ({max_files}); raise it with --max-files");
         }
         let bytes = bounded_read(e.path())?;
         total_bytes += bytes.len() as u64;
-        if total_bytes > 128 * 1024 * 1024 {
-            bail!("index scan byte limit exceeded (128 MiB)");
+        if total_bytes > max_mib * 1024 * 1024 {
+            bail!("index scan byte limit exceeded ({max_mib} MiB); raise it with --max-mib");
         }
         let sha = hash(&bytes);
         let old: Option<(i64, String, String)> = tx
@@ -699,7 +714,12 @@ fn execute(cli: Cli) -> Result<Value> {
         ),
     )?;
     match cli.command {
-        Action::Index { root, allow } => index(&mut c, &root, &allow),
+        Action::Index {
+            root,
+            allow,
+            max_files,
+            max_mib,
+        } => index(&mut c, &root, &allow, max_files, max_mib),
         Action::RebuildEmbeddings { model } => crate::semantic::rebuild(&mut c, &model),
         Action::Search {
             query,

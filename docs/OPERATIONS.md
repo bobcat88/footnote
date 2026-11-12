@@ -11,10 +11,10 @@ Search and get return content with explicit `untrusted_*` labels. Prompt injecti
 ## Bounds and failure modes
 
 - Source file: 16 MiB; text source/extracted document: approximately 1 million characters/UTF-8 text byte bound as enforced at each boundary.
-- Scan: at most 10,000 accepted files and 128 MiB of accepted source bytes; exceeding a bound aborts and rolls back the corpus transaction.
+- Scan: at most 250,000 accepted files and 4,096 MiB of accepted source bytes per `index` run by default (`--max-files`, `--max-mib` raise or lower them); exceeding a bound aborts and rolls back the corpus transaction.
 - Binary extraction: at most 100 pages and 20 million pixels per raster/image; 120-second helper timeout; 8 MB protocol output cap, additional Rust page/text validation.
 - Search: nonempty query up to 512 bytes; literal whitespace-delimited AND terms, not caller-supplied FTS operators. Limit 1–20 across text and records. Excerpts 500 characters; full chunks at most 2,000 characters.
-- Hybrid: explicit local model directory; up to 10,000 chunks/records combined; request 64 MB, helper output 128 MB, 600-second direct-child kill/reap timeout, followed by the shared 256,000-byte CLI response cap. Python/native inference is not sandboxed or given a process memory limit. Model files are hashed locally for each invocation; manifest/helper/identity mismatches fail closed. A rebuild holds a write transaction throughout inference, so it can block other writers. No network download occurs in the inference helper.
+- Hybrid: explicit local model directory; no entry cap (exact scan up to 50,000 stored entries, a BM25 shortlist of 1,000 beyond; see bench/experiments/RESULTS.md); request 64 MB, helper output 128 MB, 600-second direct-child kill/reap timeout, followed by the shared 256,000-byte CLI response cap. Python/native inference is not sandboxed or given a process memory limit. Model files are hashed locally for each invocation; manifest/helper/identity mismatches fail closed. A rebuild holds a write transaction throughout inference, so it can block other writers. No network download occurs in the inference helper.
 - JSON responses: at most 256,000 bytes or a JSON error asking for a narrower query.
 - Finding/validation import JSON: at most 64,000 bytes each; 1–16 evidence artifacts, each within the 16 MiB file bound. Checks are explicit and bounded. Large archives must be split or a smaller signed/hash manifest used; do not silently skip hashing them.
 
