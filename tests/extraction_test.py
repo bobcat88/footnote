@@ -20,7 +20,7 @@ class ExtractionTests(unittest.TestCase):
             # Image-only PDF page written by Pillow, so the fixture needs no
             # PDF-authoring library (PyMuPDF was AGPL-3.0 and is not a dependency).
             pdf=root/'scan.pdf'; image.convert('RGB').save(pdf,'PDF',resolution=200.0)
-            binary=REPO/'target/release/borg-knowledge.exe'
+            binary=REPO/'target/release/footnote.exe'
             db=root/'k.db'
             original={p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in [png,pdf]}
             def call(*args):

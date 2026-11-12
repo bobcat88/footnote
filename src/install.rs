@@ -1,13 +1,13 @@
 //! Plug-and-play registration: point every detected agent at this corpus.
 //!
-//! Each agent's MCP entry runs `borg-knowledge --db <DB> mcp`, a thin stdio
+//! Each agent's MCP entry runs `footnote --db <DB> mcp`, a thin stdio
 //! front-end. The daemon, token and audit log are automatic, so the only thing
 //! written here is "where is the corpus" — no secrets, no per-agent tuning.
 use anyhow::{Context, Result, bail};
 use serde_json::{Value, json};
 use std::path::{Path, PathBuf};
 
-const SERVER: &str = "borg";
+const SERVER: &str = "footnote";
 
 fn home() -> Result<PathBuf> {
     std::env::var_os("USERPROFILE")
@@ -111,7 +111,7 @@ fn replace_atomically(
     }
     let mut temp = path.to_path_buf();
     temp.set_file_name(format!(
-        "{}.borg-tmp",
+        "{}.footnote-tmp",
         path.file_name()
             .map(|n| n.to_string_lossy())
             .unwrap_or_default()
@@ -127,11 +127,11 @@ fn write_codex_toml(path: &Path, db: &Path, dry_run: bool) -> Result<&'static st
     } else {
         String::new()
     };
-    if existing.contains("[mcp_servers.borg]") {
+    if existing.contains("[mcp_servers.footnote]") {
         return Ok("already registered");
     }
     let block = format!(
-        "\n[mcp_servers.borg]\ncommand = \"{}\"\nargs = [\"--db\", \"{}\", \"mcp\"]\n",
+        "\n[mcp_servers.footnote]\ncommand = \"{}\"\nargs = [\"--db\", \"{}\", \"mcp\"]\n",
         portable(&exe),
         portable(db)
     );
@@ -156,10 +156,7 @@ fn write_codex_toml(path: &Path, db: &Path, dry_run: bool) -> Result<&'static st
 /// the reason the proxy must never spawn it itself.
 fn register_daemon(db: &Path, dry_run: bool) -> Value {
     let endpoint = crate::daemon::endpoint_name(db);
-    let task = format!(
-        "borg-knowledge-{}",
-        endpoint.trim_start_matches("borg-knowledge-")
-    );
+    let task = format!("footnote-{}", endpoint.trim_start_matches("footnote-"));
     #[cfg(windows)]
     {
         let exe = match std::env::current_exe() {
@@ -204,7 +201,7 @@ fn register_daemon(db: &Path, dry_run: bool) -> Value {
         json!({
             "task": task,
             "status": "manual on this platform",
-            "hint": "run `borg-knowledge --db <DB> serve --mcp --daemon` from your session manager",
+            "hint": "run `footnote --db <DB> serve --mcp --daemon` from your session manager",
         })
     }
 }
@@ -258,6 +255,6 @@ pub fn run(db: &Option<PathBuf>, dry_run: bool) -> Result<Value> {
         "entry": entry,
         "targets": report,
         "daemon": register_daemon(&db, dry_run),
-        "note": "each agent runs `borg-knowledge --db <DB> mcp`; the daemon, token and audit log are automatic",
+        "note": "each agent runs `footnote --db <DB> mcp`; the daemon, token and audit log are automatic. An entry named `borg` from before the rename still points at the old executable: delete it from the agent config",
     }))
 }

@@ -9,7 +9,7 @@ use serde_json::Value;
 use std::{fs, path::PathBuf};
 
 fn bin() -> Command {
-    Command::new(assert_cmd::cargo::cargo_bin!("borg-knowledge"))
+    Command::new(assert_cmd::cargo::cargo_bin!("footnote"))
 }
 
 fn tmp() -> tempfile::TempDir {
@@ -49,10 +49,10 @@ fn an_agent_gets_working_tools_and_automatic_security_state() {
     let input = format!(
         "{}\n{}\n",
         serde_json::json!({"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}),
-        serde_json::json!({"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"borg_stats","arguments":{}}}),
+        serde_json::json!({"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"footnote_stats","arguments":{}}}),
     );
     let out = bin()
-        .env("BORG_STATE_DIR", &state)
+        .env("FOOTNOTE_STATE_DIR", &state)
         .arg("--db")
         .arg(&db)
         .arg("mcp")
@@ -132,11 +132,11 @@ fn install_registers_detected_agents() {
     assert!(out.status.success(), "{out:?}");
 
     let codex = fs::read_to_string(home.join(".codex/config.toml")).unwrap();
-    assert!(codex.contains("[mcp_servers.borg]"), "{codex}");
+    assert!(codex.contains("[mcp_servers.footnote]"), "{codex}");
     assert!(codex.contains("mcp"), "{codex}");
 
     let gemini: Value =
         serde_json::from_str(&fs::read_to_string(home.join(".gemini/settings.json")).unwrap())
             .unwrap();
-    assert_eq!(gemini["mcpServers"]["borg"]["args"][2], "mcp");
+    assert_eq!(gemini["mcpServers"]["footnote"]["args"][2], "mcp");
 }

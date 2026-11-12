@@ -24,7 +24,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent
 WORK = HERE / "work"  # no dot in the path: the indexer silently skips dot-folders
-EXE = REPO / "target" / "release" / "borg-knowledge.exe"
+EXE = REPO / "target" / "release" / "footnote.exe"
 MODEL_DIR = REPO / "artifacts" / "models" / "minilm"
 E5_DIR = REPO / "artifacts" / "models" / "e5-small"
 
@@ -40,7 +40,7 @@ def sha256_file(path: Path) -> str:
 def run_cli(db: Path, *args: str, timeout: int = 3600) -> dict:
     out = subprocess.run([str(EXE), "--db", str(db), *args], capture_output=True, text=True, timeout=timeout)
     if out.returncode != 0:
-        raise RuntimeError(f"borg-knowledge {' '.join(args)} failed: {(out.stderr or out.stdout)[:500]}")
+        raise RuntimeError(f"footnote {' '.join(args)} failed: {(out.stderr or out.stdout)[:500]}")
     return json.loads(out.stdout)
 
 
@@ -263,7 +263,7 @@ class ShippedEnsemble(CliEngine):
         if self._proc is None:
             self._start()
         args = {"query": clip(text), "mode": "hybrid", "limit": min(k, 20), "model": [str(d) for d in self.model_dirs]}
-        result = self._rpc("tools/call", {"name": "borg_recall", "arguments": args})
+        result = self._rpc("tools/call", {"name": "footnote_recall", "arguments": args})
         payload = json.loads(result["content"][0]["text"]) if "content" in result else result["structuredContent"]
         return [doc_id_of(r["path"]) for r in payload["results"]]
 

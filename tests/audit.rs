@@ -12,7 +12,7 @@ const KEY_HEX: &str = "a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a
 const WRONG_KEY_HEX: &str = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
 
 fn bin() -> Command {
-    Command::new(assert_cmd::cargo::cargo_bin!("borg-knowledge"))
+    Command::new(assert_cmd::cargo::cargo_bin!("footnote"))
 }
 
 fn tmp() -> tempfile::TempDir {
@@ -71,8 +71,8 @@ fn serve_audited(db: &Path, audit: &Path, key: Option<&Path>, lines: &[Value]) -
 
 fn two_calls() -> Vec<Value> {
     vec![
-        json!({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"borg_stats","arguments":{}}}),
-        json!({"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"borg_recall","arguments":{"query":"checkpoint","limit":1}}}),
+        json!({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"footnote_stats","arguments":{}}}),
+        json!({"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"footnote_recall","arguments":{"query":"checkpoint","limit":1}}}),
     ]
 }
 
@@ -113,11 +113,11 @@ fn every_tool_call_is_logged_chained_and_bound_to_its_response() {
     let (out, stdout) = serve_audited(&db, &audit, Some(&key), &two_calls());
     assert!(out.status.success(), "serve failed: {out:?}");
 
-    // Responses carry a _meta.borg binding to the audit line.
+    // Responses carry a _meta.footnote binding to the audit line.
     let mut seqs = Vec::new();
     for line in stdout.lines().filter(|l| !l.trim().is_empty()) {
         let response: Value = serde_json::from_str(line).unwrap();
-        let meta = &response["result"]["_meta"]["borg"];
+        let meta = &response["result"]["_meta"]["footnote"];
         assert_eq!(meta["mac"].as_str().map(|m| m.len()), Some(64));
         seqs.push(meta["seq"].as_u64().unwrap());
     }
@@ -125,8 +125,8 @@ fn every_tool_call_is_logged_chained_and_bound_to_its_response() {
 
     let entries = audit_lines(&audit);
     assert_eq!(entries.len(), 2);
-    assert_eq!(entries[0]["tool"], "borg_stats");
-    assert_eq!(entries[1]["tool"], "borg_recall");
+    assert_eq!(entries[0]["tool"], "footnote_stats");
+    assert_eq!(entries[1]["tool"], "footnote_recall");
     // Queries are hashed, never stored verbatim.
     assert!(entries[1]["args_sha256"].as_str().unwrap().len() == 64);
     assert!(!fs::read_to_string(&audit).unwrap().contains("checkpoint"));

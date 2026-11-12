@@ -24,9 +24,9 @@ const DIM: usize = 384;
 const SHORTLIST: usize = 1000;
 const POOL: usize = 100;
 const SCAN_LIMIT: usize = 50_000;
-/// Entries up to which every stored vector is scored. `BORG_KNOWLEDGE_SCAN_LIMIT` lowers it (tests, very small machines).
+/// Entries up to which every stored vector is scored. `FOOTNOTE_SCAN_LIMIT` lowers it (tests, very small machines).
 fn scan_limit() -> usize {
-    std::env::var("BORG_KNOWLEDGE_SCAN_LIMIT")
+    std::env::var("FOOTNOTE_SCAN_LIMIT")
         .ok()
         .and_then(|v| v.parse().ok())
         .map_or(SCAN_LIMIT, |n: usize| n.min(SCAN_LIMIT))
@@ -78,7 +78,7 @@ impl Drop for Worker {
 static WORKERS: OnceLock<Mutex<HashMap<PathBuf, Worker>>> = OnceLock::new();
 
 fn python() -> PathBuf {
-    std::env::var_os("BORG_KNOWLEDGE_PYTHON")
+    crate::state::env("FOOTNOTE_PYTHON", "BORG_KNOWLEDGE_PYTHON")
         .map(PathBuf::from)
         .unwrap_or_else(|| {
             Path::new(env!("CARGO_MANIFEST_DIR")).join(if cfg!(windows) {

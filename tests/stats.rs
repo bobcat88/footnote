@@ -12,7 +12,7 @@ fn stats_reports_live_sqlite_fts_and_failed_extraction_states() {
     fs::write(root.join("bad.txt"), [255, 254]).unwrap();
     let db = t.path().join("k.db");
     let call = |args: &[&str]| -> Value {
-        let o = Command::new(assert_cmd::cargo::cargo_bin!("borg-knowledge"))
+        let o = Command::new(assert_cmd::cargo::cargo_bin!("footnote"))
             .arg("--db")
             .arg(&db)
             .args(args)

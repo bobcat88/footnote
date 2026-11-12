@@ -3,12 +3,17 @@
 //! The audit log, its MAC key and the daemon token live in one per-user
 //! directory and are created on first use. Nobody has to generate a secret, pass
 //! a key file or remember a flag: security is the default and the plumbing is
-//! automatic. `BORG_STATE_DIR` overrides the location (used by tests).
+//! automatic. `FOOTNOTE_STATE_DIR` overrides the location (used by tests).
 use anyhow::{Context, Result, bail};
 use std::path::{Path, PathBuf};
 
+/// A `FOOTNOTE_*` environment variable, falling back to its pre-rename `BORG_*` name.
+pub fn env(new: &str, old: &str) -> Option<std::ffi::OsString> {
+    std::env::var_os(new).or_else(|| std::env::var_os(old))
+}
+
 pub fn state_dir() -> Result<PathBuf> {
-    if let Some(dir) = std::env::var_os("BORG_STATE_DIR") {
+    if let Some(dir) = env("FOOTNOTE_STATE_DIR", "BORG_STATE_DIR") {
         return Ok(PathBuf::from(dir));
     }
     let base = if cfg!(windows) {
@@ -20,8 +25,15 @@ pub fn state_dir() -> Result<PathBuf> {
                 std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".local/state"))
             })
     };
-    let base = base.context("cannot determine a per-user state directory; set BORG_STATE_DIR")?;
-    Ok(base.join("borg-knowledge"))
+    let base =
+        base.context("cannot determine a per-user state directory; set FOOTNOTE_STATE_DIR")?;
+    let dir = base.join("footnote");
+    // Before the rename the folder was called borg-knowledge; carry its audit log, key and token over once.
+    let old = base.join("borg-knowledge");
+    if !dir.exists() && old.is_dir() {
+        let _ = std::fs::rename(&old, &dir);
+    }
+    Ok(dir)
 }
 
 pub fn audit_path() -> Result<PathBuf> {

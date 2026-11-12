@@ -16,7 +16,7 @@ fn title_context_is_searchable_within_child_sections() {
     )
     .unwrap();
     let call = |args: &[&str]| -> Value {
-        let o = Command::new(assert_cmd::cargo::cargo_bin!("borg-knowledge"))
+        let o = Command::new(assert_cmd::cargo::cargo_bin!("footnote"))
             .arg("--db")
             .arg(&db)
             .args(args)

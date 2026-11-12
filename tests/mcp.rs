@@ -6,7 +6,7 @@ use std::{
 };
 
 fn cmd(db: &Path) -> Command {
-    let mut c = Command::new(assert_cmd::cargo::cargo_bin!("borg-knowledge"));
+    let mut c = Command::new(assert_cmd::cargo::cargo_bin!("footnote"));
     c.arg("--db").arg(db);
     c
 }
@@ -121,7 +121,7 @@ fn initialize_returns_server_info_and_echoes_requested_protocol_version() {
     assert_eq!(rs[0]["jsonrpc"], "2.0");
     assert_eq!(rs[0]["id"], 1);
     assert_eq!(rs[0]["result"]["protocolVersion"], "2025-06-18");
-    assert_eq!(rs[0]["result"]["serverInfo"]["name"], "borg-knowledge");
+    assert_eq!(rs[0]["result"]["serverInfo"]["name"], "footnote");
     assert_eq!(
         rs[0]["result"]["serverInfo"]["version"],
         env!("CARGO_PKG_VERSION")
@@ -175,14 +175,14 @@ fn tools_list_returns_eight_tools_with_valid_input_schemas() {
     assert_eq!(tools.len(), 8);
     let names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
     for expected in [
-        "borg_recall",
-        "borg_get",
-        "borg_get_record",
-        "borg_stats",
-        "borg_health",
-        "borg_wake_up",
-        "borg_propose",
-        "borg_export",
+        "footnote_recall",
+        "footnote_get",
+        "footnote_get_record",
+        "footnote_stats",
+        "footnote_health",
+        "footnote_wake_up",
+        "footnote_propose",
+        "footnote_export",
     ] {
         assert!(names.contains(&expected), "missing tool {expected}");
     }
@@ -202,23 +202,23 @@ fn tools_list_returns_eight_tools_with_valid_input_schemas() {
     }
     let by_name = |n: &str| tools.iter().find(|t| t["name"] == n).unwrap().clone();
     assert_eq!(
-        by_name("borg_recall")["inputSchema"]["required"],
+        by_name("footnote_recall")["inputSchema"]["required"],
         json!(["query"])
     );
     assert_eq!(
-        by_name("borg_get")["inputSchema"]["required"],
+        by_name("footnote_get")["inputSchema"]["required"],
         json!(["id"])
     );
     assert_eq!(
-        by_name("borg_get_record")["inputSchema"]["required"],
+        by_name("footnote_get_record")["inputSchema"]["required"],
         json!(["id"])
     );
     assert_eq!(
-        by_name("borg_propose")["inputSchema"]["required"],
+        by_name("footnote_propose")["inputSchema"]["required"],
         json!(["payload"])
     );
     assert_eq!(
-        by_name("borg_recall")["inputSchema"]["properties"]["mode"]["enum"],
+        by_name("footnote_recall")["inputSchema"]["properties"]["mode"]["enum"],
         json!(["lexical", "hybrid"])
     );
 }
@@ -227,7 +227,7 @@ fn tools_list_returns_eight_tools_with_valid_input_schemas() {
 fn tools_call_borg_stats_returns_a_successful_tool_result_on_an_indexed_db() {
     let t = tmp();
     let db = fixture(&t);
-    let result = call(&db, "borg_stats", json!({}));
+    let result = call(&db, "footnote_stats", json!({}));
     assert_eq!(result["isError"], false);
     assert_eq!(result["content"][0]["type"], "text");
     let stats: Value = serde_json::from_str(&text(&result)).unwrap();
@@ -242,7 +242,7 @@ fn tools_call_borg_stats_returns_a_successful_tool_result_on_an_indexed_db() {
 fn recall_get_health_wake_up_and_export_round_trip() {
     let t = tmp();
     let db = fixture(&t);
-    let recall = call(&db, "borg_recall", json!({"query":"checkpoint"}));
+    let recall = call(&db, "footnote_recall", json!({"query":"checkpoint"}));
     assert_eq!(recall["isError"], false);
     let hits: Value = serde_json::from_str(&text(&recall)).unwrap();
     assert_eq!(hits["mode"], "lexical_bm25");
@@ -251,27 +251,27 @@ fn recall_get_health_wake_up_and_export_round_trip() {
     assert_eq!(first["freshness"], "current");
     let id = first["id"].as_i64().unwrap();
 
-    let chunk = call(&db, "borg_get", json!({"id":id}));
+    let chunk = call(&db, "footnote_get", json!({"id":id}));
     assert_eq!(chunk["isError"], false);
     let chunk: Value = serde_json::from_str(&text(&chunk)).unwrap();
     assert!(chunk["text"].as_str().unwrap().contains("Checkpoint"));
     // Retrieved text stays labelled as untrusted data.
     assert_eq!(chunk["trust"], "untrusted_source_data");
 
-    let health = call(&db, "borg_health", json!({}));
+    let health = call(&db, "footnote_health", json!({}));
     let health: Value = serde_json::from_str(&text(&health)).unwrap();
     assert_eq!(health["schema"], 4);
     assert_eq!(health["embeddings_present"], false);
     assert_eq!(health["semantic_state"], "lexical_only");
     assert_eq!(health["records_by_status"], json!({}));
 
-    let pack = call(&db, "borg_wake_up", json!({"limit":3}));
+    let pack = call(&db, "footnote_wake_up", json!({"limit":3}));
     let pack: Value = serde_json::from_str(&text(&pack)).unwrap();
     assert_eq!(pack["kind"], "context_pack");
     assert_eq!(pack["retrieval"], "recent_chunks");
     assert!(!pack["chunks"].as_array().unwrap().is_empty());
 
-    let export = call(&db, "borg_export", json!({}));
+    let export = call(&db, "footnote_export", json!({}));
     let export: Value = serde_json::from_str(&text(&export)).unwrap();
     assert_eq!(export["format"], "json");
     assert_eq!(export["total"], 0);
@@ -334,14 +334,14 @@ fn borg_propose_refuses_without_weakening_the_allowlist_contract() {
     let db = fixture(&t);
     let result = call(
         &db,
-        "borg_propose",
+        "footnote_propose",
         json!({"payload":{"technology":"SQLite"}}),
     );
     assert_eq!(result["isError"], true);
     let message = text(&result);
     assert!(message.contains("not supported"), "{message}");
     // Nothing was written: the fixture still has no records.
-    let stats = call(&db, "borg_stats", json!({}));
+    let stats = call(&db, "footnote_stats", json!({}));
     let stats: Value = serde_json::from_str(&text(&stats)).unwrap();
     assert_eq!(stats["records"], 0);
 }
@@ -373,7 +373,7 @@ fn record_tools_read_structured_records_and_project_context_packs() {
     assert_eq!(proposed["status"], "proposal");
     let id = proposed["id"].as_i64().unwrap();
 
-    let record = call(&db, "borg_get_record", json!({"id":id}));
+    let record = call(&db, "footnote_get_record", json!({"id":id}));
     assert_eq!(record["isError"], false);
     let record: Value = serde_json::from_str(&text(&record)).unwrap();
     assert_eq!(record["status"], "proposal");
@@ -381,11 +381,11 @@ fn record_tools_read_structured_records_and_project_context_packs() {
     assert_eq!(record["trust"], "untrusted_scoped_finding");
     assert_eq!(record["payload"]["project"], "synthetic");
 
-    let missing = call(&db, "borg_get_record", json!({"id":9999}));
+    let missing = call(&db, "footnote_get_record", json!({"id":9999}));
     assert_eq!(missing["isError"], true);
     assert!(text(&missing).contains("record not found"));
 
-    let export = call(&db, "borg_export", json!({"format":"json"}));
+    let export = call(&db, "footnote_export", json!({"format":"json"}));
     let export: Value = serde_json::from_str(&text(&export)).unwrap();
     assert_eq!(export["total"], 1);
     assert_eq!(export["records"][0]["id"], id);
@@ -396,7 +396,7 @@ fn record_tools_read_structured_records_and_project_context_packs() {
 
     let pack = call(
         &db,
-        "borg_wake_up",
+        "footnote_wake_up",
         json!({"project":"synthetic","limit":5}),
     );
     assert_eq!(pack["isError"], false);
@@ -404,7 +404,7 @@ fn record_tools_read_structured_records_and_project_context_packs() {
     assert_eq!(pack["retrieval"], "project_records");
     assert_eq!(pack["records"][0]["id"], id);
 
-    let wrong_project = call(&db, "borg_wake_up", json!({"project":"other-project"}));
+    let wrong_project = call(&db, "footnote_wake_up", json!({"project":"other-project"}));
     let wrong_project: Value = serde_json::from_str(&text(&wrong_project)).unwrap();
     assert_eq!(wrong_project["records"], json!([]));
     assert_eq!(wrong_project["retrieval"], "recent_chunks");
@@ -415,7 +415,7 @@ fn record_tools_read_structured_records_and_project_context_packs() {
 fn read_tools_never_create_a_missing_database() {
     let t = tmp();
     let db = t.path().join("missing.db");
-    let result = call(&db, "borg_stats", json!({}));
+    let result = call(&db, "footnote_stats", json!({}));
     assert_eq!(result["isError"], true);
     assert!(text(&result).contains("database not found"));
     assert!(!db.exists(), "a read tool created the database");
@@ -434,4 +434,13 @@ fn serve_without_the_mcp_flag_fails_with_a_clear_error() {
         .clone();
     let stderr = String::from_utf8(out).unwrap();
     assert!(stderr.contains("--mcp"), "stderr: {stderr}");
+}
+
+#[test]
+fn pre_rename_tool_names_still_work() {
+    let t = tmp();
+    let db = fixture(&t);
+    let result = call(&db, "borg_stats", json!({}));
+    assert!(result["isError"] != json!(true), "{result}");
+    assert!(text(&result).contains("chunks"));
 }

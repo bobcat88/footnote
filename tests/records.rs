@@ -2,7 +2,7 @@ use assert_cmd::Command;
 use serde_json::{Value, json};
 use std::{fs, path::Path};
 fn cmd(db: &Path, args: &[&str]) -> Command {
-    let mut c = Command::new(assert_cmd::cargo::cargo_bin!("borg-knowledge"));
+    let mut c = Command::new(assert_cmd::cargo::cargo_bin!("footnote"));
     c.arg("--db").arg(db).args(args);
     c
 }

@@ -5,7 +5,7 @@
 //! The first line on every connection is a token handshake read from a per-user
 //! file, so a local process that guesses the endpoint still cannot talk to it.
 //!
-//! Agents never manage this process: their MCP entry points at `borg-knowledge
+//! Agents never manage this process: their MCP entry points at `footnote
 //! mcp`, which connects to the daemon and spawns it on demand. That is what makes
 //! one warm corpus shared by Claude Code, Codex and Gemini at the same time.
 use crate::mcp::{Shared, session_loop};
@@ -30,7 +30,7 @@ static ACTIVE: AtomicUsize = AtomicUsize::new(0);
 pub fn endpoint_name(db: &Path) -> String {
     let canonical = std::fs::canonicalize(db).unwrap_or_else(|_| db.to_path_buf());
     let digest = crate::app::hash(canonical.to_string_lossy().as_bytes());
-    format!("borg-knowledge-{}", &digest[..16])
+    format!("footnote-{}", &digest[..16])
 }
 
 fn endpoint_of(db: &Path) -> String {
@@ -51,7 +51,7 @@ pub fn run(shared: Shared) -> Result<()> {
             )
         })?;
     // Record the pid so operators (and tests) can stop an owned daemon without
-    // killing every other borg-knowledge process on the machine.
+    // killing every other footnote process on the machine.
     if let Ok(state) = crate::state::state_dir() {
         let _ = crate::state::ensure_private_dir(&state);
         let _ = std::fs::write(state.join("daemon.pid"), std::process::id().to_string());
@@ -61,7 +61,7 @@ pub fn run(shared: Shared) -> Result<()> {
         let stream = match connection {
             Ok(stream) => stream,
             Err(e) => {
-                eprintln!("borg-knowledge daemon: accept failed: {e}");
+                eprintln!("footnote daemon: accept failed: {e}");
                 continue;
             }
         };
@@ -69,7 +69,7 @@ pub fn run(shared: Shared) -> Result<()> {
         // cannot exhaust threads or memory. Real use is a handful of agents.
         if ACTIVE.fetch_add(1, Ordering::SeqCst) >= MAX_SESSIONS {
             ACTIVE.fetch_sub(1, Ordering::SeqCst);
-            eprintln!("borg-knowledge daemon: refused a connection (limit {MAX_SESSIONS})");
+            eprintln!("footnote daemon: refused a connection (limit {MAX_SESSIONS})");
             continue;
         }
         let shared = Arc::clone(&shared);
@@ -78,7 +78,7 @@ pub fn run(shared: Shared) -> Result<()> {
             let mut out = &stream;
             if let Err(e) = session_loop(&mut reader, &mut out, &shared, true) {
                 // A rejected handshake or a dropped agent is routine, not fatal.
-                eprintln!("borg-knowledge daemon: session ended: {e:#}");
+                eprintln!("footnote daemon: session ended: {e:#}");
             }
             ACTIVE.fetch_sub(1, Ordering::SeqCst);
         });
@@ -109,8 +109,8 @@ pub fn proxy(shared: &Shared) -> Result<()> {
         Err(_) => {
             // No resident daemon: stay functional, just not shared.
             eprintln!(
-                "borg-knowledge: no shared daemon for this corpus; serving in-process \
-                 (run `borg-knowledge --db <DB> serve --mcp --daemon` or re-run install to share one)"
+                "footnote: no shared daemon for this corpus; serving in-process \
+                 (run `footnote --db <DB> serve --mcp --daemon` or re-run install to share one)"
             );
             let stdin = std::io::stdin();
             let mut reader = BufReader::new(stdin.lock());
@@ -207,7 +207,7 @@ mod tests {
 
     fn auth_line(token: &str, client_nonce: &str) -> String {
         format!(
-            "{{\"borg\":{{\"auth\":{{\"nonce\":\"{client_nonce}\",\"proof\":\"{}\"}}}}}}\n",
+            "{{\"footnote\":{{\"auth\":{{\"nonce\":\"{client_nonce}\",\"proof\":\"{}\"}}}}}}\n",
             proof(token, "c", SN, client_nonce)
         )
     }
@@ -245,7 +245,7 @@ mod tests {
         let token = "a".repeat(64);
         let other = "3333333333333333333333333333333333333333333333333333333333333333";
         let recorded = format!(
-            "{{\"borg\":{{\"auth\":{{\"nonce\":\"{CN}\",\"proof\":\"{}\"}}}}}}\n",
+            "{{\"footnote\":{{\"auth\":{{\"nonce\":\"{CN}\",\"proof\":\"{}\"}}}}}}\n",
             proof(&token, "c", other, CN)
         );
         assert!(serve(&recorded, &token).0.is_err(), "replay accepted");
@@ -269,7 +269,7 @@ mod tests {
 
     #[test]
     fn a_daemon_without_a_token_fails_closed() {
-        let dir = std::env::temp_dir().join(format!("borg-notoken-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("footnote-notoken-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let shared = Shared::new(&dir.join("corpus.db"), None, None);
         let mut reader = BufReader::new(&b""[..]);
@@ -280,10 +280,10 @@ mod tests {
     #[test]
     fn the_client_refuses_a_server_that_does_not_know_the_token() {
         let token = "a".repeat(64);
-        let hello = format!("{{\"borg\":{{\"hello\":{{\"nonce\":\"{SN}\"}}}}}}\n");
+        let hello = format!("{{\"footnote\":{{\"hello\":{{\"nonce\":\"{SN}\"}}}}}}\n");
         let ready = |t: &str| {
             format!(
-                "{{\"borg\":{{\"ready\":{{\"proof\":\"{}\"}}}}}}\n",
+                "{{\"footnote\":{{\"ready\":{{\"proof\":\"{}\"}}}}}}\n",
                 proof(t, "s", SN, CN)
             )
         };

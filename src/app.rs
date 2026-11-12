@@ -232,11 +232,11 @@ pub(crate) fn scratch_dir() -> Result<std::path::PathBuf> {
         .map(std::path::PathBuf::from)
         .or_else(|| {
             std::env::var_os("LOCALAPPDATA")
-                .map(|p| std::path::PathBuf::from(p).join("BorgKnowledge/scratch"))
+                .map(|p| std::path::PathBuf::from(p).join("Footnote/scratch"))
         })
         .or_else(|| {
             std::env::var_os("HOME")
-                .map(|p| std::path::PathBuf::from(p).join(".cache/BorgKnowledge/scratch"))
+                .map(|p| std::path::PathBuf::from(p).join(".cache/Footnote/scratch"))
         })
         .ok_or_else(|| anyhow::anyhow!("configure TMPDIR for helper scratch space"))?;
     no_links(&scratch)?;

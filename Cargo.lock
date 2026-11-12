@@ -162,25 +162,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "borg-knowledge"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "assert_cmd",
- "clap",
- "getrandom 0.4.3",
- "interprocess",
- "rusqlite",
- "serde",
- "serde_json",
- "sha2",
- "tantivy",
- "tempfile",
- "wait-timeout",
- "walkdir",
-]
-
-[[package]]
 name = "bstr"
 version = "1.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -486,6 +467,25 @@ name = "foldhash"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "77ce24cb58228fbb8aa041425bb1050850ac19177686ea6e0f41a70416f56fdb"
+
+[[package]]
+name = "footnote"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "assert_cmd",
+ "clap",
+ "getrandom 0.4.3",
+ "interprocess",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tantivy",
+ "tempfile",
+ "wait-timeout",
+ "walkdir",
+]
 
 [[package]]
 name = "frostem"

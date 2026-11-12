@@ -6,10 +6,10 @@ const MINILM: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/artifacts/models/mini
 const E5: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/artifacts/models/e5-small");
 
 fn run(db: &Path, args: &[&str], scan_limit: Option<&str>) -> Value {
-    let mut c = Command::new(assert_cmd::cargo::cargo_bin!("borg-knowledge"));
+    let mut c = Command::new(assert_cmd::cargo::cargo_bin!("footnote"));
     c.arg("--db").arg(db).args(args);
     if let Some(n) = scan_limit {
-        c.env("BORG_KNOWLEDGE_SCAN_LIMIT", n);
+        c.env("FOOTNOTE_SCAN_LIMIT", n);
     }
     serde_json::from_slice(&c.assert().success().get_output().stdout).unwrap()
 }
