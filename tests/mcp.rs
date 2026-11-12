@@ -245,7 +245,7 @@ fn recall_get_health_wake_up_and_export_round_trip() {
     let recall = call(&db, "borg_recall", json!({"query":"checkpoint"}));
     assert_eq!(recall["isError"], false);
     let hits: Value = serde_json::from_str(&text(&recall)).unwrap();
-    assert_eq!(hits["mode"], "lexical_fts5");
+    assert_eq!(hits["mode"], "lexical_bm25");
     let first = &hits["results"][0];
     assert_eq!(first["heading"], "WAL");
     assert_eq!(first["freshness"], "current");

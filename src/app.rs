@@ -546,6 +546,25 @@ pub(crate) fn search(
         return Ok(json!({"mode":"lexical_fts5","results":[],"records":records}));
     }
     let text_limit = limit - records.len();
+    // Chunk ranking comes from the derived Tantivy index when there is one (BM25, stemming); FTS5 is the fallback.
+    if let Some(ids) = crate::lexical::top_ids(c, q, (limit * 30).max(100))
+        .ok()
+        .flatten()
+    {
+        let mut s = c.prepare(&format!(
+            "{HIT} WHERE c.id=?1 AND s.status='indexed' AND c.id=(SELECT min(c2.id) FROM chunks c2 JOIN sources s2 ON s2.id=c2.source_id WHERE s2.sha256=s.sha256 AND s2.status='indexed' AND c2.heading=c.heading AND c2.page IS c.page AND c2.line=c.line AND c2.text=c.text)"
+        ))?;
+        let mut results = Vec::new();
+        for id in ids {
+            if results.len() >= text_limit {
+                break;
+            }
+            if let Some(v) = s.query_row([id], |r| hit(r, false)).optional()? {
+                results.push(v);
+            }
+        }
+        return Ok(json!({"mode":"lexical_bm25","results":results,"records":records}));
+    }
     let sql = format!(
         "{HIT} JOIN search_fts f ON f.rowid=c.id WHERE search_fts MATCH ?1 AND s.status='indexed' AND c.id=(SELECT min(c2.id) FROM chunks c2 JOIN sources s2 ON s2.id=c2.source_id WHERE s2.sha256=s.sha256 AND s2.status='indexed' AND c2.heading=c.heading AND c2.page IS c.page AND c2.line=c.line AND c2.text=c.text) ORDER BY bm25(search_fts),c.id LIMIT ?2"
     );
