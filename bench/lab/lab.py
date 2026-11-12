@@ -31,10 +31,14 @@ import models  # noqa: E402
 CACHE = models.BENCH / ".cache" / "emb"
 DEFAULT = {
     "chunker": {"kind": "chars", "size": 2000, "overlap": 0, "title_prefix": False},
-    "lexical": {"on": True, "tokenizer": {"accents": "strip", "stem": "none"}, "k1": 1.2, "b": 0.75},
-    "dense": {"on": True, "model": "e5-small-multi", "max_len": None, "center": "none"},
-    "fusion": {"kind": "rrf", "k": 60, "alpha": 0.5, "norm": "minmax", "pool": 100},
-    "rerank": {"on": False, "model": "mmarco-mminilm", "pool": 20},
+    "lexical": {"on": True, "tokenizer": {"accents": "strip", "stem": "none"}, "k1": 1.2, "b": 0.75,
+                "min_idf": 0.0, "prf": {"docs": 0, "terms": 10, "weight": 0.5}, "title_boost": 1},
+    "dense": {"on": True, "model": "e5-small-multi", "max_len": None, "center": "none",
+              "quant": "f32", "dims": 0, "prf": {"docs": 0, "beta": 0.5},
+              "extra": {"model": "", "weight": 0.5}},
+    "fusion": {"kind": "rrf", "k": 60, "alpha": 0.5, "norm": "minmax", "pool": 100, "dense_from_lexical": 0,
+               "adaptive": {"on": False, "lo": 0.4, "hi": 0.8}},
+    "rerank": {"on": False, "model": "mmarco-mminilm", "pool": 20, "gate_margin": 0.0},
 }
 
 
@@ -180,14 +184,15 @@ class Bm25:
         self.idf = {t: math.log(1 + (self.n - len(d) + 0.5) / (len(d) + 0.5)) for t, (d, _) in self.post.items()}
         self.norm = k1 * (1 - b + b * self.dl / self.avgdl)
 
-    def scores(self, query_tokens: list[str]) -> np.ndarray:
+    def scores(self, query_tokens: list[str], weights: dict[str, float] | None = None) -> np.ndarray:
         s = np.zeros(self.n, dtype=np.float32)
         for t in set(query_tokens):
             p = self.post.get(t)
             if p is None:
                 continue
             d, tf = p
-            s[d] += self.idf[t] * (tf * (self.k1 + 1)) / (tf + self.norm[d])
+            w = 1.0 if weights is None else weights.get(t, 1.0)
+            s[d] += w * self.idf[t] * (tf * (self.k1 + 1)) / (tf + self.norm[d])
         return s
 
 
@@ -309,7 +314,7 @@ def _norm(values: np.ndarray, how: str) -> np.ndarray:
     return (values - lo) / (hi - lo) if hi > lo else np.zeros_like(values)
 
 
-def fuse(lex: np.ndarray | None, den: np.ndarray | None, cfg: dict, k: int) -> list[int]:
+def fuse(lex: np.ndarray | None, den: np.ndarray | None, cfg: dict, k: int, alpha: float | None = None) -> list[int]:
     kind, pool = cfg["kind"], cfg["pool"]
     if kind == "dense" or lex is None:
         return list(np.argsort(-den, kind="stable")[:k])
@@ -320,7 +325,12 @@ def fuse(lex: np.ndarray | None, den: np.ndarray | None, cfg: dict, k: int) -> l
     top_l = top_l[lex[top_l] > 0]
     if len(top_l) == 0:  # no query term occurs in the corpus: the lexical signal is silent, fall back to the dense order
         return [int(d) for d in np.argsort(-den, kind="stable")[:k]]
-    top_d = np.argsort(-den, kind="stable")[:pool]
+    if cfg.get("dense_from_lexical"):  # two-stage: the dense signal only re-scores the lexical shortlist, no full dense scan
+        short = np.argsort(-lex, kind="stable")[: cfg["dense_from_lexical"]]
+        short = short[lex[short] > 0]
+        top_d = short[np.argsort(-den[short], kind="stable")[:pool]]
+    else:
+        top_d = np.argsort(-den, kind="stable")[:pool]
     cand = np.union1d(top_l, top_d)
     if kind == "rrf":
         score = collections.defaultdict(float)
@@ -334,7 +344,7 @@ def fuse(lex: np.ndarray | None, den: np.ndarray | None, cfg: dict, k: int) -> l
         nd = dict(zip(top_d.tolist(), _norm(den[top_d], cfg["norm"])))
         floor_l = min(nl.values()) - 1e-9 if cfg["norm"] == "zscore" else 0.0
         floor_d = min(nd.values()) - 1e-9 if cfg["norm"] == "zscore" else 0.0
-        a = cfg["alpha"]
+        a = cfg["alpha"] if alpha is None else alpha
         score = {int(d): a * nd.get(int(d), floor_d) + (1 - a) * nl.get(int(d), floor_l) for d in cand}
         return sorted(score, key=lambda d: (-score[d], d))[:k]
     raise ValueError(f"unknown fusion {kind}")
@@ -379,10 +389,13 @@ class LabEngine:
         texts: list[str] = []
         doc_of: list[int] = []
         self.doc_ids = list(corpus)
+        boost = self.cfg["lexical"]["title_boost"]
+        lex_texts: list[str] = []
         for i, doc_id in enumerate(self.doc_ids):
             title, text = corpus[doc_id]
-            for part in chunk(title, text, ccfg):
+            for j, part in enumerate(chunk(title, text, ccfg)):
                 texts.append(part)
+                lex_texts.append((f"{title} " * (boost - 1) + part) if (boost > 1 and j == 0 and title) else part)
                 doc_of.append(i)
         self.texts = texts
         self.starts = self._starts(doc_of)
@@ -390,7 +403,9 @@ class LabEngine:
         lex = self.cfg["lexical"]
         if lex["on"]:
             self.tokenize = make_tokenizer(lex["tokenizer"])
-            self.bm25 = Bm25([self.tokenize(t) for t in texts], lex["k1"], lex["b"])
+            chunk_tokens = [self.tokenize(t) for t in lex_texts]
+            self.chunk_tokens = chunk_tokens if lex["prf"]["docs"] > 0 else None
+            self.bm25 = Bm25(chunk_tokens, lex["k1"], lex["b"])
         embed_ms = 0.0
         if self.cfg["dense"]["on"]:
             e0 = time.perf_counter()
@@ -400,10 +415,34 @@ class LabEngine:
             self.lang_means = {}
             if self.cfg["dense"].get("center") == "lang":
                 self.emb, self.lang_means = center_by_language(self.emb, [lang_of(x) for x in texts])
+            self.emb = self._quantize(self.emb)
+            ex = self.cfg["dense"]["extra"]
+            if ex["model"]:  # second encoder: its cosine scores are blended with the first one's before fusion
+                self._enc2 = get_encoder(ex["model"], None)
+                self.emb2 = cached_embed(self._enc2, texts, "passage", self._cache_embeddings)
+                self._qcache2: dict[str, np.ndarray] = {}
             embed_ms = (time.perf_counter() - e0) * 1000
         info.update({"build_ms": (time.perf_counter() - t0) * 1000, "embed_ms": embed_ms, "disk_bytes": 0,
-                     "index_bytes_in_memory": int(self.emb.nbytes) if self.cfg["dense"]["on"] else 0})
+                     "index_bytes_in_memory": self._vector_bytes() if self.cfg["dense"]["on"] else 0})
         return info
+
+    def _quantize(self, emb: np.ndarray) -> np.ndarray:
+        """Store vectors the way a compact index would, then work on the dequantized values: this measures the ranking cost of the
+        precision loss (speed and memory of real int8/f16 kernels are measured separately)."""
+        d = self.cfg["dense"]
+        if d["dims"]:
+            emb = emb[:, : d["dims"]]
+            emb = emb / np.maximum(np.linalg.norm(emb, axis=1, keepdims=True), 1e-12)
+        if d["quant"] == "f16":
+            emb = emb.astype(np.float16).astype(np.float32)
+        elif d["quant"] == "int8":
+            scale = np.maximum(np.abs(emb).max(axis=1, keepdims=True), 1e-12) / 127.0
+            emb = (np.round(emb / scale).clip(-127, 127) * scale).astype(np.float32)
+        return emb
+
+    def _vector_bytes(self) -> int:
+        per = {"f32": 4, "f16": 2, "int8": 1}[self.cfg["dense"]["quant"]]
+        return int(self.emb.shape[0] * self.emb.shape[1] * per)
 
     def warm_queries(self, texts: list[str]) -> None:
         """Encode all queries in one batch (sweeps); search() then finds them cached."""
@@ -411,6 +450,10 @@ class LabEngine:
             todo = [t for t in dict.fromkeys(texts) if t not in self._qcache]
             for t, v in zip(todo, self._enc.embed(todo, "query")):
                 self._qcache[t] = v
+            if self.cfg["dense"]["extra"]["model"]:
+                todo = [t for t in dict.fromkeys(texts) if t not in self._qcache2]
+                for t, v in zip(todo, self._enc2.embed(todo, "query")):
+                    self._qcache2[t] = v
 
     @staticmethod
     def _starts(doc_of: list[int]) -> np.ndarray:
@@ -421,10 +464,30 @@ class LabEngine:
                 last = d
         return np.array(starts)
 
+    def _lexical(self, text: str) -> np.ndarray:
+        cfg = self.cfg["lexical"]
+        qtok = self.tokenize(text)
+        if cfg["min_idf"]:  # drop words that occur in a large share of the corpus (question words, function words)
+            kept = [t for t in qtok if self.bm25.idf.get(t, 99.0) >= cfg["min_idf"]]
+            qtok = kept or qtok
+        scores = self.bm25.scores(qtok)
+        prf = cfg["prf"]
+        if prf["docs"] > 0 and self.chunk_tokens is not None and scores.max() > 0:
+            top = np.argsort(-doc_scores(scores, self.starts), kind="stable")[: prf["docs"]]
+            acc: collections.Counter = collections.Counter()
+            for d in top:
+                toks = self.chunk_tokens[int(self.starts[d])]
+                for t, c in collections.Counter(toks).items():
+                    acc[t] += c / max(len(toks), 1) * self.bm25.idf[t]
+            have = set(qtok)
+            extra = [t for t, _ in acc.most_common(prf["terms"] + len(have)) if t not in have][: prf["terms"]]
+            scores = self.bm25.scores(qtok + extra, {t: prf["weight"] for t in extra})
+        return scores
+
     def search(self, qid: str, text: str, k: int) -> list[str]:
         lex = den = lex_c = den_c = None
         if self.cfg["lexical"]["on"]:
-            lex_c = self.bm25.scores(self.tokenize(text))
+            lex_c = self._lexical(text)
             lex = doc_scores(lex_c, self.starts)
         if self.cfg["dense"]["on"]:
             if text not in self._qcache:
@@ -433,11 +496,40 @@ class LabEngine:
             if self.lang_means:
                 qv = qv - self.lang_means.get(lang_of(text), 0)
                 qv = qv / max(float(np.linalg.norm(qv)), 1e-12)
+            if self.cfg["dense"]["dims"]:
+                qv = qv[: self.cfg["dense"]["dims"]]
+                qv = qv / max(float(np.linalg.norm(qv)), 1e-12)
             den_c = self.emb @ qv
             den = doc_scores(den_c, self.starts)
+            ex = self.cfg["dense"]["extra"]
+            if ex["model"]:
+                if text not in self._qcache2:
+                    self._qcache2[text] = self._enc2.embed([text], "query")[0]
+                den2 = doc_scores(self.emb2 @ self._qcache2[text], self.starts)
+                z = lambda x: (x - x.mean()) / (x.std() or 1.0)
+                den = (1 - ex["weight"]) * z(den) + ex["weight"] * z(den2)
+            dprf = self.cfg["dense"]["prf"]
+            if dprf["docs"] > 0:  # Rocchio: move the query toward the centroid of its best documents
+                top = np.argsort(-den, kind="stable")[: dprf["docs"]]
+                qv = qv + dprf["beta"] * self.emb[self.starts[top]].mean(axis=0)
+                qv = qv / max(float(np.linalg.norm(qv)), 1e-12)
+                den_c = self.emb @ qv
+                den = doc_scores(den_c, self.starts)
+        alpha = None
+        ad = self.cfg["fusion"]["adaptive"]
+        if ad["on"] and lex is not None and den is not None:  # a peaked lexical ranking earns more weight
+            top = np.sort(lex)[::-1][:10]
+            conf = float(1 - top[-1] / top[0]) if top[0] > 0 else 0.0
+            alpha = ad["hi"] - (ad["hi"] - ad["lo"]) * conf
         rr = self.cfg["rerank"]
-        order = fuse(lex, den, self.cfg["fusion"], max(k, rr["pool"]) if rr["on"] else k)
-        if rr["on"] and order:
+        use_rr = rr["on"]
+        if use_rr and rr["gate_margin"] and den is not None:  # only spend the reranker where the dense ranking is not decisive
+            top2 = np.sort(den)[::-1][:2]
+            use_rr = bool(len(top2) > 1 and top2[0] - top2[1] < rr["gate_margin"])
+        self.rr_total = getattr(self, "rr_total", 0) + 1
+        self.rr_calls = getattr(self, "rr_calls", 0) + int(use_rr)
+        order = fuse(lex, den, self.cfg["fusion"], max(k, rr["pool"]) if use_rr else k, alpha)
+        if use_rr and order:
             head, tail = order[:rr["pool"]], order[rr["pool"]:]
             evidence = den_c if den_c is not None else lex_c  # rerank each candidate on its best-matching chunk
             ends = np.append(self.starts[1:], len(self.texts))

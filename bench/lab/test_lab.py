@@ -81,6 +81,52 @@ class LabTests(unittest.TestCase):
         self.assertEqual(lab.embed_key(Fake, cut, "passage"), lab.embed_key(Fake, list(cut), "passage"))
         self.assertNotEqual(lab.embed_key(Fake, cut, "passage"), lab.embed_key(Fake, cut, "query"))
 
+    def _lex_engine(self, over: dict, corpus: dict):
+        eng = lab.LabEngine("t", {"dense": {"on": False}, "fusion": {"kind": "lexical"}, "chunker": {"kind": "whole"},
+                                  "lexical": {"tokenizer": {"stem": "none"}, **over}})
+        eng.prepare("t", corpus)
+        return eng
+
+    def test_min_idf_drops_words_found_in_most_documents(self):
+        corpus = {str(i): ("", f"the cat {w}") for i, w in enumerate(["alpha", "beta", "gamma", "delta", "omega"])}
+        eng = self._lex_engine({"min_idf": 1.0}, corpus)
+        self.assertEqual(eng.search("q", "the cat gamma", 3), ["2"])  # "the" and "cat" are in every document
+        self.assertEqual(self._lex_engine({}, corpus).search("q", "the cat gamma", 1), ["2"])  # without the filter gamma still wins
+        # a query made only of common words is kept as is rather than emptied
+        self.assertEqual(len(eng.search("q", "the cat", 5)), 5)
+
+    def test_title_boost_counts_the_title_more_than_once(self):
+        corpus = {"a": ("zebra", "filler words about nothing at all here"), "b": ("other", "zebra filler words about things here too")}
+        plain = self._lex_engine({"title_boost": 1}, corpus).search("q", "zebra", 2)
+        boosted = self._lex_engine({"title_boost": 3}, corpus)
+        self.assertEqual(set(plain), {"a", "b"})
+        self.assertEqual(boosted.search("q", "zebra", 2)[0], "a")
+
+    def test_lexical_prf_adds_terms_from_the_top_documents(self):
+        corpus = {"a": ("", "quasar jet emission quasar jet"), "b": ("", "jet emission galaxy cluster"), "c": ("", "pasta recipe sauce"), "d": ("", "emission lines cluster")}
+        eng = self._lex_engine({"prf": {"docs": 1, "terms": 3, "weight": 0.5}}, corpus)
+        self.assertIsNotNone(eng.chunk_tokens)
+        scores = eng._lexical("quasar")
+        self.assertGreater(scores[1], 0)  # b shares "jet"/"emission" with the best document, not the query word
+
+    def test_quantization_keeps_unit_scale_and_dims_truncate(self):
+        rng = np.random.default_rng(1)
+        emb = rng.normal(size=(50, 16)).astype(np.float32)
+        emb /= np.linalg.norm(emb, axis=1, keepdims=True)
+        eng = lab.LabEngine("t", {"dense": {"on": False, "quant": "int8"}})
+        q = eng._quantize(emb)
+        self.assertTrue(np.abs(q - emb).max() < 0.02)
+        eng = lab.LabEngine("t", {"dense": {"on": False, "dims": 8}})
+        t = eng._quantize(emb)
+        self.assertEqual(t.shape, (50, 8))
+        self.assertTrue(np.allclose(np.linalg.norm(t, axis=1), 1.0, atol=1e-5))
+
+    def test_two_stage_fusion_never_returns_documents_outside_the_lexical_shortlist(self):
+        lex = np.array([5, 4, 3, 0, 0, 0], dtype=np.float32)
+        den = np.array([0.1, 0.2, 0.3, 0.99, 0.98, 0.97], dtype=np.float32)
+        cfg = {"kind": "cc", "pool": 6, "norm": "zscore", "alpha": 0.9, "k": 60, "dense_from_lexical": 3}
+        self.assertTrue(set(lab.fuse(lex, den, cfg, 6)) <= {0, 1, 2})
+
     def test_doc_scores_takes_the_best_chunk(self):
         self.assertEqual(lab.doc_scores(np.array([1, 5, 2, 7, 3], dtype=np.float32), np.array([0, 2, 3])).tolist(), [5, 2, 7])
 

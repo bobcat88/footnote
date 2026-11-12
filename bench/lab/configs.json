@@ -101,5 +101,74 @@
     "dense": {
       "model": "bekko-a25m"
     }
+  },
+  "ens-bekko-gte": {
+    "lexical": {
+      "k1": 1.5,
+      "tokenizer": {
+        "stem": "en"
+      }
+    },
+    "fusion": {
+      "kind": "cc",
+      "norm": "zscore",
+      "alpha": 0.55
+    },
+    "chunker": {
+      "kind": "whole"
+    },
+    "dense": {
+      "model": "bekko-a8m",
+      "extra": {
+        "model": "gte-small",
+        "weight": 0.5
+      }
+    }
+  },
+  "ens-bekko-gte-two-stage": {
+    "lexical": {
+      "k1": 1.5,
+      "tokenizer": {
+        "stem": "en"
+      }
+    },
+    "fusion": {
+      "kind": "cc",
+      "norm": "zscore",
+      "alpha": 0.55,
+      "dense_from_lexical": 1000
+    },
+    "chunker": {
+      "kind": "whole"
+    },
+    "dense": {
+      "model": "bekko-a8m",
+      "quant": "int8",
+      "extra": {
+        "model": "gte-small",
+        "weight": 0.5
+      }
+    }
+  },
+  "ml-bekko-a8m-int8-two-stage": {
+    "lexical": {
+      "k1": 1.5,
+      "tokenizer": {
+        "stem": "en"
+      }
+    },
+    "fusion": {
+      "kind": "cc",
+      "norm": "zscore",
+      "alpha": 0.55,
+      "dense_from_lexical": 1000
+    },
+    "chunker": {
+      "kind": "whole"
+    },
+    "dense": {
+      "model": "bekko-a8m",
+      "quant": "int8"
+    }
   }
 }

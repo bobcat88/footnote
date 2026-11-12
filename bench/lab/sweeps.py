@@ -85,5 +85,48 @@ def crowding(ds: str, base: dict):
     return out
 
 
-SWEEPS = {"crowding": crowding, "models": models, "lexical": lexical, "fusion": fusion, "chunking": chunking, "rerank": rerank,
+def experiments(ds: str, base: dict):
+    """Pre-registered optimization experiments (see bench/experiments/PLAN.md). Every row varies ONE thing from the base config."""
+    from lab import merge  # noqa: PLC0415
+    v = lambda label, **over: (label, merge(base, over))
+    out = [v("E00 base")]
+    out += [v("E01 bm25 k1=1.2 b=0.75 (Tantivy fixed)", lexical={"k1": 1.2, "b": 0.75}),
+            v("E01 bm25 k1=2.0 b=0.75", lexical={"k1": 2.0, "b": 0.75}),
+            v("E01 bm25 k1=1.5 b=0.5", lexical={"k1": 1.5, "b": 0.5})]
+    out += [v(f"E02 drop query words with idf<{t}", lexical={"min_idf": t}) for t in (1.0, 2.0, 3.0)]
+    out += [v(f"E03 lexical PRF docs={d} terms={t} w={w}", lexical={"prf": {"docs": d, "terms": t, "weight": w}})
+            for d, t, w in ((3, 8, 0.3), (5, 10, 0.5), (5, 20, 0.3))]
+    out += [v(f"E04 title boost x{n}", lexical={"title_boost": n}) for n in (2, 3)]
+    out += [v(f"E05 dense PRF docs={d} beta={b}", dense={"prf": {"docs": d, "beta": b}}) for d, b in ((3, 0.3), (3, 0.6), (5, 0.5))]
+    out += [v("E06 adaptive alpha 0.4..0.8", fusion={"adaptive": {"on": True, "lo": 0.4, "hi": 0.8}}),
+            v("E06 adaptive alpha 0.3..0.9", fusion={"adaptive": {"on": True, "lo": 0.3, "hi": 0.9}})]
+    out += [v(f"E07 fusion pool={n}", fusion={"pool": n}) for n in (20, 50, 200)]
+    out += [v(f"E08 two-stage dense on lexical top-{n}", fusion={"dense_from_lexical": n}) for n in (100, 1000)]
+    out += [v("E09 vectors f16", dense={"quant": "f16"}), v("E10 vectors int8", dense={"quant": "int8"})]
+    out += [v(f"E11 dims={d}", dense={"dims": d}) for d in (256, 192, 128)]
+    return out
+
+
+def ensemble(ds: str, base: dict):
+    """E16: blend the cosine scores of two dense models (twice the encode cost) before fusion with BM25."""
+    from lab import merge  # noqa: PLC0415
+    out = [("E16 base (one model)", merge(base, {}))]
+    for model in ("e5-small-multi", "minilm-l12-multi", "gte-small"):
+        for w in (0.3, 0.5):
+            out.append((f"E16 + {model} weight={w}", merge(base, {"dense": {"extra": {"model": model, "weight": w}}})))
+    return out
+
+
+def gated_rerank(ds: str, base: dict):
+    """E12: bge-reranker-v2-m3 only where the dense ranking is not decisive (small cosine gap between the two best documents)."""
+    from lab import merge  # noqa: PLC0415
+    out = [("E12 no rerank", merge(base, {"rerank": {"on": False}}))]
+    for pool in (10,):
+        for gate in (0.0, 0.01, 0.03, 0.06):
+            out.append((f"E12 bge-reranker-v2-m3 pool={pool} gate={gate}",
+                        merge(base, {"rerank": {"on": True, "model": "bge-reranker-v2-m3", "pool": pool, "gate_margin": gate}})))
+    return out
+
+
+SWEEPS = {"ensemble": ensemble, "experiments": experiments, "gated_rerank": gated_rerank, "crowding": crowding, "models": models, "lexical": lexical, "fusion": fusion, "chunking": chunking, "rerank": rerank,
           "lexical_lang": lexical_lang}

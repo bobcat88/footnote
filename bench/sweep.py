@@ -55,6 +55,8 @@ def main() -> int:
                        "ndcg@10": round(m["ndcg@10"], 5), "recall@10": round(m["recall@10"], 5), "mrr@10": round(m["mrr@10"], 5),
                        "empty": m["queries_empty"], "queries": m["queries_scored"], "tag": args.tag, "chunks": info["chunks"],
                        "embed_ms": round(info["embed_ms"]), "seconds": round(time.perf_counter() - t0, 1)}
+                if getattr(eng, "rr_total", 0) and eng.cfg["rerank"]["on"]:
+                    row["reranked_share"] = round(eng.rr_calls / eng.rr_total, 3)
             except Exception as e:  # a failure is a result: record it and continue
                 row = {"sweep": args.sweep, "dataset": ds, "split": args.split, "label": label, "error": f"{type(e).__name__}: {e}"[:300]}
             with sink.open("a", encoding="utf-8") as f:
