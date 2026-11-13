@@ -41,3 +41,13 @@
 | E16 + minilm-l12-multi weight=0.5 | -0.0038 | -0.0021 | -0.0006 | -0.0054 |
 | E16 + gte-small weight=0.3 | +0.0096 | +0.0135 | +0.0203 | +0.0118 |
 | E16 + gte-small weight=0.5 | +0.0122 | +0.0177 | +0.0237 | +0.0150 |
+
+### E12: reranker only where the dense gap is small (200 queries per dataset)
+
+| Experiment | scifact | nfcorpus | alloprof | mix-fr-en |
+|---|---|---|---|---|
+| *E12 no rerank* (nDCG@10) | nan | nan | 0.5083 | 0.4913 |
+| E12 bge-reranker-v2-m3 pool=10 gate=0.0 | - | - | +0.0385 | - |
+| E12 bge-reranker-v2-m3 pool=10 gate=0.01 | - | - | +0.0125 | - |
+| E12 bge-reranker-v2-m3 pool=10 gate=0.03 | - | - | +0.0333 | - |
+| E12 bge-reranker-v2-m3 pool=10 gate=0.06 | - | - | +0.0260 | - |

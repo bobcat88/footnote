@@ -1,3 +1,5 @@
+> **Footprint qualification (2026-11-12):** The scale bake-off compares an FTS5 database that stores the document body with a Tantivy index that stores IDs and search structures but not the body. The 5.6× artifact-size ratio below is not an index-only or full-product storage comparison. Footnote also retains source content and vectors in SQLite. A like-for-like full-stack measurement is still required. See `track_a.py` and `results.jsonl`.
+
 # Decision rules (written before the optimization results)
 
 Written 2026-11-11, while the model sweep was still running. The weights below are fixed; changing them after seeing results requires a
@@ -116,7 +118,7 @@ Rule applied: an engine is only worth adding if it changes precision, or latency
 | DuckDB FTS none / porter / french | 0.669 / 0.692 / 0.681 | 0.342 / 0.349 / 0.343 | 22 | 10.5-10.8 |
 | LanceDB FTS no stem / english / french | 0.662 / 0.687 / 0.671 | 0.345 / 0.352 / 0.346 | 2.2 | 6.8-7.2 |
 
-Engines with the same tokenizer agree within 0.01 nDCG: the engine does not move precision, the tokenizer does (English stemmer +0.017 to +0.026 on SciFact, +0.007 to +0.012 on the mixed index, and a French stemmer does not beat no stemming on the mixed index). Tantivy is 40-90 times faster per query and 5 times smaller on disk; FTS5 at 4-8 ms is already far below the dense encode step (about 2 ms resident, 1 s today in the CLI helper).
+Engines with the same tokenizer agree within 0.01 nDCG: the engine does not move precision, the tokenizer does (English stemmer +0.017 to +0.026 on SciFact, +0.007 to +0.012 on the mixed index, and a French stemmer does not beat no stemming on the mixed index). Tantivy is 40-90 times faster per query in this test; its artifact is smaller, but stores less content; FTS5 at 4-8 ms is already far below the dense encode step (about 2 ms resident, 1 s today in the CLI helper).
 
 **Track B, vector index (384 dimensions, 1000 real queries, recall against exact search).** 11,462 vectors are real; 100k and 1M are synthetic resamples with noise (clustered, a hard case for ANN: absolute recall there is pessimistic and only the ordering is indicative).
 
@@ -142,10 +144,10 @@ Qdrant Edge was not measured: it ships as a Rust crate, and the Python client's 
 | 1,000,000 | SQLite FTS5 | 422.8 | 1,669 | 1,715 | 62.0 |
 | 1,000,000 | Tantivy | 3.0 | 7.7 | 304 | 35.0 |
 
-At 5k-11k documents the gap looked harmless (4-8 ms against 0.08 ms); it grows linearly with the corpus: FTS5 reaches 0.4 s median and 1.7 s at the 95th percentile at 1M chunks, while Tantivy stays under 8 ms. Both are 5.6 times apart on disk. The top-10 lists of the two engines overlap only partly (Jaccard 0.65 at 100k, 0.58 at 1M) because scoring details differ; precision parity is established on the judged sets above, where equal tokenizers gave equal nDCG within 0.01, and the synthetic documents have no judgments.
+At 5k-11k documents the gap looked harmless (4-8 ms against 0.08 ms); it grows linearly with the corpus: FTS5 reaches 0.4 s median and 1.7 s at the 95th percentile at 1M chunks, while Tantivy stays under 8 ms. The two artifacts are 5.6 times apart on disk, but store different content as qualified above. The top-10 lists of the two engines overlap only partly (Jaccard 0.65 at 100k, 0.58 at 1M) because scoring details differ; precision parity is established on the judged sets above, where equal tokenizers gave equal nDCG within 0.01, and the synthetic documents have no judgments.
 
 **Decision (revised 2026-11-12 after the scale test).**
-- **Lexical layer: Tantivy** (`en_stem`, OR queries, BM25). Same precision as FTS5, 100-140 times faster at 100k-1M chunks, 5.6 times smaller. It replaces FTS5 for ranking.
+- **Lexical layer: Tantivy** (`en_stem`, OR queries, BM25). Similar judged-set precision to FTS5 and 100-140 times faster lexical queries at 100k-1M synthetic documents; artifact sizes are not like-for-like. It replaces FTS5 for ranking.
 - **Vectors: exact search over a matrix held in the daemon's memory** (2 ms at 100k chunks, 21 ms at 1M, perfect recall). Approximate indexes (USearch HNSW f32 ef 128) only beyond about 1M chunks, after re-measuring on real vectors. sqlite-vec, LanceDB and Qdrant are not needed.
 - **System of record stays SQLite** (documents, chunks, vectors as blobs, audit, provenance). The Tantivy index is derived data: it is rebuilt from SQLite (35 s for 1M chunks) whenever it is missing or its generation number does not match the database, so there is no second source of truth to keep consistent. Writes go to SQLite first, then to Tantivy; a crash between the two is repaired by the rebuild.
 - Costs accepted: one more crate (`tantivy`, MIT) and one extra folder on disk. The stemmer is language-fixed at index time (English, per the mixed-language results above).

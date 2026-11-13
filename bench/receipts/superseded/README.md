@@ -1,0 +1,1 @@
+Receipts of the shipped binary from before the resident vector cache (PR 7): same ranking, slower queries (the exact scan re-read every vector from SQLite on each query). Kept as history; the reportable receipts are one folder up.

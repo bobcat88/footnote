@@ -1,0 +1,100 @@
+{
+  "protocol": "v1",
+  "timestamp_utc": "2026-11-12T17:08:34+00:00",
+  "partial": false,
+  "dataset": {
+    "id": "syntec",
+    "split": "test",
+    "pin": {
+      "sha256": {
+        "documents.json": "0b899775cbeb3484f8f2b333581e4d792d301e0320d44ab495a593a6025203b8",
+        "queries.json": "c7d922ae47eb90c8c4ad93f8e84d1bb8c82397f1cae4385541027a129f49ca97"
+      },
+      "converted_sha256": null,
+      "source": "lyon-nlp/mteb-fr-retrieval-syntec-s2p"
+    },
+    "documents": 90,
+    "queries": 100
+  },
+  "engine": {
+    "id": "shipped-ensemble-mcp",
+    "config": {
+      "lexical": "any word (OR), Tantivy BM25 en_stem, accents folded",
+      "dense": "bekko-a8m + gte-small, 384d int8, blended 50/50",
+      "fusion": "convex combination alpha 0.55 (z-scores over top 100)",
+      "strategy": "full dense scan up to 50000 entries, else BM25 shortlist 1000",
+      "chunk_chars": 2000,
+      "k": 20,
+      "process": "resident mcp session",
+      "query_clip_bytes": 500
+    },
+    "versions": {
+      "binary_sha256": "2e1f258440015584f79ec4683366f2be0fae69edef79254154aba84f62fea79a",
+      "python_sqlite": "3.49.1",
+      "binary_sqlite": "3.51.1",
+      "model_repository": [
+        "hotchpotch/bekko-embedding-v1-a8m",
+        "Xenova/gte-small"
+      ],
+      "model_revision": [
+        "c721113d59a1d91b447450324f51c4b3332c924a",
+        "5927d1727bb12db490052a1b33265ad78058de08"
+      ],
+      "model_files_sha256": [
+        {
+          "tokenizer.json": "8bd47075711f75a143d1b78e01a41cc65c1c591b00d3cfeffc23db07adce1392",
+          "model.onnx": "96d8cc6199e96357b21b2fb12f6d7ffd2d4abc7b182fe94b5468fbd6dc819af7"
+        },
+        {
+          "tokenizer.json": "da0e79933b9ed51798a3ae27893d3c5fa4a201126cef75586296df9b4d2c62a0",
+          "model.onnx": "18dec105109b6004369799ca4761fb8fb413c64172c02147bcfac186b5c5f6cb"
+        }
+      ]
+    }
+  },
+  "code": {
+    "commit": "b1036bbdb389b27d081ef84a64aae18f5d48cbac",
+    "dirty": true,
+    "metrics_sha256": "f60c511c79f8cd4fe5e95ecbf5a47d77ddddceae8fc89038682c7fc44502ab50",
+    "harness_sha256": "eb90aab43535988aeef4281411f033d163620fc061be02fc393480695da80f8e"
+  },
+  "machine": {
+    "os": "Windows-11-10.0.28000-SP0",
+    "cpu": "Intel64 Family 6 Model 198 Stepping 2, GenuineIntel",
+    "logical_cpus": 24,
+    "ram_gib": 47.6,
+    "python": "3.12.10"
+  },
+  "build": {
+    "exe_sha256": "2e1f258440015584f79ec4683366f2be0fae69edef79254154aba84f62fea79a",
+    "documents": 90,
+    "build_ms": 12632.129700039513,
+    "embed_ms": 12557.188300066628,
+    "disk_bytes": 684032,
+    "chunks": 109,
+    "sources": 90,
+    "reused": false
+  },
+  "metrics": {
+    "ndcg@10": 0.795188,
+    "recall@5": 0.9,
+    "recall@10": 0.95,
+    "recall@20": 1.0,
+    "mrr@10": 0.745024,
+    "queries_scored": 100,
+    "queries_empty": 0
+  },
+  "latency_ms": {
+    "scope": "one resident `mcp` session (models loaded once, helpers resident): JSON-RPC over stdio, per-query wall time",
+    "p50": 13.62,
+    "p95": 17.31,
+    "mean": 28.92,
+    "queries": 100
+  },
+  "determinism": {
+    "checked": true,
+    "queries_checked": 100,
+    "identical_rankings": true,
+    "rankings_sha256": "bd434ee48562c4fd1569ce324155b0ee28d61457f6916dc94be9d3a51eda9e6e"
+  }
+}
