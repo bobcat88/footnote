@@ -1,181 +1,210 @@
-# BorgKnowledge
+<div align="center">
 
-Local Rust + SQLite retrieval CLI for agents. **Working pilot, not a replacement for the existing vault/Qdrant service and not globally activated in agent configurations.** No daemon, cloud inference, or document uploads.
+# Footnote<sup>1</sup>
 
-- Executable: `D:/Projets/BorgKnowledge/target/release/borg-knowledge.exe`
-- Original schema-3 pilot (unchanged): `artifacts/demo/knowledge.db`; current schema-4 accepted copy: `artifacts/hybrid-acceptance/803ba94aa98b4f628abb4feb4557a323/pilot-copy.db`. Both contain two scoped optimization **proposals**; reads refuse an unmigrated schema.
-- [Architecture, schema, boundaries](docs/ARCHITECTURE.md)
-- [Verification and measured baseline](docs/VERIFICATION.md)
-- [Security and recovery](docs/OPERATIONS.md)
-- [Isolated Qdrant server/HNSW comparison with resident inference](docs/SERVER-BENCHMARK.md) — Python harness, not Rust CLI performance; latency and ANN recall measured separately.
-- [Public technical retrieval quality and experimental abstention](docs/TECHNICAL-QUALITY.md) — frozen official-source corpus, bilingual questions, explicit limitations; not personal-vault certification.
-- [Harmonized SQLite/Qdrant per-query comparison](docs/QDRANT-QUALITY.md) — same ordered top5 on 32/32 questions; Qdrant selected for further experiments, not production acceptance.
-- [Executed retrieval ablations and reranking](docs/benchmarks/RETRIEVAL-ABLATIONS.md) — 704 diagnostic rows; relevance, applicability and CPU latency trade-offs, with per-query evidence.
-- [Executed public-document LAD/RAD pilot](docs/benchmarks/DOCUMENT-INTELLIGENCE-PILOT.md) — native PDF, derived scan and HTML; extraction fidelity is separate from retrieval precision. Not banking/GED qualification.
-- Academic research: [retrieval by theme](docs/research/ACADEMIC-RETRIEVAL-BY-THEME.md) and [document intelligence by theme](docs/research/ACADEMIC-DOCUMENT-INTELLIGENCE-BY-THEME.md).
-- [Original imported evidence](evidence/archperf-20261016/) and [repeatable import](tools/import_archperf.py)
-- Canonical stack links: [stack contract](STACK-CONTRACT.md), [coding rules](AI-CODING-RULES.md), [MCP registry](MCP-REGISTRY.md), [hook registry](HOOK-REGISTRY.md). These are symlinks, not divergent copies.
+**Local memory for AI coding agents. Every answer carries a footnote.**
 
-## Implemented
+Search your own notes and documents from Claude Code, Codex, Hermes or any MCP host.<br>
+Each hit comes back with the file, the line, the content hash and whether the file has changed since.
 
-| Capability | Behavior |
-|---|---|
-| Local database | Bundled SQLite, actual FTS5 enabled; transactional versioned migrations; no arbitrary SQL command |
-| Text indexing | UTF-8 Markdown/TXT, heading and title context, bounded Unicode chunks, source hash/revision, incremental hash comparison |
-| Binary ingestion | PDF text layers; real local OCR for PNG/JPEG/WebP/TIFF/BMP and scanned or mixed-image PDF pages, with page references |
-| Search/get | Lexical FTS5 remains default; opt-in local multilingual ONNX + cosine/RRF; structured applicability filters; hash-bound citations and bounded JSON |
-| Derived embeddings | Explicit `rebuild-embeddings --model LOCAL_DIR`; schema 4; model/helper identity and corpus revision checks; at most 10,000 chunks + records |
-| Contributions | Schema-checked proposals, exact-version metadata, cause/context deduplication, pinned local evidence, revision-checked explicit validation and immutable transition history |
-| Recovery | SQLite online backup; coherent backup can be opened as a restored database; overwrite refused |
-| Source lifecycle | Updated sources reindexed, deleted/moved paths tombstoned, identical content deduplicated in search; originals never modified |
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-A8281C)](LICENSE)
+[![Rust](https://img.shields.io/badge/built%20with-Rust-1B1915)](Cargo.toml)
+[![MCP](https://img.shields.io/badge/protocol-MCP%20stdio-1B1915)](#connect-your-agent)
+[![Offline](https://img.shields.io/badge/network-none-2F6B3A)](#security-model)
 
-**Not implemented:** a config auto-installer (`init`) for the supported agents, reranking in the Rust CLI, calibrated answerability/abstention, a watcher, extraction of meaning from charts/photos, complex-table reconstruction, structured finding edit/supersede commands. `superseded` is reserved in the schema; it is not an exposed transition yet. No whole-vault import is enabled or performed. PDF/image support and optional embeddings use the project `.venv`, not native-Rust OCR/inference.
+[Install](#install) · [Proof](#proof) · [How it works](#how-it-works) · [Connect your agent](#connect-your-agent) · [Security](#security-model) · [Reproduce](#reproduce-every-number)
 
-[Hybrid implementation, model comparison and raw evidence](docs/HYBRID.md): actual release CLI, 1,000 synthetic documents, 16 development + 16 holdout queries. Holdout macro recall@5 was **0.286 FTS5 vs 0.929 for either hybrid model**; MiniLM MRR was **0.810**. This is not production precision: P@5 was **0.200**, every no-answer hybrid query still returned candidates, and cold-per-process hybrid p50 was **956.25 ms**, versus **6.23 ms** lexical. No automatic rollout or Qdrant replacement is justified. Isolated Qdrant-client local exact search matched top five for all 32 queries/model; it was **not a Qdrant server benchmark**.
+</div>
 
-## MCP server — one tool surface for every agent
+---
 
-Any MCP-capable host (Claude Code, Codex CLI, Gemini CLI, Cursor, Windsurf, Zed, VS Code, Cline, Roo Code, …) can call the same database. The tool surface is identical regardless of which model or editor drives it.
+```text
+agent ▸ footnote_recall("why does the WAL checkpoint stall under write load")
 
-```bash
-# one command: write the MCP entry into every detected agent, register the
-# shared daemon at logon and start it
-borg-knowledge --db D:/path/knowledge.db install
+¹  Checkpoint latency is amortized through batching; a long reader holds the
+   WAL open and the checkpoint cannot finish.
+   notes/sqlite.md · §WAL · line 42 · rev 4 · current · sha256 3fa9c1d07b2e
 
-# what each agent runs (written by install; plain MCP on stdio)
-borg-knowledge --db D:/path/knowledge.db mcp
-
-# the shared daemon: one warm process per corpus, local socket only, no TCP.
-# `install` starts it at logon; run it by hand if you prefer.
-borg-knowledge --db D:/path/knowledge.db serve --mcp --daemon
+²  After a reader-heavy night, run a passive checkpoint before the batch job starts.
+   ops/runbook.md · page 3 · rev 1 · stale (file changed since indexing) · sha256 9b0e77a41c58
 ```
 
-`mcp` is the plug-and-play front-end: it connects to the shared daemon when one is running and otherwise serves the session in-process, so tools work before any daemon exists. Agents never see the socket or the token.
+<sup>1</sup> *Illustrative output. The fields are the real ones the tools return: `path`, `heading`, `page`, `line`, `revision`, `sha256`, `freshness`.*
 
-| Tool | Required args | Purpose |
+## What it is
+
+An agent that remembers is only useful if it can tell you where it read something, and whether that source is still true.
+Footnote is a single Rust binary that indexes Markdown, text and PDF on your machine and serves them to your agent over MCP.
+
+- **Cited.** Every hit is bound to the exact bytes it came from. If the file changed, the hit says `stale`. If it is gone, it says `missing_or_unreadable`.
+- **Local.** One SQLite file, one search index, one embedding helper on your CPU. No account, no cloud, no telemetry, no network calls.
+- **Read-only for agents.** An agent can recall and fetch. It cannot write to your corpus, and every call is appended to a tamper-evident audit log.
+- **French and English.** Built and measured for mixed-language work, not as an afterthought.
+
+## Proof
+
+nDCG@10 on the official test sets of public benchmarks, measured on the shipped binary through one resident MCP session, the way an agent uses it.
+"Earlier build" is this project before the retrieval work below, the same code path with every query word required to match.
+
+| Benchmark (language) | Earlier build | BM25, published | Footnote |
+|---|---:|---:|---:|
+| SciFact, science claims (EN) | 0.017 | 0.665 | **0.747** |
+| NFCorpus, nutrition and medicine (EN) | 0.189 | 0.325 | **0.368** |
+| Alloprof, school questions (FR) | – | – | **0.478** |
+| Syntec, business documents (FR) | 0.000 | – | **0.795** |
+| French and English in one index, 11,462 documents | – | – | **0.489** |
+
+How to read this, honestly:
+
+- The jump from 0.017 to 0.66 on SciFact is one rule. The earlier build required every word of a question to match, so 295 of 300 questions returned nothing. Any-word matching with BM25 ranking is the published baseline, and Footnote reproduces it (0.663 against the published 0.665) before adding anything.
+- On top of BM25, two small embedding models are blended with it. On held-out data, with 95% bootstrap intervals that all exclude zero, the blend beats the single-model version by +0.012 to +0.019 nDCG@10 ([experiments](bench/experiments/RESULTS.md)).
+- We tested 15 other ideas, one at a time, and most of them did not help: query pruning, pseudo-relevance feedback, title boosts, adaptive weights, fewer dimensions. They are listed, with their numbers, in the same file. A change ships only if it clears a threshold written down before the run.
+- We have **not** run other memory tools on these sets, so we make no claim against them by name. The comparison points are the ones with public numbers: published BM25 (BEIR) and published embedding-model scores (MTEB), reproduced in [`bench/anchors.json`](bench/anchors.json).
+
+### Fast at 100,000 chunks
+
+Two measurements, kept apart because they answer different questions.
+
+**The shipped binary, end to end**, through one resident MCP session, every query encoded by both models, 300 real queries, median and 95th percentile:
+
+| Stored chunks | Strategy | p50 | p95 |
+|---:|---|---:|---:|
+| 5,183 (SciFact) | exact scan | 20 ms | 23 ms |
+| 40,018 | exact scan | 45 ms | 67 ms |
+| 100,044 | BM25 shortlist of 1,000 | 52 ms | 79 ms |
+
+The 40,018 and 100,044 rows use real text and real queries but **random document vectors** (encoding 100,000 chunks with two models takes hours and does not change the cost of a search), so they measure speed, not precision ([script](bench/experiments/scale_product.py), [rows](bench/sweeps/scale_product.jsonl)).
+
+**The lexical index alone**, against SQLite FTS5, which most local tools use; median warm query on synthetic corpora cut from real documents:
+
+| Documents | SQLite FTS5 | Footnote's index (Tantivy) |
+|---:|---:|---:|
+| 100,000 | 43 ms | **0.38 ms** |
+| 1,000,000 | 423 ms (p95 1.7 s) | **3.0 ms** (p95 7.7 ms) |
+
+At one million documents the Tantivy artifact is 304 MB versus 1,715 MB for the FTS5 database ([data](bench/dbbake/results.jsonl)). The FTS5 test stores document text while Tantivy stores identifiers and search structures without document text, so the 5.6× ratio is not a like-for-like index-only or complete-product storage comparison. These corpora are not judged: they show speed, not precision.
+
+Up to 50,000 stored entries every vector is scored exactly, from a matrix decoded once per process. Beyond that, a BM25 shortlist of 1,000 chunks is re-scored from vectors fetched by id, so memory does not grow with the corpus and the query time grows slowly.
+
+## How it works
+
+```text
+ notes, docs, PDF                                          your agent
+        │                                                       ▲
+        ▼                                                       │ MCP (stdio, read-only)
+  ┌──────────┐   ┌─────────────────────────────────────────────┴───────────────┐
+  │  index   │──▶│  SQLite (system of record)  ·  Tantivy BM25 (derived)       │
+  │  chunk   │   │  chunks, hashes, revisions     any-word, stemmed, accents   │
+  │  hash    │   │  int8 vectors from 2 local models, blended 50/50            │
+  └──────────┘   └─────────────────────────────────────────────┬───────────────┘
+                                                                │
+        fuse:  0.55 · dense  +  0.45 · BM25   (z-scores over each top 100)
+                                                                │
+                                          cite: path · line · sha256 · revision · freshness
+```
+
+| Choice | Why | Evidence |
 |---|---|---|
-| `borg_recall` | `query` | Lexical (default) or hybrid search; optional `limit`, `mode`, `model` (hybrid only: local embedding directory), and structured `technology`/`project`/`tested_version`/`status` filters. |
-| `borg_get` | `id` | One indexed chunk with hash, revision, page/line and freshness. |
-| `borg_get_record` | `id` | One structured finding with its pinned evidence and validation state. |
-| `borg_stats` | — | Counts, schema version, FTS5/semantic status. |
-| `borg_health` | — | Schema version, corpus coverage and embedding presence. |
-| `borg_wake_up` | — | Bounded context pack for session start: records first, lexical chunks second, labelled `project_records` / `project_lexical` / `global_lexical` / `recent_chunks` (optional `project`, `limit`). |
-| `borg_export` | — | Bounded records metadata dump — ids, status, revision, fingerprint, `payload_sha256` — max 200 rows with a `truncated` flag. No file writes. |
-| `borg_propose` | `payload` | **Reserved in v1**: returns `isError: true` with the CLI command, because the file allowlist, evidence hashes and dedup are CLI-only and must not be bypassed. |
+| Any-word BM25, English stemmer, accents folded | Natural questions rarely share every word with the answer | SciFact 0.017 → 0.663; the English stemmer beat per-language and combined stemming on a mixed French and English index |
+| Tantivy for BM25, SQLite as the record | Comparable judged-set precision and 110 to 140 times faster lexical queries at 100k to 1M synthetic documents; artifact-size measurements use different stored content and do not compare complete databases | [bake-off](bench/DECISION.md) |
+| Two embedding models, blended | A multilingual model (bekko-a8m) and an English one (gte-small) fail on different questions | +0.012 to +0.019 on four held-out sets, all intervals exclude zero |
+| int8 vectors | A quarter of the memory, the same ranking | identical within 0.0004 nDCG |
+| Exact scan up to 50,000 entries | Finds paraphrases and other-language matches that share no word with the question | covered by a test: a French question finds the English note |
+| No language model in retrieval | Retrieval stays local, deterministic and cheap; the agent does the reasoning | every run is repeated and compared |
 
-Protocol: JSON-RPC 2.0 over stdio, one JSON object per line. Request lines are bounded to 1 MB and responses to 256 KB; oversized input is rejected with a parse error. Notifications never receive a reply. Tool failures are returned as `isError: true` results; protocol failures use JSON-RPC error codes (`-32700`, `-32600`, `-32601`, `-32602`). Read tools open the database **read-only** and never create it. All retrieved text is returned as untrusted source data — consumers must not follow instructions found inside it.
+Models are public, pinned to a commit and checked against a SHA-256 before every use: [`bekko-embedding-v1-a8m`](https://huggingface.co/hotchpotch/bekko-embedding-v1-a8m) (multilingual) and [`gte-small`](https://huggingface.co/Xenova/gte-small) (English).
 
-## Security posture
+## Install
 
-The default and only transport is **stdio**: the host launches this binary as a subprocess and exchanges newline-delimited JSON-RPC over two pipes. There is no socket, no listening port and no network surface, so the security boundary is the OS process and the user account running it. Do **not** add a network transport to this process without authentication and TLS.
-
-Hardening that applies today:
-
-- **Helper subprocesses run with a scrubbed environment.** The MCP host spawns this binary inside the agent's environment, which usually carries provider credentials (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, GitHub tokens, ...). Both Python helpers (`tools/extract.py`, `tools/embed.py`) parse untrusted documents, so they are started with `env_clear()` and receive only `PATH`, system directories, temp paths and locale — never secrets. A unit test asserts the inherited environment does not reach the helper.
-- **Tool panics are contained.** A panicking tool returns `isError: true` and the server keeps serving, so one bad document cannot kill the session.
-- **Retrieved text is untrusted by contract.** Every hit carries `trust: "untrusted_source_data"` and the tool descriptions state that agents must never follow instructions found in indexed content. Content labelling — not the channel — is what defends against prompt injection.
-- **Read tools never create or migrate the database** (read-only open, missing DB is a tool error), and `borg_propose` refuses over MCP rather than bypassing the CLI allowlist.
-- **Bounded everywhere:** 1 MB request lines, 256 KB responses, 512-character queries, 20-result limits, 16 MiB source files, 100 pages per document, 120 s extraction timeout.
-
-**Not implemented, and required before any network transport:** authentication/authorization, TLS, per-tool scopes and session binding. The SQLite file is unencrypted at rest — protect it with OS file permissions and disk encryption. If a resident/shared server is ever needed, prefer an owner-only Windows named pipe over TCP.
-
-### Audit log (automatic accountability, not encryption)
-
-For a memory tool holding personal notes, "who read what, when" matters more than encrypting a pipe. Every tool call is appended to a hash-chained log **by default**; nothing has to be configured:
+Requirements: Rust 1.85 or later, Python 3.12 (only for the embedding helper), about 200 MB of disk for the two models.
 
 ```bash
-# nothing to do: `install`/`mcp`/--daemon already write the log, the MAC key is
-# generated on first use and both live in the per-user state directory
-#   Windows: %LOCALAPPDATA%\borg-knowledge\
-#   Linux:   $XDG_STATE_HOME/borg-knowledge/ (~/.local/state/...)
+git clone https://github.com/bobcat88/footnote && cd footnote
+cargo build --release                      # target/release/footnote
+export PATH="$PWD/target/release:$PATH"     # this shell; use an absolute path for MCP
+mkdir -p ~/.footnote
 
-# verify at any time, with the automatically managed key
-borg-knowledge audit verify --file <state>/audit.jsonl --mac-key <state>/audit.key
+python -m venv .venv                       # the embedding helper (onnxruntime, tokenizers, numpy)
+.venv/bin/pip install -r requirements-hybrid.lock          # Windows: .venv\Scripts\pip
+python tools/provision_embeddings.py bekko-a8m gte-small   # public models, hash-checked
 
-# detect tail truncation by pinning the head hash you last observed
-borg-knowledge audit verify --file <state>/audit.jsonl --expect-last <hash>
+export DB=~/.footnote/knowledge.db
+footnote --db $DB index --root ~/notes --allow ~/notes
+footnote --db $DB rebuild-embeddings --model artifacts/models/bekko-a8m --model artifacts/models/gte-small
+footnote --db $DB search "your question" --mode hybrid \
+  --model artifacts/models/bekko-a8m --model artifacts/models/gte-small
 ```
 
-`BORG_STATE_DIR` relocates that directory; `--no-audit` (daemon mode) or an explicit `--audit` path overrides the default. Each response carries `_meta.borg = {session, seq, result_sha256, mac}`, which binds the evidence the agent received to the exact log line that records it. Argument text is never logged — only its hash — because queries are sensitive.
+The commands above use a POSIX shell. On Windows, add `target\release` to `PATH` for the session and create `%USERPROFILE%\.footnote` before indexing. Use absolute executable and database paths in MCP configuration.
 
-What the chain guarantees, stated honestly:
+Lexical search works without Python or models; hybrid search needs them. Re-run `index` whenever your files change (only changed files are re-read) and `rebuild-embeddings` afterwards (only new or changed chunks are embedded).
 
-| Attack | Detected? |
+## Connect your agent
+
+```bash
+footnote --db $DB install      # registers Footnote in Claude Code, Codex CLI and Gemini CLI if it finds them
+```
+
+For any other MCP host, add this entry to its MCP settings:
+
+```json
+{ "mcpServers": { "footnote": { "command": "/path/to/footnote", "args": ["--db", "/path/to/knowledge.db", "mcp"] } } }
+```
+
+| Host | How |
 |---|---|
-| Edit a logged line | **Yes** — hash mismatch |
-| Delete or reorder a line | **Yes** — sequence gap / chain break |
-| Rewrite lines without the MAC key | **Yes** — MAC mismatch |
-| Truncate the tail | **Only with `--expect-last`** — a bare hash chain cannot see it |
-| Attacker who can read the key and rewrite everything | **No** — keep the key user-only |
+| Claude Code | `install`, or `claude mcp add footnote -- /path/to/footnote --db /path/to/knowledge.db mcp` |
+| Codex CLI | `install`, or `codex mcp add footnote -- /path/to/footnote --db /path/to/knowledge.db mcp` |
+| Gemini CLI | `install` (writes `~/.gemini/settings.json`) |
+| Hermes | add the same command and args under `mcp_servers:` in `config.yaml` |
+| Cursor, Windsurf, Zed, VS Code, Cline | paste the JSON entry above into the host's MCP settings |
 
-A log that does not verify at startup makes `serve` **refuse to start**. If an audit write fails mid-session the result is withheld (`isError: true`): knowledge that cannot be accounted for is not disclosed.
+`install` never overwrites an existing entry and keeps a backup of every file it edits. An entry named `borg` from before the rename still points at the old executable; delete it.
 
-## Quick use (Git Bash / native Windows)
+### Tools the agent sees
 
-Every command requires an explicit database path. Read commands open it read-only; they do not initialize a missing database. JSON errors have nonzero exit status. `--help` / `--version` use normal CLI text.
+| Tool | Purpose |
+|---|---|
+| `footnote_recall` | Search. `mode`: `lexical` (default) or `hybrid` with `model`; optional structured filters |
+| `footnote_get` | One chunk by id, with hash, revision, page, line and freshness |
+| `footnote_get_record` | One structured finding with its pinned evidence and validation state |
+| `footnote_wake_up` | A compact starting context for a project |
+| `footnote_stats`, `footnote_health` | Counts and state, so the agent can pick a strategy |
+| `footnote_export` | Bounded export of records |
+| `footnote_propose` | **Refused over MCP.** Writes need an explicit CLI command from you |
 
-```bash
-K='D:/Projets/BorgKnowledge/target/release/borg-knowledge.exe'
-DB='D:/Projets/BorgKnowledge/artifacts/hybrid-acceptance/803ba94aa98b4f628abb4feb4557a323/pilot-copy.db'
+The previous `borg_*` tool names keep working as aliases.
 
-# Real imported scoped SQLite finding; exact technology/version filter.
-"$K" --db "$DB" search substr --technology 'Python/SQLite' \
-  --tested-version sqlite=3.53.1 --project BorgInvestor --status proposal --limit 2
-"$K" --db "$DB" get-record 2
-"$K" --db "$DB" stats
+## Security model
 
-# Explicitly authorized source scope only. Choose a bounded technical folder,
-# not the whole personal vault. No default corpus is inferred.
-"$K" --db 'D:/Projets/BorgKnowledge/artifacts/notes.db' index \
-  --root 'D:/approved-technical-notes' --allow 'D:/approved-technical-notes'
-"$K" --db 'D:/Projets/BorgKnowledge/artifacts/notes.db' search 'sqlite checkpoint' --limit 5
-# Use the returned numeric chunk ID, not a guessed path or SQL expression.
-"$K" --db 'D:/Projets/BorgKnowledge/artifacts/notes.db' get 12
+Footnote is built on the assumption that retrieved text may contain instructions aimed at your agent.
 
-# Snapshot includes authoritative findings and derived indexes. Target must not exist.
-"$K" --db "$DB" backup --output 'D:/Projets/BorgKnowledge/artifacts/pilot-backup.db'
-```
+- **Untrusted by default.** Every retrieved passage is labelled as data. Nothing in a document can make the server do anything.
+- **Read-only surface.** The MCP tools cannot write. Proposals are refused and logged.
+- **No network.** The tool opens no outbound connection. The only download is the explicit, hash-checked model provisioning script you run yourself.
+- **Private state.** The audit log, its MAC key and the daemon token live in a user-only folder created on first use.
+- **Authenticated daemon.** The shared daemon listens on a local socket only, with a mutual HMAC handshake; agents never see the token.
+- **Tamper-evident audit.** Every call is appended to a hash-chained, MAC-signed log. `footnote audit verify --file <audit.jsonl> --mac-key <audit.key>` verifies it offline.
+- **Bounded everything.** Query length, result counts, helper output size and timeouts are capped; the embedding helper runs with a scrubbed environment.
+- **Verified models.** Model files are hashed against the manifest at every helper start and every rebuild.
 
-`results` contains text chunks; `records` contains optimization summaries. The combined count is at most `--limit` (default 8, maximum 20). For **default lexical mode**, structured records get reserved priority, then text fills remaining slots; this is **not cross-type calibrated relevance**. A structured filter selects records only: document compatibility is not inferred from prose. All lexical terms must match within one chunk plus its indexed title/heading context. Hybrid mode instead uses RRF scores across eligible records/chunks; it does not infer version ranges, source authority or answerability. Neither mode can safely promote retrieved advice automatically.
+## Reproduce every number
 
-A text citation includes `path`, `sha256`, `revision`, `heading`, `page` (1-based or null), `line` (1-based; extracted text for binaries), and numeric chunk `id`. Search text is at most 500 characters; `get` returns the selected chunk up to 2,000 characters. The overall JSON response is capped at 256,000 bytes; narrower queries are required if it exceeds that limit. Paths and source text are **untrusted data, never instructions**. Fetch selected evidence, check `freshness`/`evidence_freshness`, and preserve applicability before using advice.
-
-## Structured optimization workflow
-
-`evidence/archperf-20261016/*.record.json` shows the real schema in use. Required fields: technology, project, exact `tested_versions` map, environment, symptom, root cause/status, actual remediation, applicability, exclusions, protocol, trade-offs, rollback, last verification, and 1–16 absolute evidence paths with lowercase SHA-256. Additional fields are retained; the full source candidate and measurements are under `details`.
+Every figure above comes from a stored receipt in [`bench/receipts`](bench/receipts): dataset and split, pinned dataset hash, binary hash, harness hash, determinism check, latency, hardware. The protocol, the decision rules (written before the results) and the full experiment log are in [`bench/`](bench/README.md).
 
 ```bash
-"$K" --db "$DB" propose --file 'D:/finding.record.json' --allow 'D:/evidence-folder'
-# Input JSON itself AND every evidence artifact must be inside the allowlist(s).
-# Repeated --allow arguments permit disjoint authorized folders.
-"$K" --db "$DB" validate 3 --revision 1 \
-  --evidence 'D:/evidence-folder/validation.json' --allow 'D:/evidence-folder'
+bench/.labenv/Scripts/python.exe -I bench/run.py scifact shipped-ensemble-mcp   # one dataset, the shipped binary
+python bench/report.py                                                          # regenerate bench/RESULTS.md
 ```
 
-Validation JSON binds `record_id`, `record_revision`, `record_sha256`, `verdict: "passed"`, nonempty `checks: [{"name": "...", "passed": true}]`, and `artifacts: [{"path": "absolute", "sha256": "64 lowercase hex"}]`. The command rejects stale/missing evidence, non-proven root causes, wrong hashes/revisions, failed checks, and revalidation of an already transitioned record. This is explicit attestation with pinned evidence, **not independent scientific proof or a production-health certificate**. Tests exercise real transactional validation; the two imported campaign findings intentionally remain proposals.
+## Limits, stated plainly
 
-Cause/context fingerprints include technology, project, exact versions, environment, and root cause. An identical payload returns the same ID. A conflicting payload under the same fingerprint is rejected, never silently overwritten. No current command edits/removes structured records; keep a coherent backup before experimenting with schema changes.
+- The English stemmer is applied to every language. On the mixed French and English index it still beat per-language stemming, but a French-only corpus may want a French stemmer.
+- Hybrid search needs a Python environment for the embedding helper. A pure-Rust encoder is planned; the helper keeps the model hash checks in one place until then.
+- A reranker helps French questions (+0.04 nDCG@10 on Alloprof) but costs 1 to 3 seconds per query on a CPU; it is not in the default path. Reranking only the 60% of queries where the two best dense scores are close keeps 87% of that gain ([E12](bench/experiments/RESULTS.md)).
+- Precision at 100,000 chunks and above was not measured: the judged benchmarks have at most 11,462 documents, and the large-corpus rows above measure speed only.
+- PDF text layers and OCR for scans are supported through optional helpers; extraction quality is reported separately from retrieval quality.
 
-## Build and verify
+## License
 
-Rust/Cargo and the Windows MSVC linker must work. The crate uses `rusqlite` bundled SQLite, so no separately installed SQLite DLL is needed. Core text/search commands do not require Python. PDF/image ingestion needs these project-local dependencies:
-
-```bash
-uv venv .venv --python 3.11
-# Full acceptance environment includes extraction, embeddings and isolated Qdrant:
-uv pip sync --python .venv/Scripts/python.exe requirements-hybrid.lock
-.venv/Scripts/python.exe tools/provision_embeddings.py
-rtk cargo build --locked --release
-bash scripts/check.sh
-.venv/Scripts/python.exe tools/verify_hybrid.py
-```
-
-Dependencies/models download during provisioning, not ingestion. RapidOCR uses packaged local ONNX models. The helper defaults to this repository's `.venv`; set `BORG_KNOWLEDGE_PYTHON` to an **already provisioned local interpreter** if needed. Moving the binary alone is insufficient for binary extraction: its helper path is compiled from the source location. Rebuild after moving the repository. A missing helper/dependency becomes `unsupported_or_failed`, never successful empty image indexing. Failed/empty extraction is retried on the next explicit index.
-
-The full gate uses scratch under `TMPDIR` or `%LOCALAPPDATA%/hermes/cache/scratch`. Real OCR tests use Windows Arial. See [verification](docs/VERIFICATION.md) for exact counts and limitations; synthetic latency is not a real-vault speedup claim.
-
-## Ownership and rollout
-
-Original notes/PDFs/images remain authoritative on disk. The SQLite index is rebuildable; **structured records and their history are not**. Never delete the database as an index-cleaning step. No Hermes profiles, agent runtime configuration, MCP registry, existing Qdrant storage, vault originals, paused Markdown prototype, or BorgInvestor files were changed. The canonical vault navigation link is left to the coordinating agent to publish without shared-file conflicts.
-
-Licensed **Apache-2.0** (see `LICENSE` / `NOTICE`). The shipped extraction path is permissive: PDF text and rasterization use **PDFium via `pypdfium2`** (Apache-2.0 / BSD-3-Clause) and OCR uses **RapidOCR** (Apache-2.0). **PyMuPDF (AGPL-3.0) is not a runtime dependency** — it survives only in `requirements-eval.lock` for evaluation scripts (`tools/demo.py`, `tools/document_intelligence_benchmark.py`), which are comparison tooling, not part of the distributed extractor. Docling pilot artifacts under `tools/artifacts/` were evaluation-only; Docling is MIT, but its downloaded model weights carry their own terms. No remote is configured. The committed feature branch is `feat/local-knowledge`; the Beads initializer previously auto-committed tracker files and that bootstrap branch reference was since removed by a compare-and-delete operation.
+Apache-2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE) for third-party components.

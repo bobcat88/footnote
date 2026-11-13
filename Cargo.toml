@@ -2,6 +2,10 @@
 name = "footnote"
 version = "0.1.0"
 edition = "2024"
+description = "Local, read-only memory and document retrieval for AI coding agents, with a footnote on every answer"
+license = "Apache-2.0"
+repository = "https://github.com/bobcat88/footnote"
+rust-version = "1.85"
 
 [dependencies]
 anyhow = "1"
