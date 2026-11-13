@@ -64,6 +64,9 @@ enum Action {
         tested_version: Option<String>,
         #[arg(long)]
         status: Option<String>,
+        /// At most this many chunks of one source file in the results
+        #[arg(long, value_parser = clap::value_parser!(u8).range(1..=20))]
+        per_source: Option<u8>,
     },
     Get {
         id: i64,
@@ -535,6 +538,31 @@ pub(crate) fn hit(r: &rusqlite::Row<'_>, full: bool) -> rusqlite::Result<Value> 
     )
 }
 pub(crate) const HIT: &str = "SELECT c.id,s.path,s.sha256,s.revision,s.status,s.extractor,c.heading,c.page,c.line,c.text FROM chunks c JOIN sources s ON s.id=c.source_id";
+/// Counts the chunks already returned from each source file, so one long file cannot fill the whole result list.
+pub(crate) struct PerSource {
+    cap: Option<usize>,
+    seen: std::collections::HashMap<String, usize>,
+}
+impl PerSource {
+    pub(crate) fn new(cap: Option<usize>) -> Self {
+        Self {
+            cap,
+            seen: Default::default(),
+        }
+    }
+    /// True when another chunk of this source may be returned (and records it).
+    pub(crate) fn allow(&mut self, path: &str) -> bool {
+        let Some(cap) = self.cap else {
+            return true;
+        };
+        let n = self.seen.entry(path.to_string()).or_default();
+        if *n >= cap {
+            return false;
+        }
+        *n += 1;
+        true
+    }
+}
 /// Chunk ids with BM25 scores (higher is better) for any-word matching: Tantivy when its derived index is available, else FTS5.
 pub(crate) fn lexical_chunks(c: &Connection, q: &str, n: usize) -> Result<Vec<(i64, f64)>> {
     if let Some(hits) = crate::lexical::top_hits(c, q, n).ok().flatten() {
@@ -583,11 +611,14 @@ pub(crate) fn search(
             "{HIT} WHERE c.id=?1 AND s.status='indexed' AND c.id=(SELECT min(c2.id) FROM chunks c2 JOIN sources s2 ON s2.id=c2.source_id WHERE s2.sha256=s.sha256 AND s2.status='indexed' AND c2.heading=c.heading AND c2.page IS c.page AND c2.line=c.line AND c2.text=c.text)"
         ))?;
         let mut results = Vec::new();
+        let mut cap = PerSource::new(filters.per_source);
         for id in ids {
             if results.len() >= text_limit {
                 break;
             }
-            if let Some(v) = s.query_row([id], |r| hit(r, false)).optional()? {
+            if let Some(v) = s.query_row([id], |r| hit(r, false)).optional()?
+                && cap.allow(v["path"].as_str().unwrap_or(""))
+            {
                 results.push(v);
             }
         }
@@ -597,9 +628,19 @@ pub(crate) fn search(
         "{HIT} JOIN search_fts f ON f.rowid=c.id WHERE search_fts MATCH ?1 AND s.status='indexed' AND c.id=(SELECT min(c2.id) FROM chunks c2 JOIN sources s2 ON s2.id=c2.source_id WHERE s2.sha256=s.sha256 AND s2.status='indexed' AND c2.heading=c.heading AND c2.page IS c.page AND c2.line=c.line AND c2.text=c.text) ORDER BY bm25(search_fts),c.id LIMIT ?2"
     );
     let mut s = c.prepare(&sql)?;
+    let fetch = if filters.per_source.is_some() {
+        text_limit * 10
+    } else {
+        text_limit
+    };
+    let mut cap = PerSource::new(filters.per_source);
     let results: Vec<Value> = s
-        .query_map(params![expr, text_limit as i64], |r| hit(r, false))?
-        .collect::<rusqlite::Result<_>>()?;
+        .query_map(params![expr, fetch as i64], |r| hit(r, false))?
+        .collect::<rusqlite::Result<Vec<Value>>>()?
+        .into_iter()
+        .filter(|v| cap.allow(v["path"].as_str().unwrap_or("")))
+        .take(text_limit)
+        .collect();
     Ok(json!({"mode":"lexical_fts5","results":results,"records":records}))
 }
 fn require_db(db: &Option<PathBuf>) -> Result<&Path> {
@@ -730,12 +771,14 @@ fn execute(cli: Cli) -> Result<Value> {
             project,
             tested_version,
             status,
+            per_source,
         } => {
             let filters = crate::records::Filters {
                 technology,
                 project,
                 tested_version,
                 status,
+                per_source: per_source.map(usize::from),
             };
             if mode == "hybrid" {
                 if model.is_empty() {

@@ -45,6 +45,27 @@ positive (+0.003 to +0.007, intervals mostly touching zero).
 ## Costs
 
 - The ensemble runs a second encoder: about twice the query encoding time and twice the vector storage (two int8 vectors of 384 dimensions per chunk, 772 bytes).
+## Product against lab: where the gap comes from
+
+On the full test sets the shipped binary scores below the lab ensemble everywhere except SciFact:
+
+| Test set | Lab, whole documents | Lab, 2,000-character chunks | Shipped binary | Gap, whole vs shipped |
+|---|---:|---:|---:|---:|
+| SciFact | 0.746 | - | 0.747 | 0.000 |
+| NFCorpus | 0.373 | - | 0.368 | -0.005 |
+| Syntec (100 q) | 0.807 | 0.804 | 0.795 | -0.012 |
+| Alloprof | 0.496 | 0.483 | 0.478 | -0.017 |
+| mix-fr-en | 0.502 | - | 0.489 | -0.013 |
+
+The lab rows are `lab:ens-bekko-gte` on the full test split; the chunked rows use `chunker chars 2000`, BM25 k1 1.2 (Tantivy's value). Most of the Alloprof gap is chunk-level
+scoring: a chunk is judged on its own text, a whole document on all of it. Documents longer than the encoder window (512 tokens, about 2,000 characters) cannot be scored whole by
+a dense model anyway, and the product cites passages, so this is inherent. What is left between the chunked lab run and the shipped binary (-0.009 Syntec, -0.005 Alloprof) is
+inside the noise of these sets (the 95% interval on a 100-question difference is about +-0.03).
+
+One hypothesis was tested and refuted: that several chunks of one long file crowd other documents out of the top 10. With the new `--per-source N` option (at most N chunks per file),
+Alloprof moves from 0.4784 to 0.4787 and nothing else changes (`dev_per_source.py`, development comparison on the receipts' indexes, not a receipt). The option is kept, off by default,
+because an agent often wants the best passage of each file rather than five passages of one.
+
 ## E12: a cross-encoder only where the dense ranking is unsure
 
 `bge-reranker-v2-m3`, pool 10, 200 Alloprof dev queries, base = the frozen default (0.5083). The gate reranks a query only when the cosine gap

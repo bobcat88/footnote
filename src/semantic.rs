@@ -807,6 +807,7 @@ pub fn search(
     let mut results = Vec::new();
     let mut records = Vec::new();
     let mut seen = HashSet::new();
+    let mut cap = crate::app::PerSource::new(f.per_source);
     for (i, score) in &ranked {
         if results.len() + records.len() >= limit {
             break;
@@ -831,6 +832,9 @@ pub fn search(
                 v["sha256"], v["heading"], v["page"], v["line"], text
             );
             if !seen.insert(key) {
+                continue;
+            }
+            if !cap.allow(v["path"].as_str().unwrap_or("")) {
                 continue;
             }
         }

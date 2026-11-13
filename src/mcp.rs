@@ -761,6 +761,13 @@ fn filters_arg(args: &Value) -> Result<crate::records::Filters> {
         project: optional_text(args, "project", MAX_FILTER)?,
         tested_version: optional_text(args, "tested_version", MAX_FILTER)?,
         status,
+        per_source: match args.get("per_source") {
+            None | Some(Value::Null) => None,
+            Some(v) => match v.as_u64() {
+                Some(n) if (1..=20).contains(&n) => Some(n as usize),
+                _ => bail!("`per_source` must be an integer from 1 to 20"),
+            },
+        },
     })
 }
 
@@ -779,6 +786,7 @@ fn tool_definitions() -> Value {
                     "project": {"type": "string", "maxLength": 200},
                     "tested_version": {"type": "string", "maxLength": 200, "description": "component=exact-version"},
                     "status": {"type": "string", "enum": ["proposal", "validated", "superseded"]},
+                    "per_source": {"type": "integer", "minimum": 1, "maximum": 20, "description": "At most this many chunks of one source file in the results; use 1 to get the best chunk of each file."},
                     "model": {"oneOf": [{"type": "string", "maxLength": 200}, {"type": "array", "items": {"type": "string", "maxLength": 200}, "minItems": 1, "maxItems": 3}], "description": "Local embedding model directory, or up to three for an ensemble; required when mode=hybrid (mirrors CLI --model)."}
                 },
                 "required": ["query"],

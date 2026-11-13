@@ -263,6 +263,8 @@ class ShippedEnsemble(CliEngine):
         if self._proc is None:
             self._start()
         args = {"query": clip(text), "mode": "hybrid", "limit": min(k, 20), "model": [str(d) for d in self.model_dirs]}
+        if getattr(self, "per_source", None):
+            args["per_source"] = self.per_source
         result = self._rpc("tools/call", {"name": "footnote_recall", "arguments": args})
         payload = json.loads(result["content"][0]["text"]) if "content" in result else result["structuredContent"]
         return [doc_id_of(r["path"]) for r in payload["results"]]

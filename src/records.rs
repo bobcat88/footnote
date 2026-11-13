@@ -222,6 +222,8 @@ pub struct Filters {
     pub project: Option<String>,
     pub tested_version: Option<String>,
     pub status: Option<String>,
+    /// At most this many chunks of one source file in the results (None: no limit)
+    pub per_source: Option<usize>,
 }
 pub fn eligible(c: &Connection, f: &Filters) -> Result<std::collections::HashSet<i64>> {
     let version = f
