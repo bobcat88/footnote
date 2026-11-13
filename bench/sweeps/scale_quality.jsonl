@@ -1,0 +1,16 @@
+{"experiment": "E13", "dataset": "scifact", "split": "heldout", "distractors": 0, "documents": 5183, "mode": "bm25", "ndcg@10": 0.6865, "recall@10": 0.8088, "p50_ms": 0.57, "build_s": 2.3, "queries": 300}
+{"experiment": "E13", "dataset": "scifact", "split": "heldout", "distractors": 0, "documents": 5183, "mode": "dense", "ndcg@10": 0.6949, "recall@10": 0.8236, "p50_ms": 0.58, "build_s": 2.3, "queries": 300}
+{"experiment": "E13", "dataset": "scifact", "split": "heldout", "distractors": 0, "documents": 5183, "mode": "hybrid", "ndcg@10": 0.7335, "recall@10": 0.8652, "p50_ms": 0.93, "build_s": 2.3, "queries": 300}
+{"experiment": "E13", "dataset": "scifact", "split": "heldout", "distractors": 0, "documents": 5183, "mode": "hybrid two-stage 1000", "ndcg@10": 0.7368, "recall@10": 0.8752, "p50_ms": 0.96, "build_s": 2.3, "queries": 300}
+{"experiment": "E13", "dataset": "scifact", "split": "heldout", "distractors": 0, "documents": 5183, "mode": "hybrid two-stage 5000", "ndcg@10": 0.7335, "recall@10": 0.8652, "p50_ms": 1.14, "build_s": 2.3, "queries": 300}
+{"experiment": "E13", "dataset": "scifact", "split": "heldout", "distractors": 10000, "documents": 15183, "mode": "bm25", "ndcg@10": 0.6712, "recall@10": 0.7786, "p50_ms": 1.34, "build_s": 151.4, "queries": 300}
+{"experiment": "E13", "dataset": "scifact", "split": "heldout", "distractors": 10000, "documents": 15183, "mode": "dense", "ndcg@10": 0.6634, "recall@10": 0.7811, "p50_ms": 1.37, "build_s": 151.4, "queries": 300}
+{"experiment": "E13", "dataset": "scifact", "split": "heldout", "distractors": 10000, "documents": 15183, "mode": "hybrid", "ndcg@10": 0.7046, "recall@10": 0.8286, "p50_ms": 2.22, "build_s": 151.4, "queries": 300}
+{"experiment": "E13", "dataset": "scifact", "split": "heldout", "distractors": 10000, "documents": 15183, "mode": "hybrid two-stage 1000", "ndcg@10": 0.7126, "recall@10": 0.8419, "p50_ms": 2.25, "build_s": 151.4, "queries": 300}
+{"experiment": "E13", "dataset": "scifact", "split": "heldout", "distractors": 10000, "documents": 15183, "mode": "hybrid two-stage 5000", "ndcg@10": 0.7088, "recall@10": 0.8353, "p50_ms": 2.36, "build_s": 151.4, "queries": 300}
+{"experiment": "E13", "dataset": "scifact", "split": "heldout", "distractors": 100000, "documents": 105183, "mode": "bm25", "ndcg@10": 0.6487, "recall@10": 0.7344, "p50_ms": 9.07, "build_s": 1534.9, "queries": 300}
+{"experiment": "E13", "dataset": "scifact", "split": "heldout", "distractors": 100000, "documents": 105183, "mode": "dense", "ndcg@10": 0.625, "recall@10": 0.7135, "p50_ms": 10.98, "build_s": 1534.9, "queries": 300}
+{"experiment": "E13", "dataset": "scifact", "split": "heldout", "distractors": 100000, "documents": 105183, "mode": "hybrid", "ndcg@10": 0.6796, "recall@10": 0.7746, "p50_ms": 15.75, "build_s": 1534.9, "queries": 300}
+{"experiment": "E13", "dataset": "scifact", "split": "heldout", "distractors": 100000, "documents": 105183, "mode": "hybrid two-stage 1000", "ndcg@10": 0.6878, "recall@10": 0.7846, "p50_ms": 14.05, "build_s": 1534.9, "queries": 300}
+{"experiment": "E13", "dataset": "scifact", "split": "heldout", "distractors": 100000, "documents": 105183, "mode": "hybrid two-stage 5000", "ndcg@10": 0.6856, "recall@10": 0.7779, "p50_ms": 14.29, "build_s": 1534.9, "queries": 300}
+DONE

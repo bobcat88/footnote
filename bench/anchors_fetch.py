@@ -17,7 +17,8 @@ MODELS = ["sentence-transformers__paraphrase-multilingual-MiniLM-L12-v2", "intfl
           "intfloat__multilingual-e5-base", "BAAI__bge-small-en-v1.5", "thenlper__gte-small",
           "sentence-transformers__all-MiniLM-L6-v2", "hotchpotch__bekko-embedding-v1-a8m",
           "hotchpotch__bekko-embedding-v1-a25m", "ibm-granite__granite-embedding-97m-multilingual-r2",
-          "ibm-granite__granite-embedding-small-english-r2", "BAAI__bge-m3"]
+          "ibm-granite__granite-embedding-small-english-r2", "BAAI__bge-m3",
+          "google__embeddinggemma-300m", "microsoft__harrier-oss-v1-270m", "Snowflake__snowflake-arctic-embed-m-v2.0"]
 TASKS = ["SciFact", "NFCorpus", "ArguAna", "FiQA2018", "SyntecRetrieval", "AlloprofRetrieval", "BSARDRetrieval",
          "MintakaRetrieval", "XPQARetrieval"]
 

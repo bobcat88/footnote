@@ -1,0 +1,88 @@
+{
+  "protocol": "v1",
+  "timestamp_utc": "2026-11-13T06:29:29+00:00",
+  "partial": true,
+  "dataset": {
+    "id": "syntec",
+    "split": "test",
+    "pin": {
+      "sha256": {
+        "documents.json": "0b899775cbeb3484f8f2b333581e4d792d301e0320d44ab495a593a6025203b8",
+        "queries.json": "c7d922ae47eb90c8c4ad93f8e84d1bb8c82397f1cae4385541027a129f49ca97"
+      },
+      "converted_sha256": null,
+      "source": "lyon-nlp/mteb-fr-retrieval-syntec-s2p"
+    },
+    "documents": 90,
+    "queries": 10
+  },
+  "engine": {
+    "id": "mem0",
+    "config": {
+      "product": "mem0",
+      "mode": "raw add (infer=False), no LLM call",
+      "embedder": "fastembed BAAI/bge-small-en-v1.5, 384d",
+      "lexical": "Qdrant sparse BM25 (fastembed Qdrant/bm25, English), re-scores dense candidates only",
+      "fusion": "mem0 score_and_rank: (semantic + bm25) / max, candidates from the dense top max(4k, 60)",
+      "threshold": 0.0,
+      "chunking": "none (one memory per document)",
+      "k": 20,
+      "query_clip_bytes": 500,
+      "caveat": "not mem0's managed platform with LLM extraction; English BM25 on French datasets"
+    },
+    "versions": {
+      "mem0ai": "2.2.1",
+      "fastembed": "0.9.1",
+      "qdrant_client": "1.20.0",
+      "embedder": "BAAI/bge-small-en-v1.5",
+      "adapter_sha256": "5d0248a2f331061296516b58d2eab108453b962789f44dfcf3c6b0e5a1ee564a"
+    }
+  },
+  "code": {
+    "commit": "92629a62c14ead0861dd0c21deef6cf23e61679d",
+    "dirty": true,
+    "metrics_sha256": "f60c511c79f8cd4fe5e95ecbf5a47d77ddddceae8fc89038682c7fc44502ab50",
+    "harness_sha256": "a0a5d655a0c97ea14b89f7ed92755dd1a1c343bc428605090b74667c9bf8089c"
+  },
+  "machine": {
+    "os": "Windows-11-10.0.28000-SP0",
+    "cpu": "Intel64 Family 6 Model 198 Stepping 2, GenuineIntel",
+    "logical_cpus": 24,
+    "ram_gib": 47.6,
+    "python": "3.12.10"
+  },
+  "build": {
+    "documents": 90,
+    "skipped_empty": 0,
+    "build_ms": 27883.150100009516,
+    "embed_ms": null,
+    "disk_bytes": 987767,
+    "store_bytes": 987767,
+    "qdrant_bytes": 807543,
+    "history_db_bytes": 180224,
+    "model_cache_bytes": 200882152,
+    "chunks": 90
+  },
+  "metrics": {
+    "ndcg@10": 0.930103,
+    "recall@5": 0.9,
+    "recall@10": 1.0,
+    "recall@20": 1.0,
+    "mrr@10": 0.911111,
+    "queries_scored": 10,
+    "queries_empty": 0
+  },
+  "latency_ms": {
+    "scope": "in-process Python call to mem0 Memory.search (embedder loaded once, Qdrant local mode, no LLM)",
+    "p50": 28.42,
+    "p95": 72.29,
+    "mean": 27.88,
+    "queries": 10
+  },
+  "determinism": {
+    "checked": false,
+    "queries_checked": 0,
+    "identical_rankings": null,
+    "rankings_sha256": "1b3eee0dea9f059cdcf00d3ac6d6b874ae93985991a22e252bc420c9a12e12c4"
+  }
+}

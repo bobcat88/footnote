@@ -1,0 +1,144 @@
+{
+  "protocol": "v1",
+  "timestamp_utc": "2026-11-13T06:51:39+00:00",
+  "partial": false,
+  "dataset": {
+    "id": "alloprof",
+    "split": "heldout",
+    "pin": {
+      "sha256": {
+        "corpus/test-00000-of-00001.parquet": "d4cc3f31c740d08f5e1bef9d83188da42f5ae07fdb2be920bd2f54754d05a09a",
+        "qrels/test-00000-of-00001.parquet": "f3c0cefa3e200f89f432981069b0d1f841d92e8653a96040d3ac67089db4d387",
+        "queries/test-00000-of-00001.parquet": "0706659a4b9cfc45d6e6eb97458edb37ca7609c96493c9b64de538ab65a5f5d3"
+      },
+      "converted_sha256": {
+        "corpus.jsonl": "0e9da1b2cb4e37da8f286158a0f086f81e558f477187e48ea28434a3ca51a72e",
+        "qrels.tsv": "26432b9a22c46e1d19d08f6cb2fd63086d6f605c9566a38ce5895fb5c326bdce",
+        "queries.jsonl": "27f1e33d57d01694c4166be767b387e2aa2a56384a3dcd8dd0f62ecd22010eaf"
+      },
+      "source": "mteb/AlloprofRetrieval"
+    },
+    "documents": 2556,
+    "queries": 1624
+  },
+  "engine": {
+    "id": "lab:ens-k12-a060",
+    "config": {
+      "chunker": {
+        "kind": "whole",
+        "size": 2000,
+        "overlap": 0,
+        "title_prefix": false
+      },
+      "lexical": {
+        "on": true,
+        "tokenizer": {
+          "accents": "strip",
+          "stem": "en"
+        },
+        "k1": 1.2,
+        "b": 0.75,
+        "min_idf": 0.0,
+        "prf": {
+          "docs": 0,
+          "terms": 10,
+          "weight": 0.5
+        },
+        "title_boost": 1
+      },
+      "dense": {
+        "on": true,
+        "model": "bekko-a8m",
+        "max_len": null,
+        "center": "none",
+        "quant": "f32",
+        "dims": 0,
+        "prf": {
+          "docs": 0,
+          "beta": 0.5
+        },
+        "extra": {
+          "model": "gte-small",
+          "weight": 0.5
+        }
+      },
+      "fusion": {
+        "kind": "cc",
+        "k": 60,
+        "alpha": 0.6,
+        "norm": "zscore",
+        "pool": 100,
+        "dense_from_lexical": 0,
+        "adaptive": {
+          "on": false,
+          "lo": 0.4,
+          "hi": 0.8
+        }
+      },
+      "rerank": {
+        "on": false,
+        "model": "mmarco-mminilm",
+        "pool": 20,
+        "gate_margin": 0.0
+      }
+    },
+    "versions": {
+      "numpy": "2.3.4",
+      "onnxruntime": "1.23.2",
+      "tokenizers": "0.22.1",
+      "python_stem": "snowballstemmer",
+      "model": "bekko-a8m",
+      "model_lock": {
+        "repo": "hotchpotch/bekko-embedding-v1-a8m",
+        "revision": "c721113d59a1d91b447450324f51c4b3332c924a",
+        "files": {
+          "model.onnx": "96d8cc6199e96357b21b2fb12f6d7ffd2d4abc7b182fe94b5468fbd6dc819af7",
+          "tokenizer.json": "8bd47075711f75a143d1b78e01a41cc65c1c591b00d3cfeffc23db07adce1392"
+        }
+      }
+    }
+  },
+  "code": {
+    "commit": "92629a62c14ead0861dd0c21deef6cf23e61679d",
+    "dirty": true,
+    "metrics_sha256": "f60c511c79f8cd4fe5e95ecbf5a47d77ddddceae8fc89038682c7fc44502ab50",
+    "harness_sha256": "33f2db3fbfc9044f6351e730d007bd2c384c8dda95bec3f34740894d23bf3add"
+  },
+  "machine": {
+    "os": "Windows-11-10.0.28000-SP0",
+    "cpu": "Intel64 Family 6 Model 198 Stepping 2, GenuineIntel",
+    "logical_cpus": 24,
+    "ram_gib": 47.6,
+    "python": "3.12.10"
+  },
+  "build": {
+    "documents": 2556,
+    "chunks": 2556,
+    "build_ms": 3114.7816000739112,
+    "embed_ms": 1478.7057000212371,
+    "disk_bytes": 0,
+    "index_bytes_in_memory": 3926016
+  },
+  "metrics": {
+    "ndcg@10": 0.490804,
+    "recall@5": 0.58436,
+    "recall@10": 0.669951,
+    "recall@20": 0.747537,
+    "mrr@10": 0.434258,
+    "queries_scored": 1624,
+    "queries_empty": 0
+  },
+  "latency_ms": {
+    "scope": "in-process, resident model, numpy brute force (no process spawn): NOT comparable with CLI engines",
+    "p50": 13.83,
+    "p95": 82.59,
+    "mean": 27.51,
+    "queries": 1624
+  },
+  "determinism": {
+    "checked": false,
+    "queries_checked": 0,
+    "identical_rankings": null,
+    "rankings_sha256": "6942e885c36e026a9248087b1529e57ae5ccd6d0078550284542214554b32550"
+  }
+}

@@ -170,5 +170,51 @@
       "model": "bekko-a8m",
       "quant": "int8"
     }
+  },
+  "ens-k12-a055": {
+    "dense": {
+      "model": "bekko-a8m",
+      "extra": {
+        "model": "gte-small",
+        "weight": 0.5
+      }
+    },
+    "lexical": {
+      "k1": 1.2,
+      "tokenizer": {
+        "stem": "en"
+      }
+    },
+    "chunker": {
+      "kind": "whole"
+    },
+    "fusion": {
+      "kind": "cc",
+      "norm": "zscore",
+      "alpha": 0.55
+    }
+  },
+  "ens-k12-a060": {
+    "dense": {
+      "model": "bekko-a8m",
+      "extra": {
+        "model": "gte-small",
+        "weight": 0.5
+      }
+    },
+    "lexical": {
+      "k1": 1.2,
+      "tokenizer": {
+        "stem": "en"
+      }
+    },
+    "chunker": {
+      "kind": "whole"
+    },
+    "fusion": {
+      "kind": "cc",
+      "norm": "zscore",
+      "alpha": 0.6
+    }
   }
 }

@@ -39,6 +39,20 @@ MODELS: dict[str, dict] = {
                           "pooling": "cls", "max_len": 512, "q": "", "p": "", "mteb": "ibm-granite__granite-embedding-97m-multilingual-r2", "lang": "multi"},
     "e5-base-multi": {"repo": "Xenova/multilingual-e5-base", "onnx": "onnx/model_quantized.onnx", "pooling": "mean",
                       "max_len": 512, "q": "query: ", "p": "passage: ", "mteb": "intfloat__multilingual-e5-base", "lang": "multi"},
+    # 2026 candidates from bench/research/embedding-boost.md (prefixes and pooling from each model card)
+    "embeddinggemma-300m": {"repo": "onnx-community/embeddinggemma-300m-ONNX", "onnx": "onnx/model.onnx",
+                            "extra": {"model.onnx_data": "onnx/model.onnx_data"}, "pooling": "graph", "output": "sentence_embedding",
+                            "max_len": 512, "q": "task: search result | query: ", "p": "title: none | text: ",
+                            "mteb": "google__embeddinggemma-300m", "lang": "multi"},
+    "harrier-270m": {"repo": "onnx-community/harrier-oss-v1-270m-ONNX", "onnx": "onnx/model.onnx",
+                     "extra": {"model.onnx_data": "onnx/model.onnx_data"}, "pooling": "last", "max_len": 512,
+                     "q": "Instruct: Given a web search query, retrieve relevant passages that answer the query\nQuery: ", "p": "",
+                     "mteb": "microsoft__harrier-oss-v1-270m", "lang": "multi"},
+    "granite-small-en-r2": {"repo": "onnx-community/granite-embedding-small-english-r2-ONNX", "onnx": "onnx/model.onnx",
+                            "extra": {"model.onnx_data": "onnx/model.onnx_data"}, "pooling": "cls", "max_len": 512, "q": "", "p": "",
+                            "mteb": "ibm-granite__granite-embedding-small-english-r2", "lang": "en"},
+    "arctic-m-v2": {"repo": "Snowflake/snowflake-arctic-embed-m-v2.0", "onnx": "onnx/model.onnx", "pooling": "cls", "max_len": 512,
+                    "q": "query: ", "p": "", "mteb": "Snowflake__snowflake-arctic-embed-m-v2.0", "lang": "multi"},
     "bge-m3": {"repo": "onnx-community/bge-m3-ONNX", "onnx": "onnx/model_quantized.onnx", "pooling": "cls", "max_len": 512,
                "q": "", "p": "", "mteb": "BAAI__bge-m3", "lang": "multi"},
 }
@@ -95,7 +109,7 @@ def model_dir(name: str) -> Path:
         entry = {"repo": spec["repo"], "revision": info["sha"], "files": {}}
         lock[name] = entry
     folder = CACHE / name
-    wanted = {"model.onnx": spec["onnx"], "tokenizer.json": "tokenizer.json"}
+    wanted = {"model.onnx": spec["onnx"], "tokenizer.json": "tokenizer.json", **spec.get("extra", {})}
     changed = False
     for local, remote in wanted.items():
         dest = folder / local

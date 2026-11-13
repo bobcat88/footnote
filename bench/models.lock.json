@@ -1,4 +1,20 @@
 {
+  "arctic-m-v2": {
+    "files": {
+      "model.onnx": {
+        "bytes": 1226099913,
+        "sha256": "c0c53d7f49a2db60761b92b7bbf5be87a7b3cf5d92dbbd7f1b5028bd5a40aa39",
+        "source": "onnx/model.onnx"
+      },
+      "tokenizer.json": {
+        "bytes": 17083009,
+        "sha256": "f1cc44ad7faaeec47241864835473fd5403f2da94673f3f764a77ebcb0a803ec",
+        "source": "tokenizer.json"
+      }
+    },
+    "repo": "Snowflake/snowflake-arctic-embed-m-v2.0",
+    "revision": "95c2741480856aa9666782eb4afe11959938017f"
+  },
   "bekko-a25m": {
     "files": {
       "model.onnx": {
@@ -95,6 +111,27 @@
     "repo": "Xenova/multilingual-e5-base",
     "revision": "1ec9243030a27d1a115d5c340572074c125b58b2"
   },
+  "embeddinggemma-300m": {
+    "files": {
+      "model.onnx": {
+        "bytes": 479932,
+        "sha256": "ea91fd315a7c152d427d231746f0f811a1ac93beaba656abfdf2b24e091265e4",
+        "source": "onnx/model.onnx"
+      },
+      "model.onnx_data": {
+        "bytes": 1234521088,
+        "sha256": "ef835ae565d8695236652475903078e8ed794c7c35faf1164d78ec3238e8a88d",
+        "source": "onnx/model.onnx_data"
+      },
+      "tokenizer.json": {
+        "bytes": 20323312,
+        "sha256": "4dda02faaf32bc91031dc8c88457ac272b00c1016cc679757d1c441b248b9c47",
+        "source": "tokenizer.json"
+      }
+    },
+    "repo": "onnx-community/embeddinggemma-300m-ONNX",
+    "revision": "5090578d9565bb06545b4552f76e6bc2c93e4a66"
+  },
   "granite-97m-multi": {
     "files": {
       "model.onnx": {
@@ -111,6 +148,27 @@
     "repo": "ibm-granite/granite-embedding-97m-multilingual-r2",
     "revision": "835ad14087e140460703cf0fae09f97d469d65c2"
   },
+  "granite-small-en-r2": {
+    "files": {
+      "model.onnx": {
+        "bytes": 182504,
+        "sha256": "cddb145cd1147ec24a3908b2ca2602b98b20a3d198365cff270b7cb26c98179e",
+        "source": "onnx/model.onnx"
+      },
+      "model.onnx_data": {
+        "bytes": 194844160,
+        "sha256": "86a3a705d4598615894d89540ea71a3d9bbdb17a315e79edcd5dfc737222834b",
+        "source": "onnx/model.onnx_data"
+      },
+      "tokenizer.json": {
+        "bytes": 2128614,
+        "sha256": "feeb83348dcb033bc6b9d2e1f7906ca9eb2d122845000c9416d894d7c2927149",
+        "source": "tokenizer.json"
+      }
+    },
+    "repo": "onnx-community/granite-embedding-small-english-r2-ONNX",
+    "revision": "1dc7835ba0cb9c76a3618d0bf0c427c97671b3c8"
+  },
   "gte-small": {
     "files": {
       "model.onnx": {
@@ -126,6 +184,27 @@
     },
     "repo": "Xenova/gte-small",
     "revision": "5927d1727bb12db490052a1b33265ad78058de08"
+  },
+  "harrier-270m": {
+    "files": {
+      "model.onnx": {
+        "bytes": 182338,
+        "sha256": "d5bff170c042556850e4941617bd45e05e7f2dd0868dc9e2beef05b8c5b62d06",
+        "source": "onnx/model.onnx"
+      },
+      "model.onnx_data": {
+        "bytes": 1105947136,
+        "sha256": "f27e5e94060e994a9d79be8be9910fc2513e0f9939d934103489a2156b0ff9a8",
+        "source": "onnx/model.onnx_data"
+      },
+      "tokenizer.json": {
+        "bytes": 20323311,
+        "sha256": "ec95be298bea26f90370854faa650744c9fb0a04ca5e5ff95dd3913393ac5e45",
+        "source": "tokenizer.json"
+      }
+    },
+    "repo": "onnx-community/harrier-oss-v1-270m-ONNX",
+    "revision": "d59c919d0159aea2c19ed7d04288fcdd048d0f9c"
   },
   "minilm-l6-en": {
     "files": {

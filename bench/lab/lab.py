@@ -225,10 +225,16 @@ class Encoder:
             feed = {"input_ids": ids, "attention_mask": mask}
             if "token_type_ids" in self.inputs:
                 feed["token_type_ids"] = np.zeros_like(ids)
-            h = self.sess.run(None, feed)[0]
+            pooling = self.spec["pooling"]
+            if pooling == "graph":  # pooling and projection are inside the ONNX graph (EmbeddingGemma)
+                h = self.sess.run([self.spec.get("output", "sentence_embedding")], feed)[0]
+            else:
+                h = self.sess.run(None, feed)[0]
             if h.ndim == 3:
-                if self.spec["pooling"] == "cls":
+                if pooling == "cls":
                     h = h[:, 0]
+                elif pooling == "last":  # last non-padding token (right padding)
+                    h = h[np.arange(len(h)), mask.sum(1) - 1]
                 else:
                     m = mask[..., None].astype(np.float32)
                     h = (h * m).sum(1) / np.maximum(m.sum(1), 1e-9)
@@ -339,12 +345,26 @@ def fuse(lex: np.ndarray | None, den: np.ndarray | None, cfg: dict, k: int, alph
                 score[int(d)] += 1.0 / (cfg["k"] + r + 1)
         order = sorted(score, key=lambda d: (-score[d], d))
         return order[:k]
+    a = cfg["alpha"] if alpha is None else alpha
+    if kind == "cc" and cfg.get("squash"):
+        # query-independent scales: BM25 through atan(x / s), cosine as is (research: Vespa NFCorpus tutorial)
+        s_ = float(cfg["squash"])
+        score = {int(d): a * float(den[d]) + (1 - a) * float(np.arctan(lex[d] / s_)) * 2 / np.pi for d in cand}
+        return sorted(score, key=lambda d: (-score[d], d))[:k]
+    if kind == "cc" and cfg.get("complete"):
+        # exact score completion: every candidate gets its real score from both retrievers, standardized with each pool's statistics
+        def z(values: np.ndarray, pool_values: np.ndarray) -> np.ndarray:
+            sd = float(pool_values.std()) or 1.0
+            return (values - float(pool_values.mean())) / sd
+        zl = z(lex[cand], lex[top_l])
+        zd = z(den[cand], den[top_d])
+        score = {int(d): a * float(vd) + (1 - a) * float(vl) for d, vl, vd in zip(cand, zl, zd)}
+        return sorted(score, key=lambda d: (-score[d], d))[:k]
     if kind == "cc":
         nl = dict(zip(top_l.tolist(), _norm(lex[top_l], cfg["norm"])))
         nd = dict(zip(top_d.tolist(), _norm(den[top_d], cfg["norm"])))
         floor_l = min(nl.values()) - 1e-9 if cfg["norm"] == "zscore" else 0.0
         floor_d = min(nd.values()) - 1e-9 if cfg["norm"] == "zscore" else 0.0
-        a = cfg["alpha"] if alpha is None else alpha
         score = {int(d): a * nd.get(int(d), floor_d) + (1 - a) * nl.get(int(d), floor_l) for d in cand}
         return sorted(score, key=lambda d: (-score[d], d))[:k]
     raise ValueError(f"unknown fusion {kind}")

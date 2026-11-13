@@ -5,3 +5,5 @@
 {"model": "e5-base-multi", "dataset": "syntec", "ndcg@10": 0.77924, "published": 0.82862, "delta": -0.04938, "tolerance": 0.03, "pass": false, "max_len": 512, "seconds": 14.3, "embed_ms": 13808}
 {"model": "granite-97m-multi", "dataset": "syntec", "ndcg@10": 0.77095, "published": null, "delta": null, "tolerance": 0.03, "pass": false, "max_len": 512, "seconds": 3.6, "embed_ms": 3163}
 {"model": "bge-m3", "dataset": "syntec", "ndcg@10": 0.85671, "published": null, "delta": null, "tolerance": 0.03, "pass": false, "max_len": 512, "seconds": 28.0, "embed_ms": 26561}
+{"model": "granite-small-en-r2", "dataset": "scifact", "ndcg@10": 0.74447, "published": 0.75494, "delta": -0.01047, "tolerance": 0.03, "pass": true, "max_len": 512, "seconds": 658.9, "embed_ms": 655920}
+{"model": "harrier-270m", "dataset": "syntec", "ndcg@10": 0.84232, "published": 0.83514, "delta": 0.00718, "tolerance": 0.03, "pass": true, "max_len": 512, "seconds": 11.9, "embed_ms": 9492}

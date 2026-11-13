@@ -34,12 +34,18 @@ K = 20
 
 
 def get_engine(name: str, lab_json: str | None = None):
-    """`lab:<name>` builds a lab engine (config from --lab-json, else lab/configs.json); anything else is a product engine."""
+    """`lab:<name>` builds a lab engine (config from --lab-json, else lab/configs.json); `ext:<name>` a competing product
+    (bench/competitors/<product>_engine.py); anything else is a Footnote product engine."""
     if name.startswith("lab:"):
         sys.path.insert(0, str(HERE / "lab"))
         import lab
         cfg = json.loads(lab_json) if lab_json else json.loads((HERE / "lab" / "configs.json").read_text())[name[4:]]
         return lab.LabEngine(name[4:], cfg)
+    if name.startswith("ext:"):  # competing products, each run from its own pinned environment (bench/competitors/)
+        sys.path.insert(0, str(HERE / "competitors"))
+        product = name[4:].split("-")[0]
+        module = __import__(f"{product}_engine")
+        return module.ENGINES[name[4:]]()
     return engines.ENGINES[name]()
 
 

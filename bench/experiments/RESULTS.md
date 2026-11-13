@@ -66,6 +66,29 @@ One hypothesis was tested and refuted: that several chunks of one long file crow
 Alloprof moves from 0.4784 to 0.4787 and nothing else changes (`dev_per_source.py`, development comparison on the receipts' indexes, not a receipt). The option is kept, off by default,
 because an agent often wants the best passage of each file rather than five passages of one.
 
+## F1 to F4: fusion ideas from the research (bench/research/fusion-boost.md)
+
+Dev splits, shipped-ensemble base (bekko-a8m + gte-small, convex combination z-score alpha 0.55 with floored missing scores, BM25 k1 1.2). nDCG@10 change against the base.
+Rows: `../sweeps/fusion2.jsonl`.
+
+| Change | SciFact | NFCorpus | Alloprof | mix-fr-en | Mean |
+|---|---:|---:|---:|---:|---:|
+| same formula, alpha 0.60 (control) | +0.0048 | +0.0026 | +0.0060 | +0.0048 | +0.0046 |
+| same formula, alpha 0.65 (control) | +0.0067 | +0.0026 | +0.0042 | +0.0048 | +0.0046 |
+| F1 exact score completion, alpha 0.65 | +0.0064 | +0.0035 | +0.0076 | +0.0047 | +0.0055 |
+| F1 exact score completion, alpha 0.70 | +0.0078 | +0.0042 | +0.0055 | +0.0052 | +0.0057 |
+| F3 second model weight 0.6 (instead of 0.5) | +0.0024 | +0.0039 | -0.0011 | +0.0004 | +0.0014 |
+| F4 atan squash of BM25, s 5, alpha 0.5 | +0.0012 | +0.0034 | -0.0148 | -0.0117 | -0.0055 |
+
+- The control changes the reading of F1: almost all of its gain comes from giving the dense side more weight (alpha 0.6 to 0.65), which the two-model blend apparently
+  wants; completing the missing scores adds about +0.001 on top. Without the control, F1 would have been credited with a gain it does not make.
+- None of these clears the +0.01 per-dataset bar on dev. The alpha change is consistent in sign on all four sets (+0.003 to +0.007), so it gets a pooled heldout
+  bootstrap before any decision (the research notes that effects this small cannot be resolved on one 300-query set).
+- A query-independent squash of BM25 (F4) hurts the French sets by up to 0.024: rejected. Separate model weights (F3) are noise.
+- **Heldout check of alpha 0.60 against 0.55** (`compare_pooled.py`, macro mean over SciFact, NFCorpus, Alloprof, mix-fr-en, 3,567 queries, stratified bootstrap):
+  +0.0025, 95% interval [+0.0003, +0.0047]. Real, and far below the pre-registered +0.01 bar, so the shipped value stays 0.55. The bar is not lowered after the fact:
+  a benchmark that moves its threshold when a result comes close stops being worth reading.
+
 ## E12: a cross-encoder only where the dense ranking is unsure
 
 `bge-reranker-v2-m3`, pool 10, 200 Alloprof dev queries, base = the frozen default (0.5083). The gate reranks a query only when the cosine gap
@@ -101,4 +124,18 @@ Remaining cost at 5,000 chunks is mostly the two model encodes (about 3 to 5 ms 
 
 ## E13: precision with 100,000 distractors
 
-Not run. The script exists (`scale_quality.py`) and embedding 100,000 distractor documents is a long CPU job; no claim about precision at 100,000 chunks or more is made anywhere.
+`scale_quality.py`, lab pipeline with one model (bekko-a8m), SciFact heldout (300 queries), whole documents. The SciFact corpus is diluted with 150-word spans
+cut at random from REAL documents of other datasets (NFCorpus, Alloprof, Syntec; never SciFact itself, so no near-duplicate of a relevant document exists).
+NFCorpus is medical text, close to SciFact's topics, so this is a hard case. Rows: `../sweeps/scale_quality.jsonl`.
+
+| Distractors | Documents | BM25 | Dense | Hybrid, full dense scan | Hybrid, BM25 shortlist 1,000 | Hybrid, shortlist 5,000 |
+|---:|---:|---:|---:|---:|---:|---:|
+| 0 | 5,183 | 0.6865 | 0.6949 | 0.7335 | 0.7368 | 0.7335 |
+| 10,000 | 15,183 | 0.6712 | 0.6634 | 0.7046 | 0.7126 | 0.7088 |
+| 100,000 | 105,183 | 0.6487 | 0.6250 | 0.6796 | **0.6878** | 0.6856 |
+
+- Precision falls as the corpus grows: hybrid -0.054 from 5k to 105k documents, dense alone -0.070, BM25 -0.038. Dense similarity crowds most.
+- **The BM25 shortlist used by the product above 50,000 entries does not cost precision**: it is slightly better than a full dense scan at every size here
+  (+0.008 at 10k and 100k). The shortlist removes dense false positives among the distractors.
+- This is one dataset, one model, 300 queries, no paired bootstrap yet: the +0.008 difference is within noise. What it does establish is that the scale strategy does not
+  lose relevance, which was the open risk. Cross-language matches with no shared word (the reason for the full scan below 50,000) are not covered by this test.

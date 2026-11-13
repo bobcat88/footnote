@@ -128,5 +128,22 @@ def gated_rerank(ds: str, base: dict):
     return out
 
 
-SWEEPS = {"ensemble": ensemble, "experiments": experiments, "gated_rerank": gated_rerank, "crowding": crowding, "models": models, "lexical": lexical, "fusion": fusion, "chunking": chunking, "rerank": rerank,
+def fusion2(ds: str, base: dict):
+    """Research-driven fusion experiments (bench/research/fusion-boost.md) on the shipped ensemble base."""
+    from lab import merge  # noqa: PLC0415
+    v = lambda label, **over: (label, merge(base, over))
+    out = [v("F0 base (ensemble, cc z-score 0.55, floored)")]
+    for a in (0.6, 0.65, 0.7):  # control: is a gain from completion, or just from more dense weight?
+        out.append(v(f"F0 control floored alpha={a}", fusion={"alpha": a}))
+    for a in (0.5, 0.55, 0.6, 0.65, 0.7):
+        out.append(v(f"F1 exact score completion alpha={a}", fusion={"complete": True, "alpha": a}))
+    for w in (0.3, 0.4, 0.6, 0.7):
+        out.append(v(f"F3 second-model weight={w}", dense={"extra": {"model": "gte-small", "weight": w}}))
+    for scale in (5.0, 10.0, 20.0):
+        for a in (0.5, 0.6, 0.7):
+            out.append(v(f"F4 atan BM25 squash s={scale} alpha={a}", fusion={"squash": scale, "alpha": a}))
+    return out
+
+
+SWEEPS = {"fusion2": fusion2, "ensemble": ensemble, "experiments": experiments, "gated_rerank": gated_rerank, "crowding": crowding, "models": models, "lexical": lexical, "fusion": fusion, "chunking": chunking, "rerank": rerank,
           "lexical_lang": lexical_lang}
