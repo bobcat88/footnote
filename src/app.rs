@@ -760,7 +760,16 @@ fn execute(cli: Cli) -> Result<Value> {
             allow,
             max_files,
             max_mib,
-        } => index(&mut c, &root, &allow, max_files, max_mib),
+        } => {
+            let mut report = index(&mut c, &root, &allow, max_files, max_mib)?;
+            // Build the lexical index at index time; a failure only means searches fall back to FTS5.
+            report["lexical_index"] = match crate::lexical::sync(&c) {
+                Ok(Some(_)) => json!("ready"),
+                Ok(None) => json!("not_applicable"),
+                Err(e) => json!(format!("unavailable: {e:#}")),
+            };
+            Ok(report)
+        }
         Action::RebuildEmbeddings { model } => crate::semantic::rebuild(&mut c, &model),
         Action::Search {
             query,

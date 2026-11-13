@@ -141,6 +141,11 @@ fn open(c: &Connection) -> Result<Option<Open>> {
         body,
     }))
 }
+/// Build or extend the derived index now, so the first query does not pay for it (at one million chunks that is about 35 s).
+/// `Ok(None)`: this database has no derived index (in-memory).
+pub fn sync(c: &Connection) -> Result<Option<i64>> {
+    Ok(open(c)?.map(|o| o.built_seq))
+}
 /// Chunk ids and BM25 scores matching any of the query's words, best first. `Ok(None)`: no derived index here, use FTS5.
 pub fn top_hits(c: &Connection, query: &str, n: usize) -> Result<Option<Vec<(i64, f32)>>> {
     let seq = sequence(c)?;

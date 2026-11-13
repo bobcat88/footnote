@@ -37,6 +37,13 @@ def sha256_file(path: Path) -> str:
     return h.hexdigest()
 
 
+def dir_bytes(path: Path) -> int:
+    """Bytes of a file or of every file under a folder (0 when absent)."""
+    if path.is_file():
+        return path.stat().st_size
+    return sum(f.stat().st_size for f in path.rglob("*") if f.is_file()) if path.is_dir() else 0
+
+
 def run_cli(db: Path, *args: str, timeout: int = 3600) -> dict:
     out = subprocess.run([str(EXE), "--db", str(db), *args], capture_output=True, text=True, timeout=timeout)
     if out.returncode != 0:
@@ -99,6 +106,18 @@ class CliEngine:
             v["model_files_sha256"] = [{n: f["sha256"] for n, f in m["files"].items()} for m in manifests] if len(manifests) > 1                 else {n: f["sha256"] for n, f in manifests[0]["files"].items()}
         return v
 
+    def footprint(self) -> dict:
+        """What the index costs on disk, by part. `disk_bytes` stays the SQLite file (earlier receipts); `store_bytes` is everything the
+        build wrote (SQLite, its WAL/SHM, the derived Tantivy index). Model files and the executable are reported apart, never mixed in."""
+        db = self.db
+        parts = {"sqlite_bytes": dir_bytes(db), "wal_shm_bytes": dir_bytes(Path(str(db) + "-wal")) + dir_bytes(Path(str(db) + "-shm")),
+                 "tantivy_bytes": dir_bytes(Path(str(db) + ".tantivy"))}
+        models = getattr(self, "model_dirs", [self.model_dir]) if self.hybrid else []
+        parts["store_bytes"] = sum(parts.values())
+        parts["model_bytes"] = sum(dir_bytes(m / "model.onnx") + dir_bytes(m / "tokenizer.json") for m in models)
+        parts["exe_bytes"] = dir_bytes(EXE)
+        return parts
+
     def prepare(self, dataset: str, corpus: dict) -> dict:
         folder = materialize(dataset, corpus)
         base = WORK / dataset / self.family
@@ -110,6 +129,7 @@ class CliEngine:
             m = json.loads(meta.read_text())
             if m.get("exe_sha256") == exe_hash and m.get("documents") == len(corpus):
                 m["reused"] = True
+                m.update(self.footprint())
                 return m
         if self.db.exists():
             self.db.unlink()
@@ -127,6 +147,7 @@ class CliEngine:
         info = {"exe_sha256": exe_hash, "documents": len(corpus), "build_ms": (time.perf_counter() - t) * 1000,
                 "embed_ms": embed_ms, "disk_bytes": self.db.stat().st_size, "chunks": stats["chunks"],
                 "sources": stats["sources"], "reused": False}
+        info.update(self.footprint())
         meta.write_text(json.dumps(info, indent=2))
         return info
 

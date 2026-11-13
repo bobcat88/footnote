@@ -42,3 +42,24 @@ fn scan_bounds_are_options_and_an_exceeded_bound_rolls_back() {
     index(&db, r, &["--max-mib", "0"]).failure();
     index(&db, r, &[]).success(); // the defaults are large
 }
+
+#[test]
+fn the_lexical_index_exists_right_after_indexing() {
+    let t = tempfile::tempdir_in(
+        std::env::var("TMPDIR").unwrap_or_else(|_| std::env::temp_dir().to_string_lossy().into()),
+    )
+    .unwrap();
+    let root = t.path().join("notes");
+    fs::create_dir(&root).unwrap();
+    fs::write(root.join("a.md"), "# A\nsome words to search").unwrap();
+    let r = root.to_str().unwrap();
+    let db = t.path().join("k.db");
+    let out = index(&db, r, &[]).success().get_output().stdout.clone();
+    let report: serde_json::Value = serde_json::from_slice(&out).unwrap();
+    assert_eq!(report["lexical_index"], "ready");
+    let dir = t.path().join("k.db.tantivy");
+    assert!(
+        dir.join("footnote.json").exists(),
+        "no search ran yet, the index must already be there"
+    );
+}
