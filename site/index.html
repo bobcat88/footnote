@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Footnote — local memory for AI coding agents</title>
+<meta name="description" content="Footnote gives AI coding agents a local, read-only memory where every answer carries a checkable source. Measured on public benchmarks, English and French.">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#F4EFE6" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#14120F" media="(prefers-color-scheme: dark)">
+<meta property="og:title" content="Footnote — local memory for AI coding agents">
+<meta property="og:description" content="Every answer carries a footnote: path, hash, revision and freshness. Local, read-only, measured.">
+<meta property="og:type" content="website">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="preload" href="fonts/newsreader-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="style.css">
+<script>document.documentElement.classList.add("js")</script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="top">
+  <div class="wrap">
+    <a class="mark" href="#top">Footnote<sup>1</sup></a>
+    <nav aria-label="Primary">
+      <a href="#compare">Compare</a>
+      <a href="#proof">Proof</a>
+      <a href="#scale">Scale</a>
+      <a href="#install">Install</a>
+      <a class="btn" href="https://github.com/bobcat88/footnote">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+
+<section class="hero" id="top">
+  <div class="wrap">
+    <div class="row with-notes">
+      <div>
+        <h1 data-enter style="--i:0">Memory that shows its sources.<sup><a class="fn" href="#n1" id="r1">1</a></sup></h1>
+        <p class="lede" data-enter style="--i:2">Footnote is local memory for AI coding agents. Every answer comes with the file, the line, the content hash and whether the file has changed since.</p>
+        <div class="actions" data-enter style="--i:3">
+          <a class="btn" href="https://github.com/bobcat88/footnote">View on GitHub</a>
+          <a class="btn quiet" href="#compare">Compare solutions</a>
+        </div>
+      </div>
+      <aside class="notes" aria-label="Notes">
+        <p id="n1"><b>1</b>Each hit includes its source, hash and freshness: current, changed or unavailable. <a href="https://github.com/bobcat88/footnote#how-it-works">How citations work</a>.</p>
+      </aside>
+    </div>
+
+    <div class="recall" data-enter style="--i:4" role="group" aria-label="Example recall output" tabindex="0">
+      <div class="cmd"><span>agent ▸</span> footnote_recall("why does the WAL checkpoint stall under write load")</div>
+      <table>
+        <tbody>
+          <tr><td>¹</td><td class="txt">Checkpoint latency is amortized through batching; a long reader holds the WAL open and the checkpoint cannot finish.</td><td class="meta"><span class="dim">notes/sqlite.md · §WAL · line 42</span><span class="dim">rev 4</span><span class="ok">current</span><span class="dim">3fa9c1d07b2e</span></td></tr>
+          <tr><td>²</td><td class="txt">After a reader-heavy night, run a passive checkpoint before the batch job starts.</td><td class="meta"><span class="dim">ops/runbook.md · page 3</span><span class="dim">rev 1</span><span class="stale">stale</span><span class="dim">9b0e77a41c58</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section id="what">
+  <div class="wrap">
+    <p class="eyebrow">What it is</p>
+    <h2>A memory layer you can audit.</h2>
+    <div class="three">
+      <div><h3>Local</h3><p>Your corpus is one SQLite file and one search index on your own disk, searched by embedding models that run on your CPU. Nothing is sent anywhere.</p></div>
+      <div><h3>Cited</h3><p>Each hit is bound to the exact bytes it came from. When the file has changed since, the hit says <span class="mono">stale</span> and your agent knows not to rely on it.</p></div>
+      <div><h3>Read-only for agents</h3><p>An agent can recall and fetch from the corpus. Writing takes a command from you; a proposal sent over MCP is refused, and every call is appended to a tamper-evident audit log.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="compare">
+  <div class="wrap">
+    <p class="eyebrow">Compare</p>
+    <h2>Different memories for different jobs.</h2>
+    <p>Start with what you want an agent to remember and who can change it. These are product descriptions, not head-to-head benchmark results.</p>
+    <div class="comparison" role="list" aria-label="Memory product comparison">
+      <article role="listitem"><h3>Footnote</h3><dl><div><dt>Best for</dt><dd>Finding evidence in your own documents.</dd></div><div><dt>Memory and updates</dt><dd>File excerpts with source and freshness; MCP access is read only.</dd></div><div><dt>Deployment</dt><dd>Local search; models require setup.</dd></div></dl><a href="https://github.com/bobcat88/footnote#security-model">Footnote documentation</a></article>
+      <article role="listitem"><h3>MCP Knowledge Graph Memory</h3><dl><div><dt>Best for</dt><dd>Remembering entities and their relationships.</dd></div><div><dt>Memory and updates</dt><dd>Entities, observations and relations; MCP tools can change them.</dd></div><div><dt>Deployment</dt><dd>Local reference server.</dd></div></dl><a href="https://github.com/modelcontextprotocol/servers/blob/main/src/memory/README.md">MCP Knowledge Graph documentation</a></article>
+      <article role="listitem"><h3>MCP Memory Service</h3><dl><div><dt>Best for</dt><dd>Storing and consolidating agent memories.</dd></div><div><dt>Memory and updates</dt><dd>Semantic search, memory lifecycle and knowledge graph.</dd></div><div><dt>Deployment</dt><dd>Local backend; cloud and other backends optional.</dd></div></dl><a href="https://github.com/doobidoo/mcp-memory-service/wiki/">MCP Memory Service documentation</a></article>
+      <article role="listitem"><h3>Letta</h3><dl><div><dt>Best for</dt><dd>Building agents with persistent memory.</dd></div><div><dt>Memory and updates</dt><dd>Shareable, agent-editable blocks; read-only blocks available.</dd></div><div><dt>Deployment</dt><dd>Depends on product and configuration.</dd></div></dl><a href="https://docs.letta.com/v1-sdk/memory/memory-blocks">Letta documentation</a></article>
+    </div>
+    <p class="note">We have not run these products on the same datasets or hardware. Their documentation describes their capabilities; our results below measure Footnote and the stated retrieval baselines only. Reviewed 12 November 2026.</p>
+    <h3 class="comparison-measured">Search engines, measured</h3>
+    <p>Lexical search only, using the English stemmer and the same SciFact test queries. These are components, not complete memory products; Footnote adds semantic search and MCP on top of Tantivy.</p>
+    <div class="ledger-wrap">
+      <table class="ledger compare-results">
+        <caption>SciFact test set: 300 queries. nDCG@10 and median query latency.</caption>
+        <thead><tr><th scope="col">Lexical engine</th><th scope="col">nDCG@10</th><th scope="col">Median latency</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">SQLite FTS5 (Porter)</th><td data-label="nDCG@10">0.687</td><td data-label="Median latency">3.8 ms</td></tr>
+          <tr><th scope="row">LanceDB FTS (English)</th><td data-label="nDCG@10">0.687</td><td data-label="Median latency">2.2 ms</td></tr>
+          <tr><th scope="row">Tantivy (English)</th><td data-label="nDCG@10">0.687</td><td data-label="Median latency">0.07–0.08 ms</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note">Warm query timing on the benchmark machine; this excludes embedding, fusion and MCP. Tokenizers and implementations differ. <a href="https://github.com/bobcat88/footnote/blob/main/bench/DECISION.md">Methods and full results</a>.</p>
+  </div>
+</section>
+
+<section id="proof">
+  <div class="wrap">
+    <div class="row with-notes">
+      <div>
+        <p class="eyebrow">Proof</p>
+        <h2>Measured on public benchmarks, in English and French.</h2>
+        <p>nDCG@10 on four public test sets. Bars are ordered by score, highest first. Footnote is our hybrid retrieval run; alternatives are published dense-only model results, not full memory products. Different evaluation settings mean these are references, not controlled head-to-head tests.</p>
+        <div class="benchmark-chart" aria-label="Retrieval results, nDCG at 10. Scores and methods appear as text alongside each bar."><p class="benchmark-axis">Bar scale: 0 to 1 · higher is better · red = Footnote</p><div class="benchmark-group"><h3>SciFact · 300 test queries</h3><div class="benchmark-line"><span class="benchmark-label"><a href="https://github.com/embeddings-benchmark/results/blob/62d67f4a051dd840fa9cfc8c93fa340597e1b71c/results/ibm-granite__granite-embedding-small-english-r2/54a8d2616a0844355a5164432d3f6dafb37b17a3/SciFact.json">Granite small English</a> <small>dense · MTEB</small></span><span class="benchmark-track" aria-hidden="true"><i style="--score:0.755"></i></span><span class="benchmark-value">0.755</span></div><div class="benchmark-line footnote-result" data-dataset="scifact"><span class="benchmark-label"><a href="https://github.com/bobcat88/footnote/tree/main/bench/receipts">Footnote</a> <small>our system · hybrid</small></span><span class="benchmark-track" aria-hidden="true"><i style="--score:0.747"></i></span><span class="benchmark-value">0.747</span></div><div class="benchmark-line"><span class="benchmark-label"><a href="https://github.com/embeddings-benchmark/results/blob/62d67f4a051dd840fa9cfc8c93fa340597e1b71c/results/intfloat__multilingual-e5-base/d13f1b27baf31030b7fd040960d60d909913633f/SciFact.json">Multilingual E5 base</a> <small>dense · MTEB</small></span><span class="benchmark-track" aria-hidden="true"><i style="--score:0.697"></i></span><span class="benchmark-value">0.697</span></div></div><div class="benchmark-group"><h3>NFCorpus · 323 test queries</h3><div class="benchmark-line"><span class="benchmark-label"><a href="https://github.com/embeddings-benchmark/results/blob/62d67f4a051dd840fa9cfc8c93fa340597e1b71c/results/ibm-granite__granite-embedding-small-english-r2/54a8d2616a0844355a5164432d3f6dafb37b17a3/NFCorpus.json">Granite small English</a> <small>dense · MTEB</small></span><span class="benchmark-track" aria-hidden="true"><i style="--score:0.371"></i></span><span class="benchmark-value">0.371</span></div><div class="benchmark-line footnote-result" data-dataset="nfcorpus"><span class="benchmark-label"><a href="https://github.com/bobcat88/footnote/tree/main/bench/receipts">Footnote</a> <small>our system · hybrid</small></span><span class="benchmark-track" aria-hidden="true"><i style="--score:0.368"></i></span><span class="benchmark-value">0.368</span></div><div class="benchmark-line"><span class="benchmark-label"><a href="https://github.com/embeddings-benchmark/results/blob/62d67f4a051dd840fa9cfc8c93fa340597e1b71c/results/intfloat__multilingual-e5-base/d13f1b27baf31030b7fd040960d60d909913633f/NFCorpus.json">Multilingual E5 base</a> <small>dense · MTEB</small></span><span class="benchmark-track" aria-hidden="true"><i style="--score:0.325"></i></span><span class="benchmark-value">0.325</span></div></div><div class="benchmark-group"><h3>Alloprof · 2,316 test queries</h3><div class="benchmark-line"><span class="benchmark-label"><a href="https://github.com/embeddings-benchmark/results/blob/62d67f4a051dd840fa9cfc8c93fa340597e1b71c/results/BAAI__bge-m3/5617a9f61b028005a4858fdac845db406aefb181/AlloprofRetrieval.json">BGE-M3</a> <small>dense · MTEB</small></span><span class="benchmark-track" aria-hidden="true"><i style="--score:0.490"></i></span><span class="benchmark-value">0.490</span></div><div class="benchmark-line footnote-result" data-dataset="alloprof"><span class="benchmark-label"><a href="https://github.com/bobcat88/footnote/tree/main/bench/receipts">Footnote</a> <small>our system · hybrid</small></span><span class="benchmark-track" aria-hidden="true"><i style="--score:0.478"></i></span><span class="benchmark-value">0.478</span></div><div class="benchmark-line"><span class="benchmark-label"><a href="https://github.com/embeddings-benchmark/results/blob/62d67f4a051dd840fa9cfc8c93fa340597e1b71c/results/intfloat__multilingual-e5-base/d13f1b27baf31030b7fd040960d60d909913633f/AlloprofRetrieval.json">Multilingual E5 base</a> <small>dense · MTEB</small></span><span class="benchmark-track" aria-hidden="true"><i style="--score:0.344"></i></span><span class="benchmark-value">0.344</span></div></div><div class="benchmark-group"><h3>Syntec · 100 test queries</h3><div class="benchmark-line"><span class="benchmark-label"><a href="https://github.com/embeddings-benchmark/results/blob/62d67f4a051dd840fa9cfc8c93fa340597e1b71c/results/intfloat__multilingual-e5-base/d13f1b27baf31030b7fd040960d60d909913633f/SyntecRetrieval.json">Multilingual E5 base</a> <small>dense · MTEB</small></span><span class="benchmark-track" aria-hidden="true"><i style="--score:0.829"></i></span><span class="benchmark-value">0.829</span></div><div class="benchmark-line"><span class="benchmark-label"><a href="https://github.com/embeddings-benchmark/results/blob/62d67f4a051dd840fa9cfc8c93fa340597e1b71c/results/hotchpotch__bekko-embedding-v1-a25m/aede922b27c1751d091b1e26c86dc82446a46cb4/SyntecRetrieval.json">Bekko a25m</a> <small>dense · MTEB</small></span><span class="benchmark-track" aria-hidden="true"><i style="--score:0.816"></i></span><span class="benchmark-value">0.816</span></div><div class="benchmark-line footnote-result" data-dataset="syntec"><span class="benchmark-label"><a href="https://github.com/bobcat88/footnote/tree/main/bench/receipts">Footnote</a> <small>our system · hybrid</small></span><span class="benchmark-track" aria-hidden="true"><i style="--score:0.795"></i></span><span class="benchmark-value">0.795</span></div></div></div>
+        <p class="note">Published MTEB runs may use different model versions, software and evaluation settings. They are useful references, not controlled head-to-head tests. The French test sets include queries used in development; see the held-out results for an independent check.</p>
+        <p class="note">Other results without a comparable published baseline: mixed French and English index <strong data-result="mix-fr-en">0.489</strong> nDCG@10<sup><a class="fn" href="#n4" id="r4">4</a></sup>; LongMemEval-S <strong>0.939</strong> nDCG@10 in the benchmark harness<sup><a class="fn" href="#n5" id="r5">5</a></sup>.</p>
+      </div>
+      <aside class="notes" aria-label="Notes">
+        <p><b>Sources</b>Footnote: <a href="https://github.com/bobcat88/footnote/tree/main/bench/receipts">run receipts</a>. Alternatives: select each model name for its published MTEB result; the collected references are in <a href="https://github.com/bobcat88/footnote/blob/main/bench/anchors.json">anchors.json</a>. <a href="https://github.com/bobcat88/footnote/blob/main/bench/experiments/RESULTS.md">Held-out experiment results</a>.</p>
+        <p id="n4"><b>4</b>11,462 documents from four datasets in one index, 3,039 queries. This is the language-crowding case; the English stemmer alone beat per-language and combined stemming.</p>
+        <p id="n5"><b>5</b>LongMemEval-S retrieval only, 343 held-out questions, user turns indexed. recall_any@5 is 0.971. Run in the benchmark harness with the same retrieval pipeline (one model), not through the shipped binary. No language model is used anywhere in retrieval.</p>
+      </aside>
+    </div>
+  </div>
+</section>
+
+<section id="scale">
+  <div class="wrap">
+    <div class="row with-notes">
+      <div>
+        <p class="eyebrow">Scale</p>
+        <h2>Speed and storage at a million chunks.</h2>
+        <p>Median query time against synthetic corpora of 100,000 and 1,000,000 documents, same queries, same stemmer. Bars use a separate scale for each corpus size.<sup><a class="fn" href="#n6" id="r6">6</a></sup></p>
+        <p><strong>5.6× smaller test artifact:</strong> 304 MB for Tantivy versus 1,715 MB for the FTS5 database at 1 million documents. The FTS5 artifact stores document text; the Tantivy index does not. This is not a comparison of complete product storage.</p>
+        <div class="scale" data-reveal>
+          <h3>100,000 documents</h3>
+          <div class="line"><span>SQLite FTS5</span><span class="track"><i style="--w:100%"></i></span><span class="v">43 ms</span></div>
+          <div class="line"><span>Tantivy</span><span class="track"><i class="f" style="--w:0.88%"></i></span><span class="v">0.38 ms</span></div>
+          <h3>1,000,000 documents</h3>
+          <div class="line"><span>SQLite FTS5</span><span class="track"><i style="--w:100%"></i></span><span class="v">423 ms</span></div>
+          <div class="line"><span>Tantivy</span><span class="track"><i class="f" style="--w:0.7%"></i></span><span class="v">3.0 ms</span></div>
+        </div>
+      </div>
+      <aside class="notes" aria-label="Notes">
+        <p id="n6"><b>6</b>Documents are 150-word spans cut from real corpora, so word frequencies are realistic; they are not judged, so this chart measures speed, not precision. The FTS5 test stores document text; the Tantivy index stores identifiers and search structures, not document text. Footnote also uses SQLite for source data and vectors, so total product storage is larger than this index. Data: <a href="https://github.com/bobcat88/footnote/blob/main/bench/dbbake/results.jsonl">bench/dbbake/results.jsonl</a>.</p>
+      </aside>
+    </div>
+  </div>
+</section>
+
+<section id="how">
+  <div class="wrap">
+    <p class="eyebrow">How it works</p>
+    <h2>Five steps, none of them a language model.</h2>
+    <ol class="pipe">
+      <li><b>Index</b><span>Markdown, text and PDF are split into chunks and hashed. Originals are never modified.</span></li>
+      <li><b>Shortlist</b><span>A BM25 index finds candidates for every word of the question, stemmed, accents folded.</span></li>
+      <li><b>Re-score</b><span>Two local embedding models compare meaning. Vectors are stored as 8-bit integers, with ranking differences within 0.0004 nDCG in our tests.</span></li>
+      <li><b>Fuse</b><span>The two scores are blended with fixed weights. No tuning at query time.</span></li>
+      <li><b>Cite</b><span>Each result carries path, line, hash, revision and freshness, checked at read time.</span></li>
+    </ol>
+  </div>
+</section>
+
+<section id="install">
+  <div class="wrap">
+    <p class="eyebrow">Install</p>
+    <h2>One command connects Claude Code, Codex and Gemini.</h2>
+    <div class="install">
+      <div>
+        <h3>Index a folder, then connect your agents</h3>
+        <pre><code><span class="c"># build from source (Rust 1.85 or later)</span>
+git clone https://github.com/bobcat88/footnote &amp;&amp; cd footnote &amp;&amp; cargo build --release
+export PATH="$PWD/target/release:$PATH"
+mkdir -p ~/.footnote
+footnote --db ~/.footnote/knowledge.db index --root ~/notes --allow ~/notes
+footnote --db ~/.footnote/knowledge.db install</code><button class="copy" type="button">Copy</button></pre>
+      </div>
+      <div>
+        <h3>Or add it by hand</h3>
+        <pre><code><span class="c"># Claude Code</span>
+claude mcp add footnote -- "$PWD/target/release/footnote" --db "$HOME/.footnote/knowledge.db" mcp
+<span class="c"># Codex CLI</span>
+codex mcp add footnote -- "$PWD/target/release/footnote" --db "$HOME/.footnote/knowledge.db" mcp</code><button class="copy" type="button">Copy</button></pre>
+      </div>
+    </div>
+    <p class="note">Commands shown use a POSIX shell and set up lexical search. For hybrid search, Windows instructions and other MCP hosts, see the README on GitHub.</p>
+    <ul class="harnesses" aria-label="Works with">
+      <li>Claude Code</li><li>Codex CLI</li><li>Gemini CLI</li><li>Hermes</li><li>Cursor</li><li>Windsurf</li><li>Zed</li><li>VS Code</li><li>Cline</li><li>any MCP host</li>
+    </ul>
+  </div>
+</section>
+
+<section id="trust">
+  <div class="wrap">
+    <p class="eyebrow">Trust</p>
+    <h2>Built so that you can check it.</h2>
+    <ul class="checks">
+      <li><b>No network.</b> The tool makes no outbound requests; this page loads nothing from a third party, fonts included.</li>
+      <li><b>Read-only over MCP.</b> Agents recall and fetch. Writes need an explicit command from you.</li>
+      <li><b>Private by construction.</b> State lives in a user-only folder; the daemon speaks over a local socket with a mutual HMAC handshake.</li>
+      <li><b>Tamper-evident log.</b> Every call is appended to a hash-chained, MAC-signed audit log you can verify offline.</li>
+      <li><b>Untrusted by default.</b> Retrieved text is labelled as data, never as instructions.</li>
+      <li><b>Receipts, not claims.</b> Every number on this page comes from a stored run you can reproduce.</li>
+    </ul>
+  </div>
+</section>
+
+<section class="close" id="end">
+  <div class="wrap">
+    <h2>Give your agent a memory it can cite.</h2>
+    <p>Source, receipts and the full benchmark protocol are in the repository.</p>
+    <p><a class="btn" href="https://github.com/bobcat88/footnote">View on GitHub</a></p>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>Footnote. Local-first retrieval for AI coding agents.</span>
+    <span><a href="https://github.com/bobcat88/footnote">GitHub</a> · Fonts: Newsreader and IBM Plex Mono, SIL Open Font License, served from this site</span>
+  </div>
+</footer>
+
+<script src="app.js" defer></script>
+</body>
+</html>
