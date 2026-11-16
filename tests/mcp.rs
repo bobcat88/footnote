@@ -172,7 +172,7 @@ fn tools_list_returns_eight_tools_with_valid_input_schemas() {
     let rs = responses(&out);
     assert_eq!(rs.len(), 1);
     let tools = rs[0]["result"]["tools"].as_array().unwrap();
-    assert_eq!(tools.len(), 11);
+    assert_eq!(tools.len(), if cfg!(feature = "code") { 12 } else { 11 });
     let names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
     for expected in [
         "footnote_recall",

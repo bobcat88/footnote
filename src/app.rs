@@ -737,7 +737,7 @@ fn canonical(root: &Path) -> Result<PathBuf> {
 
 /// One graph per project, in the state folder (never inside the repository), named after the project's canonical path.
 #[cfg(feature = "code")]
-fn code_db(root: &Path) -> Result<PathBuf> {
+pub(crate) fn code_db(root: &Path) -> Result<PathBuf> {
     let key = footnote_core::hash(canonical(root)?.to_string_lossy().as_bytes());
     Ok(crate::state::state_dir()?.join("code").join(format!("{}.db", &key[..16])))
 }

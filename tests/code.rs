@@ -41,6 +41,20 @@ fn callers_and_callees_come_from_the_compiler_index() {
     assert_eq!(footnote(&state, &["code", "run", "--root", root])["symbols"][0]["callees"][0]["name"], "helper");
     assert_eq!(found["stale"], serde_json::json!([]));
 
+    // The same answer reaches agents through the MCP tool.
+    let call = serde_json::json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+        "params": {"name": "footnote_code", "arguments": {"name": "helper", "root": root}}});
+    let out = Command::new(assert_cmd::cargo::cargo_bin!("footnote"))
+        .env("FOOTNOTE_STATE_DIR", &state)
+        .env("FOOTNOTE_POLICY_FILE", state.join("no-policy.json"))
+        .args(["--db", state.join("kb.db").to_str().unwrap(), "serve", "--mcp"])
+        .write_stdin(format!("{call}\n"))
+        .output()
+        .unwrap();
+    let reply: Value = serde_json::from_slice(&out.stdout).unwrap();
+    let text: Value = serde_json::from_str(reply["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+    assert_eq!(text["symbols"][0]["callers"][0]["name"], "run", "{reply}");
+
     fs::write(project.join("src/lib.rs"), format!("{lib}// edited\n")).unwrap();
     assert_eq!(footnote(&state, &["code", "helper", "--root", root])["stale"], serde_json::json!(["src/lib.rs"]));
 }

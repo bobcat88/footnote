@@ -493,6 +493,19 @@ fn dispatch(db: &Path, name: &str, args: &Value) -> Result<Value> {
                 &list("remove")?,
             )
         }
+        #[cfg(feature = "code")]
+        "footnote_code" => {
+            let name = args["name"].as_str().filter(|n| !n.is_empty() && n.len() <= 200).context("`name` is required")?;
+            let root = match args["root"].as_str() {
+                Some(r) => std::path::PathBuf::from(r),
+                None => std::env::current_dir()?,
+            };
+            let limit = match args.get("limit") {
+                None => 30,
+                Some(v) => v.as_u64().filter(|n| (1..=100).contains(n)).context("`limit` must be 1 to 100")? as usize,
+            };
+            footnote_code::lookup(&app::code_db(&root)?, name, limit)
+        }
         other => bail!("unknown tool: {other}"),
     }
 }
@@ -1005,6 +1018,23 @@ fn tool_definitions() -> Value {
             }
         }
     ]);
+    #[cfg(feature = "code")]
+    if let Some(list) = tools.as_array_mut() {
+        list.push(json!({
+            "name": "footnote_code",
+            "description": "Footnote Code: a symbol's definition (signature, file, lines), who calls it (with call-site lines) and what it calls, from the compiler's own index of the project (rust-analyzer for Rust). `stale` lists answer files changed since indexing; re-run `footnote code-index <root>` then. Read-only.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "Symbol name, e.g. a function or type: `lookup`, `Store`"},
+                    "root": {"type": "string", "description": "Project folder; default: the server's working folder"},
+                    "limit": {"type": "integer", "minimum": 1, "maximum": 100, "default": 30}
+                },
+                "required": ["name"],
+                "additionalProperties": false
+            }
+        }));
+    }
     // A build without Footnote Memory does not offer its write tools.
     #[cfg(not(feature = "memory"))]
     if let Some(list) = tools.as_array_mut() {
