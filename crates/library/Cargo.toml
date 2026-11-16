@@ -25,5 +25,6 @@ ureq.workspace = true
 url.workspace = true
 regex.workspace = true
 dom_smoothie.workspace = true
+dom_query = "0.29"
 htmd.workspace = true
 texting_robots.workspace = true

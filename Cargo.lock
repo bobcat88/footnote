@@ -905,6 +905,7 @@ name = "footnote-library"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
+ "dom_query",
  "dom_smoothie",
  "footnote-core",
  "footnote-search",

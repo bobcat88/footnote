@@ -191,13 +191,34 @@ fn sitemap(agent: &ureq::Agent, root: &Url) -> Vec<Url> {
     out.into_iter().map(normalize).collect()
 }
 
-/// Main content as Markdown: Readability first, the whole body when it finds nothing.
+/// Main content as Markdown: Readability first; the page's main landmark (`main`, `role=main`) when Readability finds
+/// nothing or picks text outside it (it prefers a long footer to a short page: Python's index and removed-module pages);
+/// the whole body when there is no landmark. Not `article`: on Tailwind's pages the first one is a demo card.
 fn markdown(html: &str, url: &Url) -> String {
-    let main = dom_smoothie::Readability::new(html, Some(url.as_str()), None)
+    // Inside = at least half of Readability's words occur in the landmark; exact text differs (permalinks, spacing).
+    let words = |s: &str| -> std::collections::HashSet<String> {
+        s.split(|c: char| !c.is_alphanumeric())
+            .filter(|w| w.chars().count() >= 3)
+            .map(str::to_lowercase)
+            .collect()
+    };
+    let doc = dom_query::Document::from(html);
+    let land = doc.select("main, [role=main]").first();
+    let landmark = land
+        .exists()
+        .then(|| (land.html().to_string(), words(&land.text())));
+    let main = dom_smoothie::Readability::with_document(doc, Some(url.as_str()), None)
         .ok()
         .and_then(|mut r| r.parse().ok())
+        .filter(|a| a.content.len() > 200)
+        .filter(|a| {
+            let mine = words(&a.text_content);
+            landmark.as_ref().is_none_or(|(_, w)| {
+                2 * mine.iter().filter(|x| w.contains(*x)).count() >= mine.len()
+            })
+        })
         .map(|a| a.content.to_string())
-        .filter(|c| c.len() > 200)
+        .or_else(|| landmark.map(|(h, _)| h))
         .unwrap_or_else(|| html.to_string());
     htmd::HtmlToMarkdown::builder()
         .skip_tags(vec!["script", "style", "nav", "footer", "noscript", "svg"])
@@ -404,6 +425,26 @@ mod tests {
         assert_eq!(
             p("https://docs.python.org/3/library/os.html"),
             "https://docs.python.org/3/library/os.html"
+        );
+    }
+
+    #[test]
+    fn a_short_page_beats_a_long_footer() {
+        let footer = "<p>Copyright 2001, Python Software Foundation, licensed under the PSF License, version 2, with examples, \
+                      recipes, and other code under the Zero Clause BSD License, see History and License.</p>"
+            .repeat(5);
+        let html = format!(
+            "<html><body><div class=\"document\"><div class=\"body\" role=\"main\"><h1>nis</h1><p>This module is no \
+             longer part of the standard library. It was removed in Python 3.13.</p></div></div>\
+             <div class=\"footer\">{footer}</div></body></html>"
+        );
+        let md = markdown(
+            &html,
+            &Url::parse("https://docs.python.org/3/library/nis.html").unwrap(),
+        );
+        assert!(
+            md.contains("removed in Python 3.13") && !md.contains("Copyright"),
+            "{md}"
         );
     }
 
