@@ -131,6 +131,35 @@ Sequential, on the idle machine, nothing else running:
    search, paired bootstrap against step 1's Grounded hybrid rankings.
 End-to-end time reported, not judged: Footnote crawl plus index build against Grounded's scrape (which embeds as it goes).
 
+**Final run, deviations (written 16 November, 08:45, after the run, before any valid end-to-end score):**
+1. **Scoring bug (harness):** `DOCS_CRAWL_WORK` was given as a relative path, so the file-to-URL manifest had relative keys
+   while Footnote returns absolute paths; no hit mapped to a URL and every end-to-end score came out 0.000. Fix: resolve
+   `DOCS_CRAWL_WORK` to an absolute path. The databases, binary and rankings are unchanged (`fn-hybrid-pass1/2.json` kept);
+   only the step that maps and scores is re-run. The invalid outputs are kept as `endtoend-invalid-relative-paths.json`.
+2. **Flask crawl blocked (environment):** Grounded Docs scraped Flask first (76 pages in 51 s); minutes later Cloudflare
+   served our IP a challenge (HTTP 429 on every page and on robots.txt, still so at 08:45 with curl). Footnote's crawl
+   backed off as designed and stopped after 501 slow-downs: 38 Flask pages in 1,006 s, coverage of judged Flask URLs 0.64
+   (Grounded 1.00). The 38 pages are real (no challenge page saved). The pre-registered primary stays this as-run crawl;
+   a Flask re-crawl once the block lifts is reported as a diagnostic only, and the sequential order (Grounded first) is a
+   flaw of this design, noted for future finals (alternate the order or wait between systems).
+
+**Final result (sealed docs-heldout3, 40 questions, seed 20261117; `bench/work/heldout3/`):**
+
+| Questions | Grounded Docs (own scrape, hybrid) | Footnote, own crawl (primary) | Footnote on Grounded's pages, `--per-source 1` (diagnostic) |
+|---|---|---|---|
+| Hono (20) | 0.879 | 0.893 (+0.014 [-0.044, +0.075]) | 0.915 (+0.036 [-0.037, +0.117]) |
+| Flask (20) | 0.960 | 0.540 (-0.420 [-0.626, -0.220]) | 0.887 (-0.073 [-0.151, -0.005]) |
+| All (40) | 0.920 | **0.716 (-0.203 [-0.334, -0.082])** | 0.901 (-0.019 [-0.074, +0.039]) |
+
+**Verdict by the pre-registered rule: worse** (lower bound -0.334 < -0.05), so the crawler does not ship as default from this
+run. Reading: on Hono, where both crawls were complete, Footnote is equivalent or better (and faster end to end: crawl 2 s +
+index 17 s against Grounded's scrape 38 s). The loss is Flask: mostly the blocked crawl (38 of 76 pages, judged-URL coverage
+0.64), and even on Grounded's own Flask pages Footnote trails by 0.073 (Sphinx-built docs, like Python; not investigated on
+this sealed set, which is now spent). On Grounded's pages over both libraries: -0.019 [-0.074, +0.039], which the -0.05 rule
+also calls worse by its lower bound. Lessons: a final must not let one system's crawl spoil the host for the other (alternate
+order, cool-down, or crawl both from cached pages for the quality part), and Sphinx sites need a dev-set look before the next
+final.
+
 ## Rules
 
 - **Keep a search change** when mean nDCG@5 rises on the pooled development questions (99) and neither development set drops

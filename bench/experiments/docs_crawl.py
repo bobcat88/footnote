@@ -22,7 +22,7 @@ ARGS, sys.argv = sys.argv, sys.argv[:1]  # docs_vs_grounded reads its run folder
 sys.path.insert(0, str(Path(__file__).parent))
 import docs_vs_grounded as g  # noqa: E402
 
-WORK = Path(g.os.environ.get("DOCS_CRAWL_WORK", g.REPO / "bench/work/crawl"))
+WORK = Path(g.os.environ.get("DOCS_CRAWL_WORK", g.REPO / "bench/work/crawl")).resolve()  # manifest keys must match absolute hit paths
 GD = g.RUN
 
 
