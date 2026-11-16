@@ -75,3 +75,28 @@ Johan confirmed the machine stays idle all night (no games), so item 5's timing 
 ## Not tonight (needs Johan)
 Memory review (21 Nov), more Code languages (third-party indexers need a security review first), Alias out of the free repo
 (needs the engine as a library), GitHub billing.
+
+## Morning report (17 November 2026)
+
+Every item: its own PR, merged; checks run locally (fmt, clippy on five feature sets, full workspace tests) because CI has no
+credits; the installed binary replaced after items 2, 4 and 6 (old copies renamed `footnote.exe.replaced-<time>`).
+
+| # | Item | PR | Result |
+|---|---|---|---|
+| 1 | Code in the free build | [#53](https://github.com/bobcat88/footnote/pull/53) | Done. Default build has Code; a missing rust-analyzer says `rustup component add rust-analyzer` (tested with an empty PATH). |
+| 2 | `footnote code-map` | [#54](https://github.com/bobcat88/footnote/pull/54) | Done. Blocks, links in references, outside packages with kinds; on this repo 8 blocks, `src → crates/core` 67 refs; serde_json, anyhow, rusqlite, tantivy on top. Old graphs need `code-index` again. |
+| 3 | Launcher, Overview | [#55](https://github.com/bobcat88/footnote/pull/55) | Done. Tauri 2 + React, real data in the real window, 0 console errors; QLoop G1–G8 pass on screenshots at 1920×1080. Tailwind dropped (plain CSS from the locked mock). |
+| 4 | `footnote usage` | [#56](https://github.com/bobcat88/footnote/pull/56) | Done. Claude Code and Codex files, counts only; 965 MB read in 0.86 s cold, 4 ms warm; matched an independent count. 7 days = $625.68 at API list prices. |
+| 5 | Memory encryption check | [#57](https://github.com/bobcat88/footnote/pull/57) | **Blocked.** SQLCipher's vendored OpenSSL needs a native Windows Perl; none here. No timing taken. Two options written down (Strawberry Perl, or SQLite3 Multiple Ciphers without OpenSSL). |
+| 9 | Third-party notices | [#58](https://github.com/bobcat88/footnote/pull/58) | Done. 622 crates + 7 web packages, all commercial-use licences; `scripts/third_party.py --check` in CI. |
+| 6 | Launcher, Code screens | [#59](https://github.com/bobcat88/footnote/pull/59) | Done. Layered architecture map and symbol ego view, checked on this repo; callees no longer list bare `crate`. |
+| 7 | Launcher, workspace screens | [#60](https://github.com/bobcat88/footnote/pull/60) | Done, plus a Usage screen on item 4. Projects, Models (install command shown), Activity, Usage. |
+| 8 | Launcher, mini mode | [#61](https://github.com/bobcat88/footnote/pull/61) | Done. Lens window, swap both ways checked in the real app; still under reduced motion. |
+| 10 | Docs catch-up | this PR | README (usage, code map, desktop window), BACKLOG, this report. CHANGELOG left to `scripts/changelog.py`: git-cliff is not installed here. |
+
+**Needs you:** item 5's choice (install Strawberry Perl, or let me try SQLite3 Multiple Ciphers first, my pick); a support page
+URL for the quiet support link; 17 old `footnote.exe.replaced-*` copies in `%LOCALAPPDATA%\Programsootnote` you may want
+deleted (one at a time, your call); restart T3 Code so the agents reconnect to the new engine.
+
+**Not checked:** the independent QLoop critic (needs a subagent), Linux and macOS builds of the launcher, light theme (dark only
+by design), screen-reader passes beyond axe.

@@ -51,6 +51,11 @@ Every item belongs to the free or the commercial edition ([EDITIONS.md](EDITIONS
 
 Plan and decisions: [P1-PLAN.md](P1-PLAN.md) (engine commands first, then design, then the Tauri launcher).
 
+- **Launcher (M3), first build 17 Nov** ([apps/launcher](../../apps/launcher/README.md)): Overview, Code (architecture map and
+  symbol view), Projects, Models, Activity, Usage, the Enterprise page, and mini mode; read-only, through an allowlist of engine
+  commands. Not built yet: tray icon and floating bubble, search, installing a model from the window, the support link (no page
+  yet), installer (M4), Linux and macOS builds, the hairball "cool view", the independent QLoop critic.
+
 8. **Separate products, features on or off:** Library, Memory, Code, Alias enabled independently; nothing loaded that is not used.
 9. ~~**Model manager**~~ done: `models install / use / remove / list`, and `models recommend` from the detected hardware and
    the corpus language (the pair by default, Jina nano for French or mixed corpora; GPU reported, not used for search). Alias's

@@ -202,6 +202,13 @@ footnote code-map               # architecture map: folders as blocks, links bet
 
 Agents get the same answer through `footnote_code`; files changed since indexing come back in `stale`. Design: [docs/CODE-GRAPH-DESIGN.md](docs/CODE-GRAPH-DESIGN.md).
 
+### Desktop window
+
+`apps/launcher` is Footnote One's window (Tauri 2): an overview of the three products, your projects and connected agents, the
+code map and symbol view, models, memory activity and token usage, plus a small always-on-top mini mode. It only reads: every
+screen runs one of a short list of read-only `footnote` commands. Build steps: [apps/launcher/README.md](apps/launcher/README.md).
+Windows only so far; no installer yet.
+
 ## Security model
 
 Footnote is built on the assumption that retrieved text may contain instructions aimed at your agent.
