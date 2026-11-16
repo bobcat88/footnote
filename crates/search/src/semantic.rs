@@ -640,13 +640,17 @@ pub fn search(
     let eligible = crate::records::eligible(c, f)?;
     // 1. lexical shortlist: chunks (Tantivy, FTS5 fallback) and structured records
     let expr = crate::store::match_expr(q);
-    let chunk_lex = if structured {
+    let allowed = |id: &i64| f.only.as_ref().is_none_or(|o| o.contains(id));
+    let chunk_lex: Vec<(i64, f64)> = if structured {
         vec![]
     } else {
         crate::metrics::timed!(
             "search.keywords",
             crate::store::lexical_chunks(c, q, SHORTLIST)
         )?
+        .into_iter()
+        .filter(|(id, _)| allowed(id))
+        .collect()
     };
     let record_lex = crate::records::lexical_hits(c, &expr, POOL, f)?;
     let mut lex: HashMap<(u8, i64), f64> = HashMap::new();
@@ -674,7 +678,7 @@ pub fn search(
     let scan = stored as usize <= scan_limit();
     let keep = |kind: &str, id: i64| match kind {
         "record" => eligible.contains(&id),
-        _ => !structured,
+        _ => !structured && allowed(&id),
     };
     let dense = crate::metrics::timed!(
         "search.vectors",

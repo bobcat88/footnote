@@ -291,7 +291,11 @@ pub fn search(
         ))?;
         let mut results = Vec::new();
         let mut cap = PerSource::new(filters.per_source);
-        for id in ids {
+        // shortcut: the pre-filter applies to the keyword shortlist (30 x limit, at least 100), enough for memory databases.
+        for id in ids
+            .into_iter()
+            .filter(|id| filters.only.as_ref().is_none_or(|o| o.contains(id)))
+        {
             if results.len() >= text_limit {
                 break;
             }
@@ -309,7 +313,9 @@ pub fn search(
         "{HIT} JOIN search_fts f ON f.rowid=c.id WHERE search_fts MATCH ?1 AND s.status='indexed' AND c.id=(SELECT min(c2.id) FROM chunks c2 JOIN sources s2 ON s2.id=c2.source_id WHERE s2.sha256=s.sha256 AND s2.status='indexed' AND c2.heading=c.heading AND c2.page IS c.page AND c2.line=c.line AND c2.text=c.text) ORDER BY bm25(search_fts),c.id LIMIT ?2"
     );
     let mut s = c.prepare(&sql)?;
-    let fetch = if filters.per_source.is_some() {
+    let fetch = if filters.only.is_some() {
+        10_000
+    } else if filters.per_source.is_some() {
         text_limit * 10
     } else {
         text_limit
@@ -319,6 +325,12 @@ pub fn search(
         .query_map(params![expr, fetch as i64], |r| hit(r, false))?
         .collect::<rusqlite::Result<Vec<Value>>>()?
         .into_iter()
+        .filter(|v| {
+            filters
+                .only
+                .as_ref()
+                .is_none_or(|o| v["id"].as_i64().is_some_and(|id| o.contains(&id)))
+        })
         .filter(|v| cap.allow(v["path"].as_str().unwrap_or("")))
         .take(text_limit)
         .collect();

@@ -327,3 +327,97 @@ fn rescope_moves_a_project_and_keeps_duplicate_detection() {
         .contains("different")
     );
 }
+
+#[test]
+fn tags_narrow_recall_before_ranking_and_untagged_memories_stay_candidates() {
+    let t = tempfile::tempdir().unwrap();
+    let db = t.path().join("memory.db");
+    let tagged = |text: &str, tags: Value| {
+        let mut m = mem(text, "fix", "footnote", "2026-11-16");
+        m["tags"] = tags;
+        m
+    };
+    let stored = run(
+        &db,
+        &["remember"],
+        Some(json!([
+            tagged(
+                "The daemon socket on Windows needs a named pipe",
+                json!(["windows", "daemon"])
+            ),
+            tagged(
+                "The daemon socket on Linux is a Unix domain socket",
+                json!(["linux", "daemon"])
+            ),
+            mem(
+                "The daemon socket path lives in the state folder",
+                "fact",
+                "footnote",
+                "2026-11-16"
+            ),
+            mem(
+                "The daemon socket of the other project is a TCP port",
+                "fact",
+                "other",
+                "2026-11-16"
+            ),
+        ])),
+    );
+    assert_eq!(stored["stored"][0]["tags"], json!(["daemon", "windows"]));
+    let linux_id = stored["stored"][1]["id"].as_i64().unwrap().to_string();
+
+    let recall = |extra: &[&str]| {
+        let mut args = vec![
+            "memory-recall",
+            "daemon socket",
+            "--project",
+            "footnote",
+            "--limit",
+            "5",
+        ];
+        args.extend_from_slice(extra);
+        texts(&run(&db, &args, None))
+    };
+    // Other projects never compete; the tag keeps windows and the untagged memory, drops linux.
+    let all = recall(&[]);
+    assert_eq!(all.len(), 3, "{all:?}");
+    let windows = recall(&["--tag", "windows"]);
+    assert_eq!(windows.len(), 2, "{windows:?}");
+    assert!(windows.iter().all(|t| !t.contains("Linux")), "{windows:?}");
+
+    // Tags change later: the Linux fix also turns out to apply on Windows.
+    let retagged = run(
+        &db,
+        &[
+            "memory-tag",
+            &linux_id,
+            "--add",
+            "windows",
+            "--remove",
+            "linux",
+        ],
+        None,
+    );
+    assert_eq!(retagged["tags"], json!(["daemon", "windows"]));
+    assert_eq!(recall(&["--tag", "windows"]).len(), 3);
+    let listed = run(&db, &["memory-list"], None);
+    assert!(
+        listed["memories"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|m| m["tags"] == json!(["daemon", "windows"]))
+    );
+
+    // Validation: bad shape and more than ten tags are refused; nothing is stored.
+    assert!(
+        fails(
+            &db,
+            &["remember"],
+            json!([tagged("x", json!(["Not Valid"]))])
+        )
+        .contains("lowercase")
+    );
+    let eleven: Vec<String> = (0..11).map(|i| format!("t{i}")).collect();
+    assert!(fails(&db, &["remember"], json!([tagged("y", json!(eleven))])).contains("at most 10"));
+}

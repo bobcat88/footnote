@@ -225,6 +225,8 @@ pub struct Filters {
     pub status: Option<String>,
     /// At most this many chunks of one source file in the results (None: no limit)
     pub per_source: Option<usize>,
+    /// Only these chunk ids may be ranked (None: every chunk); a pre-filter, applied before ranking, not after.
+    pub only: Option<std::collections::HashSet<i64>>,
 }
 pub fn eligible(c: &Connection, f: &Filters) -> Result<std::collections::HashSet<i64>> {
     let version = f

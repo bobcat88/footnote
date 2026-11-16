@@ -16,6 +16,7 @@ const SAVE: &str = r#"Footnote memory: before you stop, save what is worth remem
 - scope: "global" for what applies to every project (most preferences), otherwise "{project}". observed_at: "{today}".
 - Name the subject (person, project or component) explicitly. Include only the stack, platform/version, triggering condition or exception needed to interpret the fact, and only when supported by the conversation. "Tested on Linux" does not mean "Linux only"; leave unknown details out. Prefer a short self-contained fact over copied context or keyword lists.
 - Keep exceptions explicit ("usually X; for Y prefers Z"). To correct an outdated memory, pass its id in "supersedes".
+- tags: 1 to 5 short lowercase words for the stack, platform, component or state ("rust", "windows", "daemon", "bugfix", "resolved"), only when the conversation supports them; footnote_tag adds or removes tags on an existing memory.
 - Skip what is already remembered, what is readable in the code or git history, and temporary task state.
 Then tell the user in one short line what you saved (count and ids), or that nothing was worth keeping. Then stop."#;
 const VISIBLE: &str = "Footnote memory: when one of these memories, or one recalled later in this session, shapes your answer, say so in a few words (for example \"from memory: ...\"). Do not mention memories that played no part.";
@@ -343,6 +344,7 @@ fn recall(s: &Settings, db: &Path, project: &str, query: &str) -> Result<Value> 
         query,
         Some(project),
         s.recall_limit,
+        &[],
         &[],
     )
 }

@@ -483,6 +483,16 @@ fn dispatch(db: &Path, name: &str, args: &Value) -> Result<Value> {
         }
         #[cfg(feature = "memory")]
         "footnote_forget" => crate::memory::forget(&mut memory_db(db)?, int_arg(args, "id")?),
+        #[cfg(feature = "memory")]
+        "footnote_tag" => {
+            let list = |k| -> Result<Vec<String>> { tags_arg(&json!({"tags": args[k]})) };
+            crate::memory::retag(
+                &mut memory_db(db)?,
+                int_arg(args, "id")?,
+                &list("add")?,
+                &list("remove")?,
+            )
+        }
         other => bail!("unknown tool: {other}"),
     }
 }
@@ -543,6 +553,15 @@ fn recall(db: &Path, args: &Value) -> Result<Value> {
     let limit = limit_arg(args, 8)?;
     let filters = filters_arg(args)?;
     let c = read_db(db)?;
+    #[allow(unused_mut)]
+    let mut filters = filters;
+    #[cfg(feature = "memory")]
+    if !args["tags"].is_null() {
+        if !crate::memory::is_memory_db(&c)? {
+            bail!("`tags` filters agent memories; this database is a document corpus");
+        }
+        filters.only = Some(crate::memory::candidates(&c, None, &tags_arg(args)?)?);
+    }
     let given = if args["model"].is_null() {
         vec![]
     } else {
@@ -565,7 +584,14 @@ fn memory_recall(db: &Path, args: &Value) -> Result<Value> {
     } else {
         model_args(args)?
     };
-    crate::memory::recall(&read_db(db)?, &query, project.as_deref(), limit, &models)
+    crate::memory::recall(
+        &read_db(db)?,
+        &query,
+        project.as_deref(),
+        limit,
+        &models,
+        &tags_arg(args)?,
+    )
 }
 
 fn chunk_by_id(c: &Connection, id: i64) -> Result<Value> {
@@ -738,6 +764,23 @@ fn export(db: &Path, args: &Value) -> Result<Value> {
     }))
 }
 
+#[cfg(feature = "memory")]
+/// `tags`: an optional array of at most ten strings (each one validated by the memory store).
+fn tags_arg(args: &Value) -> Result<Vec<String>> {
+    match &args["tags"] {
+        Value::Null => Ok(vec![]),
+        Value::Array(a) if a.len() <= 10 => a
+            .iter()
+            .map(|t| {
+                t.as_str()
+                    .map(str::to_string)
+                    .context("`tags` must be strings")
+            })
+            .collect(),
+        _ => bail!("`tags` must be an array of at most 10 strings"),
+    }
+}
+
 fn int_arg(args: &Value, key: &str) -> Result<i64> {
     match args.get(key) {
         Some(Value::Number(n)) => n
@@ -816,6 +859,7 @@ fn filters_arg(args: &Value) -> Result<crate::records::Filters> {
                 _ => bail!("`per_source` must be an integer from 1 to 20"),
             },
         },
+        only: None,
     })
 }
 
@@ -835,6 +879,7 @@ fn tool_definitions() -> Value {
                     "project": {"type": "string", "maxLength": 200},
                     "tested_version": {"type": "string", "maxLength": 200, "description": "component=exact-version"},
                     "status": {"type": "string", "enum": ["proposal", "validated", "superseded"]},
+                    "tags": {"type": "array", "items": {"type": "string", "maxLength": 32}, "maxItems": 10, "description": "Agent memory databases only: rank only memories sharing one of these tags, plus untagged ones."},
                     "per_source": {"type": "integer", "minimum": 1, "maximum": 20, "description": "At most this many chunks of one source file in the results; use 1 to get the best chunk of each file (recommended for documentation: +0.03 nDCG@5 on 99 questions)."},
                     "model": {"oneOf": [{"type": "string", "maxLength": 200}, {"type": "array", "items": {"type": "string", "maxLength": 200}, "minItems": 1, "maxItems": 3}], "description": "Local embedding model directory, or up to three for an ensemble; default: the corpus's installed models (mirrors CLI --model)."}
                 },
@@ -916,7 +961,8 @@ fn tool_definitions() -> Value {
                             "scope": {"type": "string", "maxLength": 200},
                             "observed_at": {"type": "string", "description": "YYYY-MM-DD"},
                             "session": {"type": "string", "maxLength": 200},
-                            "supersedes": {"type": "integer"}
+                            "supersedes": {"type": "integer"},
+                            "tags": {"type": "array", "items": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,31}$"}, "maxItems": 10, "description": "1 to 5 short lowercase tags naming the stack, platform, component or state (rust, windows, daemon, bugfix, resolved); they narrow recall later."}
                         },
                         "required": ["text", "kind", "scope", "observed_at"],
                         "additionalProperties": false
@@ -938,6 +984,20 @@ fn tool_definitions() -> Value {
             }
         },
         {
+            "name": "footnote_tag",
+            "description": "Add or remove tags on an agent memory by id (at most 10 per memory; short lowercase words such as rust, windows, daemon, bugfix, resolved). Use it when a memory turns out to apply more widely, for example a fix later confirmed on Linux gains linux.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "id": {"type": "integer"},
+                    "add": {"type": "array", "items": {"type": "string", "maxLength": 32}, "maxItems": 10},
+                    "remove": {"type": "array", "items": {"type": "string", "maxLength": 32}, "maxItems": 10}
+                },
+                "required": ["id"],
+                "additionalProperties": false
+            }
+        },
+        {
             "name": "footnote_export",
             "description": "Bounded read-only JSON dump of record metadata only (id, status, revision, fingerprint, payload sha256). No payload text and no file writes.",
             "inputSchema": {
@@ -953,7 +1013,7 @@ fn tool_definitions() -> Value {
         list.retain(|t| {
             !matches!(
                 t["name"].as_str(),
-                Some("footnote_remember" | "footnote_forget")
+                Some("footnote_remember" | "footnote_forget" | "footnote_tag")
             )
         });
     }

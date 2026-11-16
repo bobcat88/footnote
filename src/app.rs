@@ -107,6 +107,15 @@ enum Action {
         id: i64,
     },
     #[cfg(feature = "memory")]
+    /// Add or remove tags on an agent memory (at most 10; lowercase words such as rust, windows, bugfix, resolved).
+    MemoryTag {
+        id: i64,
+        #[arg(long)]
+        add: Vec<String>,
+        #[arg(long)]
+        remove: Vec<String>,
+    },
+    #[cfg(feature = "memory")]
     /// Rename a project scope of the agent memories (for example after a project rename).
     MemoryRescope {
         #[arg(long)]
@@ -135,6 +144,9 @@ enum Action {
         /// Ask the resident daemon (models already loaded) instead of searching here; fails when none runs.
         #[arg(long)]
         resident: bool,
+        /// Only memories sharing one of these tags, plus untagged ones (repeatable); narrows before ranking.
+        #[arg(long)]
+        tag: Vec<String>,
     },
     /// Serve the knowledge base to an agent; --mcp selects the MCP stdio transport.
     Serve {
@@ -547,6 +559,7 @@ fn execute(cli: Cli) -> Result<Value> {
                 tested_version,
                 status,
                 per_source: per_source.map(usize::from),
+                only: None,
             };
             let models = search_models(&c, mode.as_deref(), model)?;
             if models.is_empty() {
@@ -580,6 +593,8 @@ fn execute(cli: Cli) -> Result<Value> {
         #[cfg(feature = "memory")]
         Action::Forget { id } => crate::memory::forget(&mut c, id),
         #[cfg(feature = "memory")]
+        Action::MemoryTag { id, add, remove } => crate::memory::retag(&mut c, id, &add, &remove),
+        #[cfg(feature = "memory")]
         Action::MemoryRescope { from, to } => crate::memory::rescope(&mut c, &from, &to),
         #[cfg(feature = "memory")]
         Action::MemoryList {
@@ -599,6 +614,7 @@ fn execute(cli: Cli) -> Result<Value> {
             limit,
             model,
             resident,
+            tag,
         } => {
             if resident {
                 let models: Vec<String> = model
@@ -608,10 +624,10 @@ fn execute(cli: Cli) -> Result<Value> {
                 crate::daemon::call(
                     db,
                     "footnote_memory_recall",
-                    &json!({"query": query, "project": project, "limit": limit, "model": if models.is_empty() { Value::Null } else { json!(models) }}),
+                    &json!({"query": query, "project": project, "limit": limit, "tags": tag, "model": if models.is_empty() { Value::Null } else { json!(models) }}),
                 )
             } else {
-                crate::memory::recall(&c, &query, project.as_deref(), limit.into(), &model)
+                crate::memory::recall(&c, &query, project.as_deref(), limit.into(), &model, &tag)
             }
         }
         // Dispatched above, before the database is opened; MCP serves its
@@ -651,7 +667,10 @@ fn writes(a: &Action) -> bool {
         #[cfg(feature = "library")]
         Action::Index { .. } => true,
         #[cfg(feature = "memory")]
-        Action::Remember { .. } | Action::Forget { .. } | Action::MemoryRescope { .. } => true,
+        Action::Remember { .. }
+        | Action::Forget { .. }
+        | Action::MemoryTag { .. }
+        | Action::MemoryRescope { .. } => true,
         Action::Propose { .. } | Action::Validate { .. } | Action::RebuildEmbeddings { .. } => true,
         _ => false,
     }
@@ -678,6 +697,8 @@ fn action_name(a: &Action) -> &'static str {
         Action::Remember { .. } => "remember",
         #[cfg(feature = "memory")]
         Action::Forget { .. } => "forget",
+        #[cfg(feature = "memory")]
+        Action::MemoryTag { .. } => "memory-tag",
         #[cfg(feature = "memory")]
         Action::MemoryRescope { .. } => "memory-rescope",
         #[cfg(feature = "memory")]

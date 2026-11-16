@@ -19,6 +19,121 @@ use std::path::PathBuf;
 const KINDS: [&str; 4] = ["preference", "fact", "fix", "session"];
 const MAX_TEXT: usize = 2000; // one chunk
 const MAX_BATCH: usize = 50;
+pub const MAX_TAGS: usize = 10;
+/// Created on first write, not by a schema version: a version bump would make every read-only open of an older database fail
+/// until something writes to it (the hook's recall among them). Reads treat a missing table as "no tags".
+const TAGS: &str = "CREATE TABLE IF NOT EXISTS memory_tags(source_id INTEGER NOT NULL REFERENCES sources(id),tag TEXT NOT NULL,PRIMARY KEY(source_id,tag)) WITHOUT ROWID";
+
+/// A tag is one short lowercase word or hyphenated phrase: `rust`, `windows`, `bugfix`, `daemon`, `resolved`.
+fn tag(t: &str) -> Result<&str> {
+    let ok = (1..=32).contains(&t.len())
+        && t.starts_with(|c: char| c.is_ascii_lowercase() || c.is_ascii_digit())
+        && t.chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-');
+    if !ok {
+        bail!("tag {t:?}: 1 to 32 characters, lowercase letters, digits and hyphens");
+    }
+    Ok(t)
+}
+
+fn tag_list(v: &Value) -> Result<Vec<&str>> {
+    let Some(a) = v.as_array() else {
+        return if v.is_null() {
+            Ok(vec![])
+        } else {
+            bail!("`tags` must be an array of strings")
+        };
+    };
+    let mut out: Vec<&str> = a
+        .iter()
+        .map(|t| {
+            t.as_str()
+                .context("`tags` must be an array of strings")
+                .and_then(tag)
+        })
+        .collect::<Result<_>>()?;
+    out.sort_unstable();
+    out.dedup();
+    if out.len() > MAX_TAGS {
+        bail!("at most {MAX_TAGS} tags per memory");
+    }
+    Ok(out)
+}
+
+fn has_tags(c: &Connection) -> Result<bool> {
+    Ok(c.query_row(
+        "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='memory_tags')",
+        [],
+        |r| r.get(0),
+    )?)
+}
+
+/// Tags of the memory behind a chunk id (empty when the database has none).
+fn tags_of(c: &Connection, chunk: i64) -> Result<Vec<String>> {
+    if !has_tags(c)? {
+        return Ok(vec![]);
+    }
+    let mut s = c.prepare_cached(
+        "SELECT t.tag FROM memory_tags t JOIN chunks c ON c.source_id=t.source_id WHERE c.id=?1 ORDER BY t.tag",
+    )?;
+    Ok(s.query_map([chunk], |r| r.get(0))?
+        .collect::<rusqlite::Result<_>>()?)
+}
+
+/// Chunk ids recall may rank, chosen before ranking: live memories of `scope` (global ones plus that project; None: every
+/// scope) and, when `tags` are given, memories sharing one of them or carrying no tag at all (an untagged memory is unknown,
+/// not excluded, so incomplete tagging never hides a relevant memory).
+pub fn candidates(
+    c: &Connection,
+    scope: Option<&str>,
+    tags: &[String],
+) -> Result<std::collections::HashSet<i64>> {
+    let by_tag = if !tags.is_empty() && has_tags(c)? {
+        " AND (NOT EXISTS(SELECT 1 FROM memory_tags t WHERE t.source_id=m.source_id) OR EXISTS(SELECT 1 FROM memory_tags t WHERE t.source_id=m.source_id AND t.tag IN (SELECT value FROM json_each(?2))))"
+    } else {
+        " AND ?2 IS NOT NULL"
+    };
+    let mut s = c.prepare(&format!(
+        "SELECT c.id FROM memories m JOIN sources s ON s.id=m.source_id JOIN chunks c ON c.source_id=s.id WHERE s.status='indexed' AND (?1 IS NULL OR m.scope='global' OR m.scope=?1){by_tag}"
+    ))?;
+    Ok(
+        s.query_map(params![scope, serde_json::to_string(tags)?], |r| r.get(0))?
+            .collect::<rusqlite::Result<_>>()?,
+    )
+}
+
+/// Add and remove tags on one memory (ids are those recall and `memory-list` show). Tags can change as a memory turns out to
+/// apply more widely (a fix later confirmed on Linux gains `linux`).
+pub fn retag(c: &mut Connection, id: i64, add: &[String], remove: &[String]) -> Result<Value> {
+    for t in add.iter().chain(remove) {
+        tag(t)?;
+    }
+    let tx = c.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+    let source = memory_source(&tx, id)?;
+    tx.execute_batch(TAGS)?;
+    for t in remove {
+        tx.execute(
+            "DELETE FROM memory_tags WHERE source_id=?1 AND tag=?2",
+            params![source, t],
+        )?;
+    }
+    for t in add {
+        tx.execute(
+            "INSERT OR IGNORE INTO memory_tags VALUES(?1,?2)",
+            params![source, t],
+        )?;
+    }
+    let n: i64 = tx.query_row(
+        "SELECT count(*) FROM memory_tags WHERE source_id=?1",
+        [source],
+        |r| r.get(0),
+    )?;
+    if n > MAX_TAGS as i64 {
+        bail!("at most {MAX_TAGS} tags per memory (this change would leave {n})");
+    }
+    tx.commit()?;
+    Ok(json!({"id": id, "tags": tags_of(c, id)?}))
+}
 
 pub fn has_files(c: &Connection) -> Result<bool> {
     Ok(c.query_row(
@@ -91,6 +206,7 @@ pub fn remember(c: &mut Connection, items: &Value, models: &[PathBuf]) -> Result
         );
     }
     let tx = c.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+    tx.execute_batch(TAGS)?;
     let (mut stored, mut duplicates) = (Vec::new(), 0);
     for m in items {
         let text = field(m, "text", MAX_TEXT)?
@@ -105,6 +221,7 @@ pub fn remember(c: &mut Connection, items: &Value, models: &[PathBuf]) -> Result
         let observed = field(m, "observed_at", 10)?.context("`observed_at` is required")?;
         date(observed)?;
         let session = field(m, "session", 200)?;
+        let tags = tag_list(&m["tags"])?;
         let supersedes = match &m["supersedes"] {
             Value::Null => None,
             v => Some(memory_source(
@@ -137,6 +254,10 @@ pub fn remember(c: &mut Connection, items: &Value, models: &[PathBuf]) -> Result
             "INSERT OR REPLACE INTO memories VALUES(?1,?2,?3,?4,?5,?6)",
             params![id, kind, scope, observed, session, supersedes],
         )?;
+        tx.execute("DELETE FROM memory_tags WHERE source_id=?1", [id])?;
+        for t in &tags {
+            tx.execute("INSERT INTO memory_tags VALUES(?1,?2)", params![id, t])?;
+        }
         // The heading carries kind, scope and date: every hit shows them, and the model can tell an old fact from a new one.
         footnote_search::store::add_chunk(
             &tx,
@@ -153,7 +274,7 @@ pub fn remember(c: &mut Connection, items: &Value, models: &[PathBuf]) -> Result
         let chunk: i64 = tx.query_row("SELECT id FROM chunks WHERE source_id=?1", [id], |r| {
             r.get(0)
         })?;
-        stored.push(json!({"id": chunk, "kind": kind, "scope": scope}));
+        stored.push(json!({"id": chunk, "kind": kind, "scope": scope, "tags": tags}));
     }
     tx.commit()?;
     let mut report = json!({"stored": stored, "duplicates": duplicates});
@@ -208,16 +329,24 @@ pub fn pack(c: &Connection, project: Option<&str>, max_chars: usize) -> Result<V
     )
 }
 
-/// Memories relevant to a prompt: global ones plus the current project's, best first.
+/// Memories relevant to a prompt: global ones plus the current project's (and, with `tags`, those sharing a tag or untagged),
+/// best first. The scope and tags narrow the candidates before ranking, so other projects never push a memory out of the top.
 pub fn recall(
     c: &Connection,
     query: &str,
     project: Option<&str>,
     limit: usize,
     models: &[PathBuf],
+    tags: &[String],
 ) -> Result<Value> {
-    let filters = records::Filters::default();
-    // Ask for the maximum and filter by scope here: other projects' memories are dropped.
+    for t in tags {
+        tag(t)?;
+    }
+    let filters = records::Filters {
+        only: Some(candidates(c, Some(project.unwrap_or("")), tags)?),
+        ..Default::default()
+    };
+    // Ask for the maximum; the scope check below stays as a guard.
     let found = if models.is_empty() {
         footnote_search::store::search(c, query, 20, &filters)?
     } else {
@@ -244,7 +373,7 @@ pub fn recall(
         if sc != "global" && Some(sc.as_str()) != project {
             continue;
         }
-        out.push(json!({"id": id, "kind": kind, "scope": sc, "observed_at": date, "text": hit["text"], "score": hit.get("fusion_score")}));
+        out.push(json!({"id": id, "kind": kind, "scope": sc, "observed_at": date, "tags": tags_of(c, id)?, "text": hit["text"], "score": hit.get("fusion_score")}));
         if out.len() >= limit {
             break;
         }
@@ -317,9 +446,12 @@ pub fn list(
     let mut s = c.prepare(&format!(
         "{filter} ORDER BY m.observed_at DESC, c.id DESC LIMIT ?3 OFFSET ?4"
     ))?;
-    let memories: Vec<Value> = s
+    let mut memories: Vec<Value> = s
         .query_map(params![scope, kind, limit as i64, offset as i64], row)?
         .collect::<rusqlite::Result<_>>()?;
+    for m in &mut memories {
+        m["tags"] = json!(tags_of(c, m["id"].as_i64().unwrap_or(0))?);
+    }
     let scopes: Vec<Value> = c
         .prepare(&format!(
             "SELECT scope, count(*) FROM ({LIVE}) GROUP BY scope ORDER BY 2 DESC"
