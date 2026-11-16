@@ -38,6 +38,26 @@ fn use_and_remove_protect_the_models_memory_relies_on() {
             .contains("unknown model")
     );
 
+    // The French model shows its licence; without llama.cpp compiled in, installing it is refused before any download.
+    assert!(
+        list["models"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|m| m["name"] == "jina-v5-nano"
+                && m["license"] == "CC-BY-NC-4.0 (no commercial use)"),
+        "{list}"
+    );
+    if !cfg!(feature = "llama") {
+        assert!(
+            models(state, &["install", "jina-v5-nano"])["error"]
+                .as_str()
+                .unwrap()
+                .contains("does not include")
+        );
+        assert!(!state.join("models/jina-v5-nano").exists());
+    }
+
     // Not installed: refused, nothing written.
     assert!(
         models(state, &["use", "gte-small"])["error"]

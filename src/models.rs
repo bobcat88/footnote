@@ -15,7 +15,8 @@ struct Recipe {
     name: &'static str,
     repo: &'static str,
     revision: &'static str,
-    onnx: &'static str,
+    /// The model file in the repository: `.onnx` (with `tokenizer.json`), or `.gguf` (llama.cpp, tokenizer inside).
+    file: &'static str,
     query_prefix: &'static str,
     passage_prefix: &'static str,
     max_length: u32,
@@ -24,6 +25,14 @@ struct Recipe {
     /// Pinned (file, sha256); empty for the older comparison models, whose digest is recorded at first download.
     sha256: &'static [(&'static str, &'static str)],
     role: &'static str,
+    /// Written into the manifest and shown on install when it restricts use; empty for the permissive ONNX models.
+    license: &'static str,
+}
+
+impl Recipe {
+    fn gguf(&self) -> bool {
+        self.file.ends_with(".gguf")
+    }
 }
 
 const RECIPES: &[Recipe] = &[
@@ -31,7 +40,7 @@ const RECIPES: &[Recipe] = &[
         name: "bekko-a8m",
         repo: "hotchpotch/bekko-embedding-v1-a8m",
         revision: "c721113d59a1d91b447450324f51c4b3332c924a",
-        onnx: "onnx/model.onnx",
+        file: "onnx/model.onnx",
         query_prefix: "",
         passage_prefix: "",
         max_length: 512,
@@ -48,12 +57,13 @@ const RECIPES: &[Recipe] = &[
             ),
         ],
         role: "default pair, multilingual half",
+        license: "",
     },
     Recipe {
         name: "gte-small",
         repo: "Xenova/gte-small",
         revision: "5927d1727bb12db490052a1b33265ad78058de08",
-        onnx: "onnx/model_quantized.onnx",
+        file: "onnx/model_quantized.onnx",
         query_prefix: "",
         passage_prefix: "",
         max_length: 512,
@@ -70,12 +80,13 @@ const RECIPES: &[Recipe] = &[
             ),
         ],
         role: "default pair, English half",
+        license: "",
     },
     Recipe {
         name: "e5-small",
         repo: "Xenova/multilingual-e5-small",
         revision: "761b726dd34fb83930e26aab4e9ac3899aa1fa78",
-        onnx: "onnx/model_quantized.onnx",
+        file: "onnx/model_quantized.onnx",
         query_prefix: "query: ",
         passage_prefix: "passage: ",
         max_length: 512,
@@ -83,12 +94,13 @@ const RECIPES: &[Recipe] = &[
         quantization: "onnx-dynamic-int8",
         sha256: &[],
         role: "earlier model, tests and comparison",
+        license: "",
     },
     Recipe {
         name: "minilm",
         repo: "Xenova/paraphrase-multilingual-MiniLM-L12-v2",
         revision: "2c4055b12046f11709e9df2c122e59ffbdc2f900",
-        onnx: "onnx/model_quantized.onnx",
+        file: "onnx/model_quantized.onnx",
         query_prefix: "",
         passage_prefix: "",
         max_length: 128,
@@ -96,6 +108,24 @@ const RECIPES: &[Recipe] = &[
         quantization: "onnx-dynamic-int8",
         sha256: &[],
         role: "earlier model, tests and comparison",
+        license: "",
+    },
+    Recipe {
+        name: "jina-v5-nano",
+        repo: "jinaai/jina-embeddings-v5-text-nano-retrieval-GGUF",
+        revision: "59cfaceeeb7d738c404659435af4c0da74d06c96",
+        file: "v5-nano-retrieval-Q8_0.gguf",
+        query_prefix: "Query: ",
+        passage_prefix: "Document: ",
+        max_length: 512,
+        pad_token: "",
+        quantization: "Q8_0",
+        sha256: &[(
+            "model.gguf",
+            "86b6e6279e9b9e71389f02a082764a2ac2b15a50e37482c26f98d69092f12442",
+        )],
+        role: "French or mixed corpora, opt-in (llama build)",
+        license: "CC-BY-NC-4.0 (no commercial use)",
     },
 ];
 const DEFAULT_PAIR: [&str; 2] = ["bekko-a8m", "gte-small"];
@@ -134,14 +164,15 @@ pub fn list(state: &Path) -> Result<Value> {
         .map(|r| {
             let dir = models_dir(state).join(r.name);
             let installed = dir.join("manifest.json").exists();
-            let bytes: u64 = ["model.onnx", "tokenizer.json"]
+            let bytes: u64 = ["model.onnx", "tokenizer.json", "model.gguf"]
                 .iter()
                 .filter_map(|f| fs::metadata(dir.join(f)).ok())
                 .map(|m| m.len())
                 .sum();
             json!({"name": r.name, "role": r.role, "installed": installed, "path": installed.then(|| dir.clone()),
                 "bytes": installed.then_some(bytes), "used_by_memory": used.iter().any(|u| same_model(u, &dir)),
-                "source": format!("{}@{}", r.repo, &r.revision[..12])})
+                "source": format!("{}@{}", r.repo, &r.revision[..12]),
+                "license": (!r.license.is_empty()).then_some(r.license)})
         })
         .collect();
     // Models the hook uses from elsewhere (for example a development checkout) are reported too.
@@ -232,6 +263,39 @@ fn manifest_text(r: &Recipe, files: &[(&str, String, u64, String)]) -> String {
             )
         })
         .collect();
+    if r.gguf() {
+        // Byte-identical to the manifest the benchmark lab wrote for test 6 (LF on every platform), so vectors stay valid.
+        // shortcut: pooling and width are Jina v5 nano's, generalise when a second GGUF model is offered.
+        return format!(
+            "{{
+  \"repository\": {},
+  \"revision\": {},
+  \"license\": {},
+  \"runtime\": \"llama.cpp\",
+  \"files\": {{
+{}
+  }},
+  \"pooling\": \"last\",
+  \"query_prefix\": {},
+  \"passage_prefix\": {},
+  \"max_length\": {},
+  \"dimension\": 768,
+  \"quantization\": {}
+}}
+",
+            s(r.repo),
+            s(r.revision),
+            s(r.license),
+            entries.join(
+                ",
+"
+            ),
+            s(r.query_prefix),
+            s(r.passage_prefix),
+            r.max_length,
+            s(r.quantization)
+        );
+    }
     let text = format!(
         "{{\n  \"repository\": {},\n  \"revision\": {},\n  \"files\": {{\n{}\n  }},\n  \"pooling\": \"attention-mask-mean-l2\",\n  \"query_prefix\": {},\n  \"passage_prefix\": {},\n  \"max_length\": {},\n  \"pad_token\": {},\n  \"dimension\": 384,\n  \"quantization\": {}\n}}\n",
         s(r.repo),
@@ -254,6 +318,9 @@ pub fn install(state: &Path, names: &[String]) -> Result<Value> {
     let mut done = Vec::new();
     for name in names {
         let r = recipe(name)?;
+        if r.gguf() && !cfg!(feature = "llama") {
+            bail!("`{name}` runs through llama.cpp, which this build of Footnote does not include");
+        }
         let dir = models_dir(state).join(r.name);
         fs::create_dir_all(&dir)?;
         // Hundreds of MB that must never reach a repository, even if the state folder ends up inside a synced git folder.
@@ -265,7 +332,12 @@ pub fn install(state: &Path, names: &[String]) -> Result<Value> {
             )?;
         }
         let mut files = Vec::new();
-        for (remote, local) in [("tokenizer.json", "tokenizer.json"), (r.onnx, "model.onnx")] {
+        let wanted: &[(&str, &str)] = if r.gguf() {
+            &[(r.file, "model.gguf")]
+        } else {
+            &[("tokenizer.json", "tokenizer.json"), (r.file, "model.onnx")]
+        };
+        for &(remote, local) in wanted {
             let path = dir.join(local);
             let url = format!(
                 "https://huggingface.co/{}/resolve/{}/{remote}",
@@ -297,7 +369,7 @@ pub fn install(state: &Path, names: &[String]) -> Result<Value> {
             files.push((local, digest, fs::metadata(&path)?.len(), url));
         }
         fs::write(dir.join("manifest.json"), manifest_text(r, &files))?;
-        done.push(json!({"name": r.name, "path": dir}));
+        done.push(json!({"name": r.name, "path": dir, "license": (!r.license.is_empty()).then_some(r.license)}));
     }
     Ok(json!({"installed": done}))
 }
@@ -392,7 +464,7 @@ pub fn recommend(db: Option<&Path>) -> Result<Value> {
     )];
     if french {
         reasons.push(json!(
-            "French or mixed corpus: Jina v5 nano scored +0.08 to +0.10 nDCG@10 over the pair on held-out Alloprof and mix-fr-en (bench/experiments/LLAMACPP-INPROCESS.md). It needs a build with --features llama, a database about 2.5 times larger, and its query latency is still to be confirmed on an idle machine."
+            "French or mixed corpus: Jina v5 nano scored +0.08 to +0.10 nDCG@10 over the pair on held-out Alloprof and mix-fr-en (bench/experiments/LLAMACPP-INPROCESS.md). On an idle machine it adds about 6 ms at p50 and 26 ms at p95 per search; the database is about 2.5 times larger. Licence CC-BY-NC-4.0: no commercial use. Install with `footnote models install jina-v5-nano` (builds that include llama.cpp)."
         ));
     }
     if hardware["gpus"].as_array().is_some_and(|g| !g.is_empty()) {
@@ -404,7 +476,47 @@ pub fn recommend(db: Option<&Path>) -> Result<Value> {
         "hardware": hardware,
         "corpus_language": language,
         "recommended": DEFAULT_PAIR,
-        "consider": if french { json!(["jina-v5-nano (llama build)"]) } else { json!([]) },
+        "consider": if french { json!(["jina-v5-nano"]) } else { json!([]) },
         "reasons": reasons,
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    /// Same bytes as the manifest the lab wrote for test 6, so a model's identity (the manifest hash) does not change.
+    #[test]
+    fn nano_manifest_matches_the_benchmarked_one() {
+        let r = super::recipe("jina-v5-nano").unwrap();
+        let url = "https://huggingface.co/jinaai/jina-embeddings-v5-text-nano-retrieval-GGUF/resolve/59cfaceeeb7d738c404659435af4c0da74d06c96/v5-nano-retrieval-Q8_0.gguf";
+        let files = [(
+            "model.gguf",
+            r.sha256[0].1.to_string(),
+            232883776,
+            url.to_string(),
+        )];
+        let expected = r#"{
+  "repository": "jinaai/jina-embeddings-v5-text-nano-retrieval-GGUF",
+  "revision": "59cfaceeeb7d738c404659435af4c0da74d06c96",
+  "license": "CC-BY-NC-4.0 (no commercial use)",
+  "runtime": "llama.cpp",
+  "files": {
+    "model.gguf": {
+      "sha256": "86b6e6279e9b9e71389f02a082764a2ac2b15a50e37482c26f98d69092f12442",
+      "bytes": 232883776,
+      "url": "https://huggingface.co/jinaai/jina-embeddings-v5-text-nano-retrieval-GGUF/resolve/59cfaceeeb7d738c404659435af4c0da74d06c96/v5-nano-retrieval-Q8_0.gguf"
+    }
+  },
+  "pooling": "last",
+  "query_prefix": "Query: ",
+  "passage_prefix": "Document: ",
+  "max_length": 512,
+  "dimension": 768,
+  "quantization": "Q8_0"
+}
+"#;
+        assert_eq!(
+            super::manifest_text(r, &files),
+            expected.replace("\r\n", "\n")
+        );
+    }
 }
