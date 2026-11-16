@@ -120,6 +120,17 @@ seven builds took 771 s against 916 s for A (84 %; same machine, not certified i
 most the crawl itself (about 38 s against about 754 s of indexing on five libraries), so it is not worth building now. The
 lever left is document encoding on the GPU (test 3 of `BUILD-SPEED.md`, never run), kept only if vectors match the CPU.
 
+**Final run, how (written 16 November before it starts; Johan's go to run it alone, same morning):** kept changes A, B2, D,
+E, G (and the lean output, which does not change rankings). Sealed set `bench/datasets/docs-heldout3/dataset.yaml`, SHA-256
+checked before the run (aa54e211…). One binary for the Footnote side (`bench/work/dev/bin/final.exe`, from `feat/lean-output`).
+Sequential, on the idle machine, nothing else running:
+1. Grounded Docs 3.4.1: `docs_vs_grounded.py` with `DOCS_RUN=bench/work/heldout3/run1`, `DOCS_DATASET` and `DOCS_RECIPE` of
+   the sealed set: its own scrape (timed per library), hybrid search with EmbeddingGemma on llama-server.
+2. Footnote: `docs_crawl.py coverage minimal final.exe` then `endtoend minimal final.exe --limit 5 --per-source 1 --mode hybrid
+   <shipped pair>` with `DOCS_CRAWL_WORK=bench/work/heldout3/crawl` and `DOCS_SEED=20261117`: own crawl (timed), index,
+   search, paired bootstrap against step 1's Grounded hybrid rankings.
+End-to-end time reported, not judged: Footnote crawl plus index build against Grounded's scrape (which embeds as it goes).
+
 ## Rules
 
 - **Keep a search change** when mean nDCG@5 rises on the pooled development questions (99) and neither development set drops

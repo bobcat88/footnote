@@ -135,7 +135,7 @@ def endtoend(variant: str, search_args: list[str]) -> None:
         raise RuntimeError("end-to-end rankings differ between repeats")
     gd = json.loads((GD / "gd-hybrid.json").read_text(encoding="utf-8"))
     nd = lambda r: [g.metrics(r[str(i)], q["qrels"])["ndcg_at_5"] for i, q in enumerate(qs)]
-    d, lo, hi = g.bootstrap(nd(ranked), nd(gd))
+    d, lo, hi = g.bootstrap(nd(ranked), nd(gd), seed=int(g.os.environ.get("DOCS_SEED", 20261115)))
     verdict = "better" if lo > 0 else "equivalent" if lo > -0.05 else "worse"
     ms = [g.metrics(ranked[str(i)], q["qrels"]) for i, q in enumerate(qs)]
     summary = {k: sum(m[k] for m in ms) / len(ms) for k in ms[0]}

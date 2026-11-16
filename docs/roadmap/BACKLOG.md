@@ -108,6 +108,15 @@ and MCP call, measured on an idle machine and turned into a cost per 1,000 users
 of users per server, so a light per-call footprint decides whether agents can be switched on for everyone; chained agents also put
 every hook on the critical path. Feeds the IT security (SSI) entry of the compliance kit.
 
+**Shared daemon throughput** (measured 16 Nov on an idle machine, `bench/work/mcp-load-idle-20261116/`, React docs, hybrid):
+the shared daemon plateaus at 281-286 requests/s from 20 clients on, p50 rising in step with the clients (70 ms at 20, 140 ms at
+40), while one server per client reaches 776 requests/s at 20 clients for 9.5 GB summed working set (daemon: 0.7 GB). Cause,
+from the code: every query's inference runs while holding the one global encoder-pool lock (`semantic.rs`, `ENCODERS`), and
+the keyword search holds the Tantivy cache lock (`lexical.rs`, `OPEN`), so about 3.5 ms per request is serialized across all
+sessions. Fix when company scale matters: a lock per model and a small pool of query sessions (2 threads each), the Tantivy
+reader shared without a lock (it is thread-safe); verify with the same load bench and identical rankings. Not needed for a
+handful of agents on one machine.
+
 ## Ideas, unranked
 
 - **AI sobriety: one view of usage, cost and savings** (Johan, 15 Nov). Explore a Footnote-family workspace that combines the
