@@ -54,7 +54,7 @@ Proposal insertion/deduplication and validation/history insertion are transactio
 
 ## Hybrid: shipped as an explicit experimental mode
 
-[Implementation, source-bound receipt, two-model comparison and limitations](HYBRID.md). Default FTS5 remains intact. Explicit `rebuild-embeddings --model LOCAL_DIR` stores derived 384-dimensional CPU ONNX embeddings in SQLite JSON float64 arrays; `search --mode hybrid --model LOCAL_DIR` fuses lexical top20 and cosine top60 with RRF k=60. This is an exact bounded scan, not sqlite-vec or ANN. Model/recipe/item identities prevent stale vector reuse; structured filters precede ranking. Read commands never rebuild implicitly.
+[Implementation, source-bound receipt, two-model comparison and limitations](HYBRID.md). Search defaults to hybrid when the corpus has vectors from installed models, otherwise FTS5. Explicit `rebuild-embeddings --model LOCAL_DIR` stores derived 384-dimensional CPU ONNX embeddings in SQLite JSON float64 arrays; `search --mode hybrid --model LOCAL_DIR` fuses lexical top20 and cosine top60 with RRF k=60. This is an exact bounded scan, not sqlite-vec or ANN. Model/recipe/item identities prevent stale vector reuse; structured filters precede ranking. Read commands never rebuild implicitly.
 
 Both pinned multilingual candidates (E5-small and MiniLM) improved macro recall@5 on the fixed synthetic holdout, with fresh-process p50 near one second and no abstention on missing answers. The benchmark retained raw outputs and checked citation metadata/hashes against the source/corpus snapshot. MiniLM had better early-result ordering in this small run; no universal model selection or rollout is justified. Document compatibility, source authority and withdrawn advice are not inferred from similarity.
 

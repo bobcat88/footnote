@@ -48,9 +48,10 @@ enum Action {
     },
     Search {
         query: String,
-        #[arg(long, default_value = "lexical", value_parser = ["lexical", "hybrid"])]
-        mode: String,
-        /// Local embedding model directory, hybrid mode only; repeat for an ensemble
+        /// Default: hybrid when the corpus has vectors from models installed in Footnote's models folder, otherwise lexical
+        #[arg(long, value_parser = ["lexical", "hybrid"])]
+        mode: Option<String>,
+        /// Local embedding model directory, hybrid mode only; repeat for an ensemble (default: the corpus's installed models)
         #[arg(long)]
         model: Vec<PathBuf>,
         #[arg(long, default_value_t = 8)]
@@ -547,16 +548,11 @@ fn execute(cli: Cli) -> Result<Value> {
                 status,
                 per_source: per_source.map(usize::from),
             };
-            if mode == "hybrid" {
-                if model.is_empty() {
-                    bail!("hybrid requires --model local directory");
-                }
-                crate::semantic::search(&c, &query, limit, &filters, &model)
-            } else {
-                if !model.is_empty() {
-                    bail!("--model requires --mode hybrid");
-                }
+            let models = search_models(&c, mode.as_deref(), model)?;
+            if models.is_empty() {
                 search(&c, &query, limit, &filters)
+            } else {
+                crate::semantic::search(&c, &query, limit, &filters, &models)
             }
         }
         Action::Propose { file, allow } => crate::records::propose(&mut c, &file, &allow),
@@ -667,8 +663,11 @@ fn action_name(a: &Action) -> &'static str {
         #[cfg(feature = "library")]
         Action::Index { .. } => "index",
         Action::RebuildEmbeddings { .. } => "rebuild-embeddings",
-        Action::Search { mode, .. } if mode == "hybrid" => "search-hybrid",
-        Action::Search { .. } => "search-lexical",
+        Action::Search { mode, .. } => match mode.as_deref() {
+            Some("hybrid") => "search-hybrid",
+            Some(_) => "search-lexical",
+            None => "search",
+        },
         Action::Get { .. } => "get",
         Action::Propose { .. } => "propose",
         Action::Validate { .. } => "validate",
@@ -710,6 +709,43 @@ fn action_name(a: &Action) -> &'static str {
         Action::Metrics { .. } => "metrics",
     }
 }
+/// Models for a search; empty means lexical. Hybrid is the default whenever the corpus has vectors from installed models
+/// (it scored higher on every documentation and memory benchmark), so agents need not know model paths.
+pub fn search_models(
+    c: &rusqlite::Connection,
+    mode: Option<&str>,
+    model: Vec<PathBuf>,
+) -> Result<Vec<PathBuf>> {
+    let installed = || -> Vec<PathBuf> {
+        let dir = crate::state::state_dir().map(|s| crate::models::models_dir(&s));
+        let mut dirs: Vec<PathBuf> = dir
+            .ok()
+            .and_then(|d| std::fs::read_dir(d).ok())
+            .into_iter()
+            .flatten()
+            .filter_map(|e| e.ok().map(|e| e.path()))
+            .filter(|p| p.join("manifest.json").is_file())
+            .collect();
+        dirs.sort();
+        crate::semantic::embedded_with(c, dirs)
+    };
+    match (mode, model.is_empty()) {
+        (Some("lexical"), false) => bail!("--model requires --mode hybrid"),
+        (Some("lexical"), true) => Ok(vec![]),
+        (Some("hybrid"), true) => {
+            let found = installed();
+            if found.is_empty() {
+                bail!(
+                    "hybrid needs this corpus's embedding models: pass --model, or install them with `footnote models install`"
+                );
+            }
+            Ok(found)
+        }
+        (_, false) => Ok(model),
+        (_, true) => Ok(installed()),
+    }
+}
+
 pub fn run() {
     let cli = match Cli::try_parse() {
         Ok(c) => c,

@@ -163,7 +163,7 @@ For any other MCP host, add this entry to its MCP settings:
 
 | Tool | Purpose |
 |---|---|
-| `footnote_recall` | Search. `mode`: `lexical` (default) or `hybrid` with `model`; optional structured filters |
+| `footnote_recall` | Search. `mode`: `hybrid` by default when the corpus has vectors from installed models (else `lexical`), or forced; optional `model` and structured filters |
 | `footnote_get` | One chunk by id, with hash, revision, page, line and freshness |
 | `footnote_get_record` | One structured finding with its pinned evidence and validation state |
 | `footnote_wake_up` | A compact starting context for a project |

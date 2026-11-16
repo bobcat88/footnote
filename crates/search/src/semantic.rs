@@ -587,6 +587,23 @@ fn fuse(cands: &[Cand], pool: usize, alpha: f64) -> Vec<(usize, f64)> {
     out
 }
 
+/// The model directories among `dirs` whose vectors this database holds (same manifest identity), at most three, in the given
+/// order: what hybrid search uses when the caller names no model.
+pub fn embedded_with(c: &Connection, dirs: impl IntoIterator<Item = PathBuf>) -> Vec<PathBuf> {
+    let has = |id: &str| {
+        c.query_row(
+            "SELECT EXISTS(SELECT 1 FROM embeddings WHERE model=?1)",
+            [id],
+            |r| r.get::<_, bool>(0),
+        )
+        .unwrap_or(false) // a database without the embeddings table has no vectors
+    };
+    dirs.into_iter()
+        .filter(|d| identity(d).is_ok_and(|(id, _)| has(&id)))
+        .take(MAX_MODELS)
+        .collect()
+}
+
 pub fn search(
     c: &Connection,
     q: &str,

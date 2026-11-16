@@ -11,7 +11,8 @@ The former blocker was real but is resolved: Program Files contained an incomple
 
 ## Runtime contract
 
-`search` defaults to lexical FTS5. Hybrid is explicit:
+Since 16 November 2026 `search` is hybrid by default when the corpus has vectors from models installed in Footnote's models folder
+(found by manifest identity), and lexical FTS5 otherwise; `--mode lexical` forces words only. The historical explicit form:
 
 ```bash
 K='D:/Projets/BorgKnowledge/target/release/borg-knowledge.exe'
