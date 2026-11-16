@@ -24,10 +24,10 @@ of work. "Johan" marks items waiting for his go.
    request ends with a one-line receipt (count and ids).
 3. ~~Zero retention in the hook~~ done 15 Nov: old journals deleted, session state keeps only counters. Also fixed: long accented
    prompts failed recall (cut at 500 characters, limit is 512 bytes), the 4 recall failures of the first days.
-4. **`bk-gsh`, hybrid recall on each prompt:** the memory baseline gave hybrid any@5 0.504 against keyword 0.384.
-   Self-contained writing guidance added in the repository after a [600-memory bilingual synthetic pilot](../../bench/experiments/MEMORY-WRITTEN-RESULTS.md).
-   Raw retrieval improves in that controlled fixture; the no-answer injection gate still fails. Live hybrid recall remains off;
-   real agent-written memories and independent relevance review are still needed.
+4. ~~`bk-gsh`, hybrid recall on each prompt~~ done 16 Nov ([MEMORY-RECALL-SWITCH.md](../../bench/experiments/MEMORY-RECALL-SWITCH.md)):
+   live keyword recall had no gate either, so the switch was judged on recall: on 100 questions over Johan's real memories,
+   any@3 0.91 against 0.77 (+0.14 [+0.08, +0.21]; French 0.84 against 0.58), +13 ms per prompt at p95, daemon about 450 MB.
+   `memory.resident` is now on by default. Still open: a no-answer decision so irrelevant memories stop being injected (both modes).
 5. **Ship Jina nano as the opt-in French/mixed profile.** Idle-machine latency measured 15 Nov evening
    ([LLAMACPP-INPROCESS.md](../../bench/experiments/LLAMACPP-INPROCESS.md)): about +6 ms at p50, +26 ms at p95 per search. Left:
    a `models install` recipe for the GGUF file and release builds with `--features llama` (CMake and LLVM in CI).

@@ -229,7 +229,7 @@ fn background_embeddings_and_opt_in_resident_recall() {
     let state = t.path();
     fs::write(
         state.join("memory.json"),
-        json!({"models":[model],"metrics":true,"idle_seconds":2}).to_string(),
+        json!({"models":[model],"metrics":true,"resident":false,"idle_seconds":2}).to_string(),
     )
     .unwrap();
     seed(state, &[]);
@@ -263,7 +263,7 @@ fn background_embeddings_and_opt_in_resident_recall() {
     drop(db);
     assert!(
         !state.join("daemon.pid").exists(),
-        "resident defaults to false"
+        "resident off: no daemon"
     );
     fs::write(
         state.join("memory.json"),

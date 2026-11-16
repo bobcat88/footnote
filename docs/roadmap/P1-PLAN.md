@@ -28,7 +28,7 @@ Done 15 November (branch `feat/m1-engine`): every command below, tested; `footno
 
 | Option | Gain | Cost | Default |
 |---|---|---|---|
-| Resident daemon (`resident`) | Recall by meaning on each prompt | Models stay in RAM; a background process; some companies forbid it | Off until `bk-gsh` passes |
+| Resident daemon (`resident`) | Recall by meaning on each prompt | Models stay in RAM (about 450 MB); a background process; some companies forbid it | On since 16 Nov (recall switch passed) |
 | Metrics | Timings for reviews and support | A local file (`metrics.jsonl`), no network | Off (on for Johan) |
 | French/mixed model (Jina v5 nano) | +0.08 to +0.10 nDCG on French and mixed corpora | Database about 2.5x larger, indexing about 2.5x slower; latency to confirm on an idle machine | Off |
 | Save request frequency (`every_turns`) | More memories kept | More agent tokens per session | 10 prompts |

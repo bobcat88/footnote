@@ -27,10 +27,10 @@ pub fn catalogue() -> Vec<OptionSpec> {
         },
         OptionSpec {
             key: "memory.resident",
-            default: json!(false),
+            default: json!(true),
             range: None,
             gain: "Recall by meaning on each prompt, not only by keyword",
-            cost: "A background process keeps the models in RAM until idle_seconds pass; some companies forbid resident processes. Off until its relevance cutoff passes (bk-gsh)",
+            cost: "A background process keeps the models in RAM until idle_seconds pass; about 450 MB with the default pair; some companies forbid resident processes. Recall@3 on real memories 0.91 against keyword 0.77, +13 ms per prompt at p95 (MEMORY-RECALL-SWITCH.md)",
         },
         OptionSpec {
             key: "memory.idle_seconds",

@@ -24,7 +24,7 @@ const MAX_EVENT: u64 = 2 * 1024 * 1024;
 /// `<state dir>/memory.json` (state dir: FOOTNOTE_STATE_DIR, else %LOCALAPPDATA%/footnote or ~/.local/state/footnote).
 /// db: memory database (default memory.db in the state dir); models: embedding model folders, so memories are found by meaning;
 /// every_turns: prompts between save requests (10); recall_limit: memories per prompt (3); metrics: timings to metrics.jsonl;
-/// resident: recall by meaning through a daemon started on demand, gone after idle_seconds (1800). Off until bk-gsh passes.
+/// resident: recall by meaning through a daemon started on demand, gone after idle_seconds (1800). On by default since the recall switch passed (bench/experiments/MEMORY-RECALL-SWITCH.md); keyword answers when no daemon is ready.
 /// enabled: false makes the hook do nothing (the launcher's switch). A company policy file overrides any of these
 /// (footnote_core::config); `footnote options` explains each one.
 #[derive(Deserialize)]
@@ -50,7 +50,7 @@ impl Default for Settings {
             every_turns: 10,
             recall_limit: 3,
             metrics: false,
-            resident: false,
+            resident: true,
             idle_seconds: 1800,
         }
     }
