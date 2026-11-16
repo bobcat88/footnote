@@ -74,6 +74,16 @@ pub fn open(path: &Path, write: bool) -> Result<Connection> {
     }
     Ok(c)
 }
+/// Markdown heading level and text (`## Title` -> 2, "Title"); `#hashtag` and `#!/bin/sh` are not headings.
+fn heading_of(s: &str) -> Option<(usize, &str)> {
+    let level = s.chars().take_while(|&c| c == '#').count();
+    let rest = &s[level..];
+    ((1..=6).contains(&level) && (rest.is_empty() || rest.starts_with(' ')))
+        .then(|| (level, rest.trim()))
+}
+
+/// Chunks split at headings (outside fenced code) and at 2,000 characters. Each chunk's heading is its path in the page,
+/// `Page title > Section > Subsection`, so a short section ("Default values") still says which page and part it belongs to.
 pub fn text_chunks(c: &Connection, id: i64, text: &str, page: Option<i64>) -> Result<()> {
     let title = text
         .lines()
@@ -82,15 +92,34 @@ pub fn text_chunks(c: &Connection, id: i64, text: &str, page: Option<i64>) -> Re
         .chars()
         .take(500)
         .collect::<String>();
+    let mut path: Vec<String> = Vec::new();
     let mut heading = String::new();
     let mut chunk = String::new();
     let mut line = 1;
+    let mut fence = false;
     for (n, s) in text.lines().enumerate() {
-        if s.starts_with('#') || chunk.chars().count() + s.chars().count() > 2000 {
+        let t = s.trim_start();
+        if t.starts_with("```") || t.starts_with("~~~") {
+            fence = !fence;
+        }
+        let head = if fence { None } else { heading_of(s) };
+        if head.is_some() || chunk.chars().count() + s.chars().count() > 2000 {
             add_chunk(c, id, &heading, page, line, &chunk, &title)?;
             chunk.clear();
-            if s.starts_with('#') {
-                heading = s.trim_start_matches('#').trim().chars().take(500).collect();
+            if let Some((level, h)) = head {
+                path.truncate(level - 1);
+                path.resize(level - 1, String::new());
+                path.push(h.to_string());
+                let parts: Vec<&str> = path
+                    .iter()
+                    .map(String::as_str)
+                    .filter(|p| !p.is_empty())
+                    .collect();
+                let mut joined = parts.join(" > ");
+                if !title.is_empty() && level > 1 && !joined.starts_with(title.as_str()) {
+                    joined = format!("{title} > {joined}");
+                }
+                heading = joined.chars().take(500).collect();
             }
         }
         if chunk.is_empty() {
@@ -295,4 +324,37 @@ pub fn backup(c: &Connection, output: &Path) -> Result<Value> {
         digest.update(&buffer[..n]);
     }
     Ok(json!({"backup":output,"sha256":format!("{:x}",digest.finalize())}))
+}
+
+#[cfg(test)]
+mod chunk_tests {
+    use super::*;
+
+    #[test]
+    fn chunks_carry_their_heading_path_and_skip_code_comments() {
+        let dir = tempfile::tempdir().unwrap();
+        let c = open(&dir.path().join("t.db"), true).unwrap();
+        c.execute("INSERT INTO sources(root,path,sha256,revision,status,extractor) VALUES('r','p','s',1,'indexed','md')", [])
+            .unwrap();
+        let id = c.last_insert_rowid();
+        let doc = "# $props\nintro\n## Fallback values\ntext\n```sh\n# not a heading\n```\n### Nested\nmore\n## Other\nx\n";
+        text_chunks(&c, id, doc, None).unwrap();
+        let heads: Vec<String> = c
+            .prepare("SELECT heading FROM chunks ORDER BY id")
+            .unwrap()
+            .query_map([], |r| r.get(0))
+            .unwrap()
+            .map(Result::unwrap)
+            .collect();
+        assert_eq!(
+            heads,
+            [
+                "$props",
+                "$props > Fallback values",
+                "$props > Fallback values > Nested",
+                "$props > Other"
+            ]
+        );
+        assert!(heading_of("#hashtag").is_none() && heading_of("#!/bin/sh").is_none());
+    }
 }

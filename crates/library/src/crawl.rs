@@ -1,13 +1,15 @@
 //! Documentation crawler (backlog item 14; study: docs/research/DOCS-INGESTION-STUDY.md). Cheapest discovery first: the site's
 //! `llms.txt`, its sitemap, then links within the start URL's path. Each page's main content (Readability) becomes Markdown in
-//! `<out>/<n>.md`; `<out>/urls.json` maps every file to its URL. Polite by construction: robots.txt, one request at a time,
-//! an identifying user agent. JavaScript is not run.
+//! `<out>/<n>.md`; `<out>/urls.json` maps every file to its URL. Polite by construction: robots.txt (rules and `Crawl-delay`),
+//! an identifying user agent, and adaptive concurrency per host: a few requests in flight, more while the site answers, half as
+//! many after a 429, a 503 or a timeout (`Retry-After` honoured). JavaScript is not run.
 use anyhow::{Context, Result, bail};
 use serde_json::{Value, json};
 use std::{
     collections::{HashSet, VecDeque},
     fs,
     path::Path,
+    thread,
     time::Duration,
 };
 use ureq::ResponseExt;
@@ -16,12 +18,16 @@ use url::Url;
 const AGENT: &str =
     "FootnoteDocs/0.1 (+https://github.com/bobcat88/footnote; local documentation index)";
 const MAX_BYTES: u64 = 8 * 1024 * 1024;
+/// Most requests in flight to one host.
+pub const MAX_CONCURRENCY: usize = 8;
 
 pub struct Options<'a> {
     pub start: &'a str,
     pub max_pages: usize,
     /// Pages whose URL matches are skipped (for example translated mirrors).
     pub exclude: Option<regex::Regex>,
+    /// Requests in flight at the start (1 to MAX_CONCURRENCY), for example the level this host reached last time.
+    pub concurrency: usize,
 }
 
 fn agent() -> ureq::Agent {
@@ -41,9 +47,46 @@ fn agent() -> ureq::Agent {
         .into()
 }
 
+enum Fetch {
+    /// Body, final URL after redirects, content type.
+    Page(String, Url, String),
+    /// The site asks us to slow down (429, 503) or did not answer in time; wait at least this long.
+    SlowDown(Duration),
+    Failed,
+}
+
+fn fetch(agent: &ureq::Agent, url: &Url) -> Fetch {
+    let mut r = match agent.get(url.as_str()).call() {
+        Ok(r) => r,
+        Err(ureq::Error::Timeout(_)) => return Fetch::SlowDown(Duration::from_secs(2)),
+        Err(_) => return Fetch::Failed,
+    };
+    let status = r.status().as_u16();
+    if status == 429 || status == 503 {
+        let wait = r
+            .headers()
+            .get("retry-after")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|v| v.trim().parse::<u64>().ok())
+            .unwrap_or(2)
+            .clamp(1, 60);
+        return Fetch::SlowDown(Duration::from_secs(wait));
+    }
+    match page(&mut r, url) {
+        Some((body, last, kind)) => Fetch::Page(body, last, kind),
+        None => Fetch::Failed,
+    }
+}
+
 /// Body and final URL (after redirects) of a successful text response.
 fn get(agent: &ureq::Agent, url: &Url) -> Option<(String, Url, String)> {
-    let mut r = agent.get(url.as_str()).call().ok()?;
+    match fetch(agent, url) {
+        Fetch::Page(body, last, kind) => Some((body, last, kind)),
+        _ => None,
+    }
+}
+
+fn page(r: &mut ureq::http::Response<ureq::Body>, url: &Url) -> Option<(String, Url, String)> {
     if !r.status().is_success() {
         return None;
     }
@@ -213,54 +256,104 @@ pub fn crawl(out: &Path, o: &Options, progress: &mut dyn FnMut(u64, u64)) -> Res
             queue.push_back(u);
         }
     }
-    let (mut pages, mut bytes, mut skipped) = (0usize, 0u64, 0usize);
+    let (mut pages, mut bytes, mut skipped, mut slowed) = (0usize, 0u64, 0usize, 0usize);
     let mut urls = serde_json::Map::new();
-    while let Some(u) = queue.pop_front() {
-        if pages >= o.max_pages {
-            break;
-        }
-        if !allowed(&u) {
-            skipped += 1;
-            continue;
-        }
-        let Some((body, last, kind)) = get(&agent, &u) else {
-            skipped += 1;
-            continue;
-        };
-        let last = normalize(last);
-        if last != u && (!in_scope(&last, &start, &o.exclude) || !seen.insert(last.to_string())) {
-            continue; // a redirect out of scope or to a page already taken
-        }
-        let text = if kind.contains("html") {
-            for l in links(&body, &last) {
-                if in_scope(&l, &start, &o.exclude) && seen.insert(l.to_string()) {
-                    queue.push_back(l);
-                }
+    // robots.txt Crawl-delay means one request at a time with that pause between them.
+    let delay = robots
+        .as_ref()
+        .and_then(|r| r.delay)
+        .map(|d| Duration::from_secs_f32(d.clamp(0.0, 60.0)));
+    let mut level = if delay.is_some() {
+        1
+    } else {
+        o.concurrency.clamp(1, MAX_CONCURRENCY)
+    };
+    while !queue.is_empty() && pages < o.max_pages {
+        let mut batch = Vec::new();
+        while batch.len() < level
+            && let Some(u) = queue.pop_front()
+        {
+            if allowed(&u) {
+                batch.push(u);
+            } else {
+                skipped += 1;
             }
-            markdown(&body, &last)
-        } else if kind.contains("markdown") || kind.contains("text/plain") {
-            body
+        }
+        let fetched: Vec<Fetch> = thread::scope(|s| {
+            let jobs: Vec<_> = batch.iter().map(|u| s.spawn(|| fetch(&agent, u))).collect();
+            jobs.into_iter()
+                .map(|j| j.join().unwrap_or(Fetch::Failed))
+                .collect()
+        });
+        let mut wait = None;
+        for (u, f) in batch.into_iter().zip(fetched) {
+            let (body, last, kind) = match f {
+                Fetch::Page(body, last, kind) => (body, last, kind),
+                Fetch::SlowDown(w) => {
+                    slowed += 1;
+                    wait = Some(wait.map_or(w, |x: Duration| x.max(w)));
+                    queue.push_back(u); // asked again later, at a lower level
+                    continue;
+                }
+                Fetch::Failed => {
+                    skipped += 1;
+                    continue;
+                }
+            };
+            if pages >= o.max_pages {
+                break;
+            }
+            let last = normalize(last);
+            if last != u && (!in_scope(&last, &start, &o.exclude) || !seen.insert(last.to_string()))
+            {
+                continue; // a redirect out of scope or to a page already taken
+            }
+            let text = if kind.contains("html") {
+                for l in links(&body, &last) {
+                    if in_scope(&l, &start, &o.exclude) && seen.insert(l.to_string()) {
+                        queue.push_back(l);
+                    }
+                }
+                markdown(&body, &last)
+            } else if kind.contains("markdown") || kind.contains("text/plain") {
+                body
+            } else {
+                continue;
+            };
+            if text.trim().len() < 50 {
+                skipped += 1; // empty main content: probably rendered by JavaScript
+                continue;
+            }
+            if !written.insert(page_key(&last)) {
+                continue; // the same page in another form (Markdown and HTML both listed)
+            }
+            pages += 1;
+            bytes += text.len() as u64;
+            let file = format!("{pages}.md");
+            fs::write(out.join(&file), &text)?;
+            urls.insert(file, json!(page_url(&last)));
+            progress(pages as u64, bytes);
+        }
+        if let Some(w) = wait {
+            level = (level / 2).max(1);
+            thread::sleep(w);
+        } else if let Some(d) = delay {
+            thread::sleep(d);
         } else {
-            continue;
-        };
-        if text.trim().len() < 50 {
-            skipped += 1; // empty main content: probably rendered by JavaScript
-            continue;
+            level = (level + 1).min(MAX_CONCURRENCY);
         }
-        if !written.insert(page_key(&last)) {
-            continue; // the same page in another form (Markdown and HTML both listed)
+        if slowed > 50 && pages == 0 {
+            bail!("the site keeps refusing requests (HTTP 429/503 or timeouts)");
         }
-        pages += 1;
-        bytes += text.len() as u64;
-        let file = format!("{pages}.md");
-        fs::write(out.join(&file), &text)?;
-        urls.insert(file, json!(page_url(&last)));
-        progress(pages as u64, bytes);
+        if slowed > 500 {
+            break; // keep what was fetched; the summary reports the slow-downs
+        }
     }
     fs::write(out.join("urls.json"), serde_json::to_string_pretty(&urls)?)?;
     Ok(
         json!({"pages": pages, "bytes": bytes, "skipped": skipped, "queued_left": queue.len(),
-        "discovered": {"llms_txt": via_llms, "sitemap": via_sitemap}, "out": out, "robots_txt": robots.is_some()}),
+        "discovered": {"llms_txt": via_llms, "sitemap": via_sitemap}, "out": out, "robots_txt": robots.is_some(),
+        "concurrency": level, "slowed_down": slowed}),
     )
 }
 

@@ -212,6 +212,9 @@ enum Action {
         /// Skip pages whose URL matches this regular expression (for example translated mirrors).
         #[arg(long)]
         exclude: Option<String>,
+        /// Requests in flight at the start; by default the level this host reached last time, else 2. It then adapts.
+        #[arg(long, value_parser = clap::value_parser!(u8).range(1..=8))]
+        concurrency: Option<u8>,
     },
     /// What is installed, on, registered and running, and what memory did this week.
     Status,
@@ -407,11 +410,24 @@ fn execute(cli: Cli) -> Result<Value> {
             out,
             max_pages,
             exclude,
+            concurrency,
         } => {
+            // Each host's last concurrency level, so a site that slowed us down starts low next time.
+            let hosts_file = crate::state::state_dir()?.join("crawl-hosts.json");
+            let mut hosts: serde_json::Map<String, Value> = std::fs::read_to_string(&hosts_file)
+                .ok()
+                .and_then(|s| serde_json::from_str(&s).ok())
+                .unwrap_or_default();
+            let host = url::Url::parse(url)
+                .ok()
+                .and_then(|u| u.host_str().map(str::to_string))
+                .unwrap_or_default();
+            let remembered = hosts.get(&host).and_then(Value::as_u64).map(|n| n as usize);
             let options = footnote_library::crawl::Options {
                 start: url,
                 max_pages: *max_pages,
                 exclude: exclude.as_deref().map(regex::Regex::new).transpose()?,
+                concurrency: concurrency.map(usize::from).or(remembered).unwrap_or(2),
             };
             let mut job = footnote_core::jobs::Job::start(
                 &crate::state::state_dir()?,
@@ -423,6 +439,13 @@ fn execute(cli: Cli) -> Result<Value> {
                 job.progress(pages, Some(*max_pages as u64))
             });
             job.finish(&done);
+            if let Ok(v) = &done
+                && let Some(level) = v["concurrency"].as_u64()
+                && !host.is_empty()
+            {
+                hosts.insert(host, json!(level));
+                std::fs::write(&hosts_file, serde_json::to_string_pretty(&hosts)?)?;
+            }
             return done;
         }
         Action::Jobs => return footnote_core::jobs::list(&crate::state::state_dir()?),

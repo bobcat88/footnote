@@ -29,6 +29,11 @@ Crawler side:
   HTTP 429/503 or timeouts, honour `Retry-After` and robots.txt `Crawl-delay`, and remember the last good level per host.
   Compressed responses (gzip, brotli). No probing beyond what the crawl itself requests.
 
+End to end (added 16 November, 06:05, before any measurement of it):
+- **F. Index while crawling:** pages are chunked and embedded as they arrive instead of after the crawl, and the per-library
+  index build time is profiled (chunking, keyword index, vectors) to find the next bottleneck. Target reported, not judged:
+  Footnote's crawl plus index finishes before Grounded Docs' crawl alone on the same libraries.
+
 ## Rules
 
 - **Keep a search change** when mean nDCG@5 rises on the pooled development questions (99) and neither development set drops
@@ -39,3 +44,22 @@ Crawler side:
   hybrid, EmbeddingGemma), nDCG@5, paired bootstrap over 40 questions (10,000 resamples, seed 20261117). Equivalent: lower bound
   above −0.05; better: above 0. If at least equivalent, the crawler ships with the kept changes as defaults.
 - Reported, not judged: end-to-end time (crawl plus index) of both systems on the sealed libraries, index size.
+
+## Result E, adaptive concurrency (16 November, 06:03, `bench/work/dev/crawl-speed/`)
+
+Both crawlers back to back on each library, the order alternating; a dev-set index build was running on the CPU meanwhile,
+for both sides alike.
+
+| Library | Sequential | Adaptive | Speed-up | Pages, skipped (both) | Judged URLs covered (both) |
+|---|---|---|---|---|---|
+| react | 46.5 s | 8.4 s | 5.5 | 218, 91 | 100 % |
+| python | 63.9 s | 15.4 s | 4.1 | 500, 7 | 100 % |
+| fastapi | 8.2 s | 4.3 s | 1.9 | 152, 14 | 100 % |
+| vite | 6.7 s | 4.1 s | 1.7 | 24, 0 | 83 % |
+| tailwindcss | 20.8 s | 6.1 s | 3.4 | 223, 0 | 85 % |
+| pydantic | 16.0 s | 5.0 s | 3.2 | 93, 92 | 100 % |
+| svelte | 5.8 s | 3.1 s | 1.9 | 173, 1 | 100 % |
+| **Total** | **167.8 s** | **46.2 s** | **3.6** | identical | identical |
+
+No site answered 429, 503 or timed out; every crawl ended at the maximum of 8 in flight. **Kept** (faster, no more failures,
+same coverage).
