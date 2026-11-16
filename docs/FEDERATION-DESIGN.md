@@ -123,6 +123,8 @@ Nothing else is built until the test in section 6 has run.
 
 ## 10. Rights from company single sign-on (decided 16 November 2026, not built)
 
+Commercial edition only ([roadmap/EDITIONS.md](roadmap/EDITIONS.md)); the free edition never shows a sign-in.
+
 Johan's company already signs people in through single sign-on (SSO), and its developers already give an agent the same rights as
 the person logged in, by passing that person's JWT. Footnote follows the same model; what it adds is how those rights live inside
 an agent session, and for how long.

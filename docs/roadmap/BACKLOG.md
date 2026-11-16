@@ -3,6 +3,9 @@
 Last updated 16 November 2026. One prioritised list; Beads stays the authority for tracked tasks. Order inside a tier is the order
 of work. "Johan" marks items waiting for his go.
 
+Every item belongs to the free or the commercial edition ([EDITIONS.md](EDITIONS.md), decided 16 Nov): company-only features
+(sign-on, rights, hierarchy, many team indexes, compliance) go into a separate commercial crate, never into the free engine.
+
 ## Recently done
 
 - Test 5 (llama.cpp models, [rule and results](../../bench/experiments/LLAMACPP-MODELS.md)): no model adopted through an HTTP server.
