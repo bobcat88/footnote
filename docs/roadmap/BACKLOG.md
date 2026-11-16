@@ -79,6 +79,10 @@ Plan and decisions: [P1-PLAN.md](P1-PLAN.md) (engine commands first, then design
   enough for a V1. Later, each measured before adoption: hits grouped by page (first), crawler improvements, page-cleaning passes
   before embedding, more retrieval techniques, and a larger embedding model for documentation only (indexed rarely, per version,
   so a slower build for better precision is an acceptable trade).
+  **Versions (Johan, 16 Nov; post-V1, after the full stack harness ships):** reuse vectors across documentation versions (a cache keyed by chunk-text hash and model, so a
+  new version only embeds changed passages), then measure how much two versions share (React 18/19, Python 3.12/3.13) before
+  deciding whether versions should share stored passages (a common store per source with a list per version, as git does)
+  instead of one full database each; the saving adds up across many stacks and versions.
 
 ## Later: company deployment (not urgent, Johan 15 Nov)
 

@@ -63,3 +63,20 @@ for both sides alike.
 
 No site answered 429, 503 or timed out; every crawl ended at the maximum of 8 in flight. **Kept** (faster, no more failures,
 same coverage).
+
+## Result A, heading path (16 November, 06:30, `bench/work/dev/`)
+
+Same exported pages, shipped pair, hybrid, `--per-source 1`; baseline = the binary before A.
+
+| Development set | Baseline nDCG@5 | A | Difference, paired 95 % interval |
+|---|---|---|---|
+| Grounded Docs' 59 | 0.6081 | 0.6553 | +0.0472 [+0.0154, +0.0822] |
+| docs-confirm's 40 | 0.5574 | 0.5973 | +0.0400 [−0.0134, +0.0928] |
+| **Pooled 99** | 0.5876 | **0.6318** | **+0.0443 [+0.0160, +0.0738]** |
+
+Per library: python 0.667 → 0.794, pydantic 0.444 → 0.514, tailwindcss 0.368 → 0.416, fastapi 0.784 → 0.830,
+vite 0.569 → 0.600, svelte 0.670 → 0.680, react 0.633 → 0.616. Part of the Python gain is the fix that stops `#` comments in
+code blocks from splitting chunks.
+
+General guard (held-out, `shipped-ensemble-mcp`, A's binary): Alloprof nDCG@10 0.4757 (before 0.4757), mix-fr-en 0.4892
+(before 0.4892): unchanged, these corpora have no Markdown headings. **Kept.**
