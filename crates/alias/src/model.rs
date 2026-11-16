@@ -81,8 +81,8 @@ impl PrivacyFilter {
                 bail!("{file} does not match the benchmarked Privacy Filter");
             }
         }
-        // shortcut: the 875 MB weights file is not hashed (seconds per load) and the graph is re-read by path after the
-        // check; acceptable while the model sits in the per-user state folder; pin it at install time when a recipe exists.
+        // shortcut: the 875 MB weights file is hashed at install (`models install openai-privacy-filter`), not at each load
+        // (seconds), and the graph is re-read by path after the check; acceptable while the model sits in the per-user state folder.
         let tokenizer = Tokenizer::from_file(dir.join("tokenizer.json")).map_err(|e| anyhow!("tokenizer: {e}"))?;
         // shortcut: its own ONNX Runtime environment; share the embedder's once Alias and embeddings run in one process.
         let env = ort::init().with_telemetry(false).build().map_err(|e| anyhow!("{e}"))?;

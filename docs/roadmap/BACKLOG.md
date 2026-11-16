@@ -49,9 +49,9 @@ of work. "Johan" marks items waiting for his go.
 Plan and decisions: [P1-PLAN.md](P1-PLAN.md) (engine commands first, then design, then the Tauri launcher).
 
 8. **Separate products, features on or off:** Library, Memory, Code, Alias enabled independently; nothing loaded that is not used.
-9. **Embedding model manager:** install, switch, remove; recommend from the detected hardware (GPU, VRAM, CPU, RAM) and corpus language,
-   from Footnote's own results (the model matrix: licence × hardware × language). Today: the pair by default, nano for French/mixed,
-   EmbeddingGemma 1 on a GPU.
+9. ~~**Model manager**~~ done: `models install / use / remove / list`, and `models recommend` from the detected hardware and
+   the corpus language (the pair by default, Jina nano for French or mixed corpora; GPU reported, not used for search). Alias's
+   detector installs through it too. The full model matrix (licence × hardware × language) stays a P3 benchmark.
 10. **Hook in Rust:** `footnote hook` live in Claude, Codex and DeepSeek since 15 Nov (Python hook p50 39 ms, p95 225 ms, plus
     interpreter start; first Rust recall 24 ms). Done: `tools/memory_hook.py` and its tests deleted, docs point to `src/hook.rs`.
     Kept on purpose: `tools/embed.py`, no longer on any product path, stays the reference recipe that benchmarks import and fingerprint
@@ -69,8 +69,8 @@ Plan and decisions: [P1-PLAN.md](P1-PLAN.md) (engine commands first, then design
     set v1 and rule ([ALIAS-EVAL.md](../../bench/experiments/ALIAS-EVAL.md)); the Rust rules (`crates/alias`, `footnote alias-scan`)
     pass the identifiers part on held-out (1.000, no look-alike hit). Rules plus OpenAI Privacy Filter (ONNX q4) pass names on
     held-out (0.913, misses are lone first names). Done 16 Nov: both inside the binary (`alias-scan --model`, same held-out scores,
-    34 ms per text) with stable keyed pseudonyms (`--pseudonymise`). Next: a `models install` recipe for the 875 MB model, then
-    the underline-and-explain prototype; GLiNER2-PII only on a new set v2 if names need more margin. Design notes below.
+    34 ms per text) with stable keyed pseudonyms (`--pseudonymise`). Installed with `footnote models install openai-privacy-filter`
+    (every file pinned). Next: the underline-and-explain prototype; GLiNER2-PII only on a new set v2 if names need more margin. Design notes below.
 13. **Footnote Code:** code-graph study ([plan](../research/CODE-GRAPH-STUDY.md)); hands-on after Johan's go.
     Its graph visualizer uses the family's design language, decided with the launcher in the M2 studio
     ([analysis, section 5](../research/LAUNCHER-DESIGN-ANALYSIS.md)).
