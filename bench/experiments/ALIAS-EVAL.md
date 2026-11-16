@@ -62,6 +62,36 @@ Detector: `footnote alias-scan` (crate `footnote-alias`, build `--features alias
   that check digits reject every look-alike (Luhn-failing tracking numbers included) at no measurable cost; real texts with
   unusual formats (an IBAN split across lines, a phone with a missing digit) are the open risk.
 
+## Result 2 (16 November 2026): rules + OpenAI Privacy Filter pass both parts
+
+Model: [openai/privacy-filter](https://huggingface.co/openai/privacy-filter) (Apache-2.0), ONNX 4-bit (`onnx/model_q4.onnx`,
+902 MB with data), revision `7ffa9a04`, run with the lab's existing onnxruntime and tokenizers (no new package), 4 threads, decoded
+with the card's constrained BIOES path at the default operating point ([alias_pf.py](alias_pf.py)). Only candidate run so far.
+
+Dev, choosing the combination (any number of runs):
+
+| Detector | Direct ids | Names (FR / EN) | Precision | Look-alikes hit |
+|---|---:|---|---:|---|
+| model alone | 0.967 | 0.978 (0.962 / 1.000) | 0.846 | 60/144 |
+| rules + model | 1.000 | 0.978 | 0.893 | 60/144 |
+| **rules + model without its account guesses** ("alias") | 1.000 | 0.978 | 0.940 | 26/144 |
+
+The model's `account_number` label took order numbers (26/30) and Luhn-failing tracking numbers (12/12); the rules already own
+account-like identifiers with check digits, so "alias" drops that label. Remaining dev look-alikes: meeting dates read as dates
+(17/24) and some amounts read as phones.
+
+**Held-out, one run, "alias":**
+
+| Direct identifiers | Names | Names FR / EN | Precision | Look-alikes hit | Time per text (CPU) |
+|---:|---:|---|---:|---|---:|
+| **1.000** | **0.913** | 0.917 / 0.910 | 0.917 | 33/156 | 63 ms model + 0.1 ms rules |
+
+- **Direct identifiers: pass** (≥ 0.95). **Names: pass** (≥ 0.90), narrowly.
+- 11 of the 12 missed names are first names alone in a greeting or reminder ("Merci Camille", "Reminder: James"); one full name
+  was missed. Over-masking: meeting dates and some amounts.
+- Next candidate if names need a margin: GLiNER2-PII (best recall on SPY). This held-out half is now spent for that question;
+  a new comparison needs a v2 set.
+
 ## Limits
 
 One author wrote the templates and the data is synthetic: realistic structure, but none of the mess of real text (typos, signatures,
