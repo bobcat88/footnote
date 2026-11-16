@@ -57,23 +57,28 @@ Cost: the engine's interface to that crate must stay stable, so changing it some
 
 **Proposed mechanisms (to be checked and security-reviewed before any build)**
 - **Encryption, not hashing.** A hash cannot be reversed, so data must be encrypted. The SQLite files would use SQLCipher (SQLite
-  with encryption; rusqlite can build it in).
+  with encryption; rusqlite's `bundled-sqlcipher` feature builds it in, with a vendored OpenSSL variant). Licence: BSD-style, usable
+  in open-source and commercial software if Zetetic's notice is shown in the app and its documentation. Checked 16 Nov (zetetic.net).
 - **The login is the operating system's.** The database key is kept in the system's key store (Windows Credential Manager, macOS
   Keychain, Linux Secret Service) and unlocked by the person's own session. A separate Footnote password would be one more thing to
   forget, and a forgotten password would mean lost data. An optional passphrase can be added for shared machines.
 - **What it protects against, plainly:** another user of the machine, a stolen or copied disk, and anyone opening the file with a
   database tool. It does not protect against malware running as the same person, which can ask the key store too.
-- **The keyword index must be covered too.** Tantivy files hold the words of every document and cannot be encrypted. Personal
-  memory is small, so its keyword index can be rebuilt in memory at start-up and never written to disk. Library corpora of public
-  documentation need no encryption; private corpora rely on full-disk encryption until something better is measured.
+- **The keyword index must be covered too.** Tantivy files hold the words of every document and Tantivy has no encryption of its
+  own, but it reads and writes through a replaceable storage layer: Seshat (Element's encrypted message search, matrix-org) wraps
+  Tantivy's directory to encrypt every file, so it is possible, at a read-speed cost to measure. Simplest first: personal memory is
+  small, so its keyword index can live in memory only and be rebuilt at start-up. Checked 16 Nov (docs.rs seshat 4.3.0,
+  `encrypted_dir.rs`).
 - **Device identity and linking.** Each device makes its own key pair on install; its public key is its id. Linking two devices
   shows a short code on one to type on the other (as T3 Code and Signal do). A project has its own random key, given to each member
   device encrypted to that device's public key. Removing a device creates a new project key for the others; what the removed
   device already received cannot be taken back.
-- **Peer to peer without a blockchain.** Like Bitcoin's network, each device is a node and there is no server. A blockchain solves
-  agreement between strangers who do not trust each other; five linked devices already trust each other, so it is not needed.
-  Candidate library: iroh (Rust, peer-to-peer connections between devices identified by their public keys, works across home and
-  office networks), to be reviewed.
+- **Peer to peer without a blockchain.** Like Bitcoin's network, each device is a node. A blockchain solves agreement between
+  strangers who do not trust each other; five linked devices already trust each other, so it is not needed. Candidate library:
+  iroh 1.0 (Rust, MIT or Apache-2.0, maintained by n0): a device's public key is its identity, connections go direct through home
+  and office networks. **Not serverless by default:** devices first meet through a relay and find each other through n0's lookup
+  servers, and fall back to the relay when a direct path fails. The free edition would point to relays it can run itself (or, on
+  one network, local discovery only), never to a third party's by default. Checked 16 Nov (iroh README on docs.rs).
 - **What syncs:** records, not database files. Memories and project records are already written once and corrected by a new
   record (`supersedes`), so devices exchange new records and each rebuilds its own indexes; there are no edit conflicts to merge.
 

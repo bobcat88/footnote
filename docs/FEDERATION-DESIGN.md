@@ -153,6 +153,10 @@ someone leaves.
 - **Expiry:** the earlier of the token's own expiry and a maximum set by the company policy file (the policy file that already
   locks other options). Default 1 hour, the usual lifetime of an SSO access token; the company may set it between 5 minutes and
   8 hours (one working day). A sensitive compartment (section 5b) may set a shorter one for its own indexes.
+- Checked 16 Nov (Microsoft Entra documentation): an Entra access token lives 60 to 90 minutes by default; administrators can set
+  10 minutes to one day, and Microsoft recommends its Conditional Access "sign-in frequency" to force people to sign in again.
+  Entra's Continuous Access Evaluation revokes in near real time, but only for resources built for it (Exchange, Teams, SharePoint
+  at first), and gives those clients tokens of up to 28 hours. Footnote must therefore enforce its own maximum, not trust the token's.
 - Every call checks the expiry first. An expired session is refused with "sign in again"; it is never extended silently. When the
   launcher refreshes the token, the rights are read again from the register, so someone who leaves or changes unit loses access
   within one expiry at most.
