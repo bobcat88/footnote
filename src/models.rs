@@ -57,7 +57,7 @@ const RECIPES: &[Recipe] = &[
             ),
         ],
         role: "default pair, multilingual half",
-        license: "",
+        license: "MIT",
     },
     Recipe {
         name: "gte-small",
@@ -80,7 +80,7 @@ const RECIPES: &[Recipe] = &[
             ),
         ],
         role: "default pair, English half",
-        license: "",
+        license: "MIT",
     },
     Recipe {
         name: "e5-small",
@@ -94,7 +94,7 @@ const RECIPES: &[Recipe] = &[
         quantization: "onnx-dynamic-int8",
         sha256: &[],
         role: "earlier model, tests and comparison",
-        license: "",
+        license: "MIT",
     },
     Recipe {
         name: "minilm",
@@ -108,7 +108,7 @@ const RECIPES: &[Recipe] = &[
         quantization: "onnx-dynamic-int8",
         sha256: &[],
         role: "earlier model, tests and comparison",
-        license: "",
+        license: "Apache-2.0",
     },
     Recipe {
         name: "jina-v5-nano",

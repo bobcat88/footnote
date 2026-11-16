@@ -48,6 +48,8 @@ fn use_and_remove_protect_the_models_memory_relies_on() {
                 && m["license"] == "CC-BY-NC-4.0 (no commercial use)"),
         "{list}"
     );
+    // Footnote One is free for companies too: every model states its licence (checked on Hugging Face, 17 Nov 2026).
+    assert!(list["models"].as_array().unwrap().iter().all(|m| m["license"].is_string()), "{list}");
     if !cfg!(feature = "llama") {
         assert!(
             models(state, &["install", "jina-v5-nano"])["error"]
