@@ -4,11 +4,12 @@
 
 Indexes each set's exported pages (Grounded Docs' crawl) into bench/work/dev/<label>/<set>/<lib>.db, searches hybrid with the
 shipped pair and `--per-source 1` (8 at a time; quality only), scores against that set's Grounded Docs hybrid run, and compares
-with the label `baseline` when it exists.
+with the label `baseline` (or `DOCS_REF`) when it exists.
 """
 from __future__ import annotations
 
 import json
+import os
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -54,8 +55,9 @@ def run(label: str, extra: list[str]) -> dict:
 
 
 def report(label: str, scores: dict) -> None:
-    base_file = OUT / "baseline" / "scores.json"
-    base = json.loads(base_file.read_text(encoding="utf-8")) if base_file.exists() and label != "baseline" else None
+    ref = os.environ.get("DOCS_REF", "baseline")
+    base_file = OUT / ref / "scores.json"
+    base = json.loads(base_file.read_text(encoding="utf-8")) if base_file.exists() and label != ref else None
     pooled, pooled_base = [], []
     for name, s in scores.items():
         nd = s["ndcg_at_5"]
@@ -63,14 +65,14 @@ def report(label: str, scores: dict) -> None:
         if base:
             b = base[name]["ndcg_at_5"]
             d, lo, hi = g.bootstrap(nd, b)
-            line += f"  vs baseline {d:+.4f} [{lo:+.4f}, {hi:+.4f}]"
+            line += f"  vs {ref} {d:+.4f} [{lo:+.4f}, {hi:+.4f}]"
             pooled_base += b
         pooled += nd
         print(line, flush=True)
     line = f"{label:12} pooled   nDCG@5 {sum(pooled) / len(pooled):.4f}"
     if base:
         d, lo, hi = g.bootstrap(pooled, pooled_base)
-        line += f"  vs baseline {d:+.4f} [{lo:+.4f}, {hi:+.4f}]"
+        line += f"  vs {ref} {d:+.4f} [{lo:+.4f}, {hi:+.4f}]"
     print(line, flush=True)
 
 

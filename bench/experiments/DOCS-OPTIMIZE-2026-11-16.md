@@ -34,6 +34,68 @@ End to end (added 16 November, 06:05, before any measurement of it):
   index build time is profiled (chunking, keyword index, vectors) to find the next bottleneck. Target reported, not judged:
   Footnote's crawl plus index finishes before Grounded Docs' crawl alone on the same libraries.
 
+Result B (floor 500, target 1,500, hard cap 3,000 inside code blocks; against A, `docs_dev.py` with `DOCS_REF`):
+
+| Set | nDCG@5 | B - A [95 % CI] |
+|---|---|---|
+| gd (59) | 0.7030 | +0.0478 [+0.0089, +0.0908] |
+| confirm (40) | 0.6182 | +0.0208 [-0.0520, +0.0888] |
+| pooled (99) | 0.6687 | +0.0369 [-0.0009, +0.0744] |
+
+General guard (held-out, `shipped-ensemble-mcp`): Alloprof nDCG@10 0.4090 (A 0.4757, -0.067), mix-fr-en 0.4362 (A 0.4892,
+-0.053). **Not kept:** the guard drops far more than 0.005. Those corpora have no Markdown headings, so the only change they
+see is the size (1,500 instead of 2,000 characters).
+
+**B2 (added 16 November, 08:00, before measuring it):** B's merging of short sections and whole code blocks, with A's size
+(a chunk ends past 2,000 characters outside code, 3,000 inside), so text without headings or fences is chunked exactly as
+before. Same rule as B, against A.
+
+Result B2 (against A):
+
+| Set | nDCG@5 | B2 - A [95 % CI] |
+|---|---|---|
+| gd (59) | 0.7133 | +0.0580 [+0.0196, +0.1008] |
+| confirm (40) | 0.6378 | +0.0404 [-0.0335, +0.1135] |
+| pooled (99) | 0.6828 | +0.0509 [+0.0124, +0.0892] |
+
+General guard: Alloprof nDCG@10 0.4757 (A 0.4757), mix-fr-en 0.4888 (A 0.4892, -0.0005). **Kept.** Over the shipped baseline
+(before A) the two kept search changes add about +0.095 nDCG@5 on the pooled development questions (A +0.044, then B2 +0.051).
+
+Extraction (added 16 November, 07:40, after finding it in the crawl output and before any measurement of the fix):
+- **G. Main landmark over a stray Readability pick:** 65 of the 500 Python pages Footnote crawled hold only the site footer
+  (index pages and removed-module pages: the real content is short and Readability prefers the longer footer). When the page
+  has a main landmark (`main`, `role=main`, `article`) and Readability's text is not inside it, or Readability finds nothing,
+  use the landmark. **Keep G** when a fresh crawl of the seven development libraries with G recovers the footer-only Python
+  pages and changes, on the other six libraries, no more than 2 % of pages by more than 5 % of their extracted length
+  (sites change between crawls; changed pages are listed and inspected). Its ranking effect is measured with the other
+  kept changes in the final run only.
+
+**Result G, first try (`main`, `role=main`, `article`): not kept.** Python footer-only pages 65 -> 1, but on the other six
+libraries 14 of 883 pages changed (1.6 %), with FastAPI 4.6 % and Svelte 2.9 % over the 2 % line read per library. Inspected:
+FastAPI and Svelte pages gain their title and API headings (better; FastAPI links become relative), React's home page grows,
+and Tailwind `line-clamp` drops to a lorem-ipsum demo card: Tailwind has no `main`, so the first `<article>` (an example) won.
+**Deviation, written before re-running:** G is narrowed to `main` and `role=main` (no `article`) and the G side is crawled
+again; the same rule applies, per library.
+
+**Result G, second try (`main`, `role=main`): not kept.** Tailwind 0 changed; Python fixed (65 -> 1); FastAPI 7 of 152 (4.6 %)
+and Svelte 5 of 173 (2.9 %) still over the line. Inspected: Readability's pick was inside `main` on those pages; the check
+compared texts with whitespace collapsed, and the page's text nodes run together ("agentsUse") where Readability spaces them,
+so it fired by mistake. On Svelte the landmark also brings hover-tooltip text into code blocks (worse).
+**Deviation 2, written before re-running:** the containment check ignores all whitespace (first 60 characters); the G side is
+crawled again; same rule.
+
+**Result G, third try: not kept.** Svelte 4 of 173 (2.3 %), FastAPI still 7 of 152 (4.6 %). Probe of FastAPI `/about/`:
+Readability drops the heading permalink (`About¶`) that the landmark text keeps, so a prefix match still fails.
+**Deviation 3, written before re-running:** "inside" becomes word overlap: at least half of the distinct words (3+ letters,
+lower case) of Readability's text occur in the landmark. The G side is crawled again; same rule. This is the last try: if it
+fails, G is dropped.
+
+**Result G, fourth try: kept.** Fresh back-to-back crawls (`bench/work/dev/extract-check/`, `changes.json`): Python
+footer-only pages 65 -> 1 (the one left is `copyright.html`, which is a copyright page); the 57 Python pages changed by more
+than 5 % were all footer-only before (for example `nis.html` now opens with "Deprecated since version 3.11, removed in version
+3.13"); React, FastAPI, Vite, Tailwind CSS, Pydantic and Svelte: 0 pages changed. The three earlier tries are kept as
+`G-try1..3` and `changes-try1..3.json`.
+
 ## Rules
 
 - **Keep a search change** when mean nDCG@5 rises on the pooled development questions (99) and neither development set drops

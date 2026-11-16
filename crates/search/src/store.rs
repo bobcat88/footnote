@@ -82,9 +82,14 @@ fn heading_of(s: &str) -> Option<(usize, &str)> {
         .then(|| (level, rest.trim()))
 }
 
-/// Chunks split at headings (outside fenced code) and at 2,000 characters. Each chunk's heading is its path in the page,
-/// `Page title > Section > Subsection`, so a short section ("Default values") still says which page and part it belongs to.
+/// Chunks follow the page structure: a new chunk at each heading (outside fenced code) once the current one has 500
+/// characters, otherwise the short section joins the next one in the same parent; a chunk ends past 2,000 characters but
+/// never inside a code block (hard cap 3,000). Each chunk's heading is its path in the page, `Page title > Section >
+/// Subsection`, so a short section ("Default values") still says which page and part it belongs to.
 pub fn text_chunks(c: &Connection, id: i64, text: &str, page: Option<i64>) -> Result<()> {
+    const FLOOR: usize = 500;
+    const TARGET: usize = 2000;
+    const MAX: usize = 3000;
     let title = text
         .lines()
         .find_map(|l| l.strip_prefix("# "))
@@ -95,21 +100,27 @@ pub fn text_chunks(c: &Connection, id: i64, text: &str, page: Option<i64>) -> Re
     let mut path: Vec<String> = Vec::new();
     let mut heading = String::new();
     let mut chunk = String::new();
+    let (mut len, mut level0) = (0usize, 0usize); // chunk length in characters, level of the heading it started at
     let mut line = 1;
     let mut fence = false;
     for (n, s) in text.lines().enumerate() {
         let t = s.trim_start();
-        if t.starts_with("```") || t.starts_with("~~~") {
-            fence = !fence;
-        }
+        let fence_line = t.starts_with("```") || t.starts_with("~~~");
         let head = if fence { None } else { heading_of(s) };
-        if head.is_some() || chunk.chars().count() + s.chars().count() > 2000 {
+        let flush = match head {
+            Some((level, _)) => len >= FLOOR || level < level0,
+            None => !fence && len + s.chars().count() > TARGET,
+        };
+        if flush {
             add_chunk(c, id, &heading, page, line, &chunk, &title)?;
             chunk.clear();
-            if let Some((level, h)) = head {
-                path.truncate(level - 1);
-                path.resize(level - 1, String::new());
-                path.push(h.to_string());
+            len = 0;
+        }
+        if let Some((level, h)) = head {
+            path.truncate(level - 1);
+            path.resize(level - 1, String::new());
+            path.push(h.to_string());
+            if len == 0 || level0 == 0 {
                 let parts: Vec<&str> = path
                     .iter()
                     .map(String::as_str)
@@ -120,18 +131,24 @@ pub fn text_chunks(c: &Connection, id: i64, text: &str, page: Option<i64>) -> Re
                     joined = format!("{title} > {joined}");
                 }
                 heading = joined.chars().take(500).collect();
+                level0 = level;
             }
         }
-        if chunk.is_empty() {
+        if len == 0 {
             line = n as i64 + 1;
         }
         for ch in s.chars().chain(std::iter::once('\n')) {
-            if chunk.chars().count() == 2000 {
+            if len >= if fence { MAX } else { TARGET } {
                 add_chunk(c, id, &heading, page, line, &chunk, &title)?;
                 chunk.clear();
+                len = 0;
                 line = n as i64 + 1;
             }
             chunk.push(ch);
+            len += 1;
+        }
+        if fence_line {
+            fence = !fence;
         }
     }
     add_chunk(c, id, &heading, page, line, &chunk, &title)
@@ -331,30 +348,33 @@ mod chunk_tests {
     use super::*;
 
     #[test]
-    fn chunks_carry_their_heading_path_and_skip_code_comments() {
+    fn chunks_follow_structure_merge_short_sections_and_keep_code_whole() {
         let dir = tempfile::tempdir().unwrap();
         let c = open(&dir.path().join("t.db"), true).unwrap();
         c.execute("INSERT INTO sources(root,path,sha256,revision,status,extractor) VALUES('r','p','s',1,'indexed','md')", [])
             .unwrap();
         let id = c.last_insert_rowid();
-        let doc = "# $props\nintro\n## Fallback values\ntext\n```sh\n# not a heading\n```\n### Nested\nmore\n## Other\nx\n";
-        text_chunks(&c, id, doc, None).unwrap();
-        let heads: Vec<String> = c
-            .prepare("SELECT heading FROM chunks ORDER BY id")
+        let code = format!(
+            "# not a heading\n{}",
+            "let x = 1; // some code\n".repeat(90)
+        ); // ~2,000 chars
+        let doc = format!(
+            "# T\nintro\n## A\n{}\n## B\n```sh\n{code}```\n## C\nshort\n### D\nd\n# U\nu\n",
+            "a".repeat(600)
+        );
+        text_chunks(&c, id, &doc, None).unwrap();
+        let rows: Vec<(String, String)> = c
+            .prepare("SELECT heading, text FROM chunks ORDER BY id")
             .unwrap()
-            .query_map([], |r| r.get(0))
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
             .unwrap()
             .map(Result::unwrap)
             .collect();
-        assert_eq!(
-            heads,
-            [
-                "$props",
-                "$props > Fallback values",
-                "$props > Fallback values > Nested",
-                "$props > Other"
-            ]
-        );
+        let heads: Vec<&str> = rows.iter().map(|r| r.0.as_str()).collect();
+        // A's short intro joins A; B keeps its whole code block; D joins its short parent C; U leaves C's parent.
+        assert_eq!(heads, ["T", "T > B", "T > C", "U"]);
+        assert_eq!(rows[1].1.matches("```").count(), 2);
+        assert!(rows[2].1.contains("### D"));
         assert!(heading_of("#hashtag").is_none() && heading_of("#!/bin/sh").is_none());
     }
 }

@@ -29,7 +29,7 @@ fn indexes_heading_and_returns_exact_provenance_without_modifying_original() {
     let s = run(&db, &["search", "checkpoint"]);
     assert_eq!(s["results"].as_array().unwrap().len(), 1);
     let hit = &s["results"][0];
-    assert_eq!(hit["heading"], "WAL");
+    assert_eq!(hit["heading"], "SQLite"); // the one-line title section joins WAL, so the chunk carries the page path
     assert_eq!(hit["freshness"], "current");
     assert_eq!(hit["sha256"].as_str().unwrap().len(), 64);
     assert_eq!(fs::read_to_string(&p).unwrap(), text);

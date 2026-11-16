@@ -32,9 +32,11 @@ fn per_source_limits_how_many_chunks_of_one_file_are_returned() {
     .unwrap();
     let root = t.path().join("notes");
     fs::create_dir(&root).unwrap();
+    // Sections past 500 characters stay separate chunks (shorter ones join the next section).
+    let pad = "filler text about write-ahead logs. ".repeat(15);
     fs::write(
         root.join("big.md"),
-        "# One\ncheckpoint stalls under load\n# Two\ncheckpoint frames are copied\n# Three\ncheckpoint passive mode helps",
+        format!("# One\ncheckpoint stalls under load\n{pad}\n# Two\ncheckpoint frames are copied\n{pad}\n# Three\ncheckpoint passive mode helps"),
     )
     .unwrap();
     fs::write(root.join("other.md"), "# Other\ncheckpoint in another file").unwrap();
