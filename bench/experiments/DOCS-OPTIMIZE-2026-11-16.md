@@ -141,7 +141,8 @@ End-to-end time reported, not judged: Footnote crawl plus index build against Gr
    backed off as designed and stopped after 501 slow-downs: 38 Flask pages in 1,006 s, coverage of judged Flask URLs 0.64
    (Grounded 1.00). The 38 pages are real (no challenge page saved). The pre-registered primary stays this as-run crawl;
    a Flask re-crawl once the block lifts is reported as a diagnostic only, and the sequential order (Grounded first) is a
-   flaw of this design, noted for future finals (alternate the order or wait between systems).
+   flaw of this design, noted for future finals (alternate the order or wait between systems). The diagnostic re-crawl
+   (`heldout3_flask_recrawl.py`, one probe every 15 minutes) found Flask still blocked at 10:35 and stopped at its 2-hour limit.
 
 **Final result (sealed docs-heldout3, 40 questions, seed 20261117; `bench/work/heldout3/`):**
 
