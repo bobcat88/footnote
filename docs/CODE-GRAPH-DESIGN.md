@@ -194,3 +194,33 @@ including process start. Callers of `store::lean` matched a manual grep exactly 
 Not built yet, in order: the MCP tool; TypeScript, JavaScript, Python and Java through their SCIP indexers; the tree-sitter pass
 (fast, labelled guesses) for files and languages with no compiler index; inputs and outputs (files, configuration, environment
 variables, tables, routes); freshness by watcher; then the comparison against codebase-memory-mcp on the measured items.
+
+## 11. Architecture map (Johan, 16 November 2026; research, nothing built)
+
+Johan wants two views behind one toggle: the **useful view**, an architecture map (blocks of code, how much each depends on the
+others, the outside services it calls, as in repowise's map), and the **cool view**, the whole-graph "hairball" as ambient motion.
+Method (Johan): study how 5 to 10 projects do it, take ideas, write our own in Rust, bench ours against theirs; no copied code.
+
+**How open projects build it (read 16 Nov from their READMEs; none run):**
+
+| Project | Licence | How it groups and draws | Idea for us |
+|---|---|---|---|
+| dependency-cruiser (JS/TS, 7.4k stars) | MIT | Module imports, then "collapse" to chosen folders (depth or pattern) for an architecture-level graph | Deterministic grouping by folder or package: no guessing |
+| Emerge (12 languages, 1.2k) | MIT | Module graph, coloured by Louvain modularity (communities found in the graph), with fan-in/fan-out | Communities as an alternative grouping when folders say little |
+| CodeBoarding (2.7k) | MIT | Static analysis for relationships; a language model names and describes the components; nested diagrams | Naming blocks is the hard part; their way sends code excerpts to a model provider |
+| arkit (JS/TS, 1k) | MIT | Groups modules into components from configured patterns, outputs SVG or PlantUML | Grouping rules the user can edit |
+| repowise | AGPL-3.0 | Layer cards with import counts, scores and outside services (ideas only) | The look Johan liked; its scores' method is unknown, so not copied |
+
+**What Footnote already has for it:** every SCIP symbol names its package (`<indexer> <manager> <package> <version> <path>`), so
+references from project code to outside packages (OpenAI, httpx, serde...) are already in the index Footnote reads; today
+`write()` keeps only references to project symbols. The map needs: (1) keep references to outside packages, counted per package;
+(2) roll symbol references up to the folder, crate or package level, with counts on each link; (3) group by folder first
+(dependency-cruiser's way), communities as an option; (4) a small curated table classing known packages (model provider, network,
+database) for the dashed outside-service nodes; (5) block names from folders by default; a local model may suggest names, never
+a cloud one by default, since naming sends code excerpts.
+
+**Languages:** the precise pass covers languages with a SCIP indexer (Rust today; Python, TypeScript and JavaScript, Go and Java
+have the indexers used in the benchmarks above). A module-level map needs only imports, which a parser gets for many more
+languages (Emerge does 12), so the map can cover more languages than the call graph.
+
+**The cool view** costs little: the same nodes and links drawn with a force layout, no labels, slow motion, in mini mode.
