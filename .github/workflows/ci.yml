@@ -29,8 +29,7 @@ jobs:
           TITLE: ${{ github.event.pull_request.title }}
         run: |
           python3 scripts/check-commits.py "$BASE"
-          printf '%s
-' "$TITLE" > pr-title.txt
+          printf '%s\n' "$TITLE" > pr-title.txt
           python3 scripts/check-commits.py --message pr-title.txt
 
   check:
