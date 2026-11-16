@@ -186,6 +186,10 @@ Besides your documents, Footnote can remember what an assistant learns while wor
 
 Nothing leaves the agent you already use: the memories are written by that agent, in its own session, into a local file. Settings (`memory.json` in the state folder) are documented in [src/hook.rs](src/hook.rs), the design in [docs/AGENT-MEMORY-DESIGN.md](docs/AGENT-MEMORY-DESIGN.md).
 
+### Usage
+
+`footnote usage --days 7` counts the tokens your agents used per day, agent and model, from the session files Claude Code and Codex already keep on your computer, and what they would cost at list API prices (a subscription pays a flat fee instead). Only counts are stored; no prompt or answer text is copied. Prices: a table in [src/usage.rs](src/usage.rs), dated, from the providers' pricing pages.
+
 ### Code graph
 
 Footnote Code answers "who calls this, and what does it call" from the compiler's own index, not from a guess. Rust only for now; it needs rust-analyzer (`rustup component add rust-analyzer`), and says so if it is missing.

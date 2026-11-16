@@ -160,6 +160,10 @@ handful of agents on one machine.
 - **Spend and savings module** (Johan, 16 Nov; Footnote One per person, Enterprise for teams). One view: what you spent, what
   Footnote saved stacked on top, over a day, 7 and 30 days; plus T3-style limits (5-hour and weekly with reset timers, context bar).
   "Not 100 % exact but close, and we say how it is computed." Design rules from the checks:
+  - **Phase 1 built (17 Nov, overnight item 4):** `footnote usage [--days N]` reads Claude Code and Codex session files
+    incrementally (0.9 s for 965 MB cold, 4 ms warm on Johan's machine; counts matched an independent Python count), keeps
+    counts only, and prices them from a hand-written table of the official pages (16 Nov). Not built: limits and reset timers,
+    savings, other agents (Grok, DeepSeek Harness, Gemini), the launcher view.
   - **Two kinds of saving, shown apart.** Measured: output filtering (RTK style) and lean results, where Footnote sees the size
     before and after each call. Estimated: behaviour skills (ponytail, caveman), whose saving exists only against a benchmark
     without them; shown as an estimate with its benchmark.

@@ -89,6 +89,7 @@ getrandom.workspace = true
 ureq.workspace = true
 regex.workspace = true
 url.workspace = true
+walkdir.workspace = true
 
 [target.'cfg(windows)'.dependencies]
 windows-sys.workspace = true

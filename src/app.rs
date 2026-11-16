@@ -246,6 +246,12 @@ enum Action {
         #[arg(long, default_value_t = 7, value_parser = clap::value_parser!(u16).range(1..=90))]
         days: u16,
     },
+    /// Tokens per day, agent and model from Claude Code and Codex session files on this computer, with what they would
+    /// cost at list API prices. Counts only: no prompt or answer text is kept.
+    Usage {
+        #[arg(long, default_value_t = 7, value_parser = clap::value_parser!(u16).range(1..=365))]
+        days: u16,
+    },
     /// Browse agent memories, newest first (ids are those `forget` takes).
     #[cfg(feature = "memory")]
     MemoryList {
@@ -564,6 +570,7 @@ fn execute(cli: Cli) -> Result<Value> {
         Action::Projects => return crate::projects::list(&crate::state::state_dir()?),
         #[cfg(feature = "memory")]
         Action::Activity { days } => return crate::activity::activity(*days),
+        Action::Usage { days } => return crate::usage::usage(*days),
         Action::Options => return footnote_core::config::options(&crate::state::state_dir()?),
         Action::Models { action } => {
             let state = crate::state::state_dir()?;
@@ -733,6 +740,7 @@ fn execute(cli: Cli) -> Result<Value> {
         Action::Uninstall { .. } | Action::Activity { .. } => {
             unreachable!("dispatched before the database is opened")
         }
+        Action::Usage { .. } => unreachable!("dispatched before the database is opened"),
         #[cfg(feature = "library")]
         Action::Crawl { .. } => unreachable!("dispatched before the database is opened"),
         #[cfg(feature = "code")]
@@ -843,6 +851,7 @@ fn action_name(a: &Action) -> &'static str {
         Action::Projects => "projects",
         #[cfg(feature = "memory")]
         Action::Activity { .. } => "activity",
+        Action::Usage { .. } => "usage",
         #[cfg(feature = "memory")]
         Action::MemoryList { .. } => "memory-list",
         Action::Models { .. } => "models",
