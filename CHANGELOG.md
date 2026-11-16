@@ -9,20 +9,28 @@ generated from Conventional Commits with git-cliff (`cliff.toml`); earlier entri
 
 - **library:** Documentation crawler, system TLS roots, overnight benchmarks
 - **library:** Adaptive per-host crawl concurrency (3.6x faster, same pages); chunks carry their heading path, code comments are no longer headings
+- **search:** Chunks follow page structure, code blocks stay whole
 
 ### Fixed
 
 - **library:** Crawler saves each page once (.md, HTML and trailing-slash forms)
+- **library:** Use the main landmark when Readability picks a footer
 
 ### Documentation
 
 - **library:** Documentation storage and crawler study; pre-registered crawl bench
+- **roadmap:** Leaner agent output first; output and storage formats
 
 ### Tests and benchmarks
 
 - **docs:** Fresh 40-question confirmation set and protocol, written before running; crawler keeps same-host redirect scope only
 - **docs:** Confirmation verdict (worse), sealed held-out set 3 and optimisation protocol; crawler cites the HTML page for Markdown copies
 - **bench:** Heading path kept (+0.044 nDCG@5 pooled on the dev sets, general guard unchanged)
+
+### Build and CI
+
+- Check commit messages; CHANGELOG from commits (git-cliff)
+- Fix the commit check step (a raw newline made the workflow invalid)
 
 ## 0.1.0-alpha.1 - 2026-11-15
 
