@@ -247,7 +247,7 @@ fn recall_get_health_wake_up_and_export_round_trip() {
     let hits: Value = serde_json::from_str(&text(&recall)).unwrap();
     assert_eq!(hits["mode"], "lexical_bm25");
     let first = &hits["results"][0];
-    assert_eq!(first["heading"], "WAL");
+    assert_eq!(first["heading"], "SQLite"); // the one-line title section joins WAL
     assert_eq!(first["freshness"], "current");
     let id = first["id"].as_i64().unwrap();
 

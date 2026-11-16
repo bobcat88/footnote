@@ -1,0 +1,112 @@
+{
+  "protocol": "v1",
+  "timestamp_utc": "2026-11-16T05:34:13+00:00",
+  "partial": false,
+  "dataset": {
+    "id": "alloprof",
+    "split": "heldout",
+    "pin": {
+      "sha256": {
+        "corpus/test-00000-of-00001.parquet": "d4cc3f31c740d08f5e1bef9d83188da42f5ae07fdb2be920bd2f54754d05a09a",
+        "qrels/test-00000-of-00001.parquet": "f3c0cefa3e200f89f432981069b0d1f841d92e8653a96040d3ac67089db4d387",
+        "queries/test-00000-of-00001.parquet": "0706659a4b9cfc45d6e6eb97458edb37ca7609c96493c9b64de538ab65a5f5d3"
+      },
+      "converted_sha256": {
+        "corpus.jsonl": "0e9da1b2cb4e37da8f286158a0f086f81e558f477187e48ea28434a3ca51a72e",
+        "qrels.tsv": "26432b9a22c46e1d19d08f6cb2fd63086d6f605c9566a38ce5895fb5c326bdce",
+        "queries.jsonl": "27f1e33d57d01694c4166be767b387e2aa2a56384a3dcd8dd0f62ecd22010eaf"
+      },
+      "source": "mteb/AlloprofRetrieval"
+    },
+    "documents": 2556,
+    "queries": 1624
+  },
+  "engine": {
+    "id": "shipped-ensemble-mcp",
+    "config": {
+      "lexical": "any word (OR), Tantivy BM25 en_stem, accents folded",
+      "dense": "bekko-a8m + gte-small, 384d int8, blended 50/50",
+      "fusion": "convex combination alpha 0.55 (z-scores over top 100)",
+      "strategy": "full dense scan up to 50000 entries, else BM25 shortlist 1000",
+      "chunk_chars": 2000,
+      "k": 20,
+      "process": "resident mcp session",
+      "query_clip_bytes": 500
+    },
+    "versions": {
+      "binary_sha256": "25f6e45e830161c2dd40056c34056e7577fbd1e220dab72bbc1f8100ecae0991",
+      "python_sqlite": "3.49.1",
+      "binary_sqlite": "3.51.1",
+      "model_repository": [
+        "hotchpotch/bekko-embedding-v1-a8m",
+        "Xenova/gte-small"
+      ],
+      "model_revision": [
+        "c721113d59a1d91b447450324f51c4b3332c924a",
+        "5927d1727bb12db490052a1b33265ad78058de08"
+      ],
+      "model_files_sha256": [
+        {
+          "tokenizer.json": "8bd47075711f75a143d1b78e01a41cc65c1c591b00d3cfeffc23db07adce1392",
+          "model.onnx": "96d8cc6199e96357b21b2fb12f6d7ffd2d4abc7b182fe94b5468fbd6dc819af7"
+        },
+        {
+          "tokenizer.json": "da0e79933b9ed51798a3ae27893d3c5fa4a201126cef75586296df9b4d2c62a0",
+          "model.onnx": "18dec105109b6004369799ca4761fb8fb413c64172c02147bcfac186b5c5f6cb"
+        }
+      ]
+    }
+  },
+  "code": {
+    "commit": "4508f31c0159e257fa0fc16c9834a02a49b02046",
+    "dirty": false,
+    "metrics_sha256": "f60c511c79f8cd4fe5e95ecbf5a47d77ddddceae8fc89038682c7fc44502ab50",
+    "harness_sha256": "9e7f505d7d799d5383664d16e4508040d8d8683ac408c56782d47b556dad67a5"
+  },
+  "machine": {
+    "os": "Windows-11-10.0.28000-SP0",
+    "cpu": "Intel64 Family 6 Model 198 Stepping 2, GenuineIntel",
+    "logical_cpus": 24,
+    "ram_gib": 47.4,
+    "python": "3.12.10"
+  },
+  "build": {
+    "exe_sha256": "25f6e45e830161c2dd40056c34056e7577fbd1e220dab72bbc1f8100ecae0991",
+    "helper_sha256": "d69ec768e02c6700472d7d8fed979fa67f576b276f939eee792a9d392ecfcccb",
+    "documents": 2556,
+    "build_ms": 224655.6918000024,
+    "embed_ms": 222195.60659999843,
+    "disk_bytes": 41627648,
+    "chunks": 5850,
+    "sources": 2556,
+    "reused": false,
+    "sqlite_bytes": 41627648,
+    "wal_shm_bytes": 0,
+    "tantivy_bytes": 3639146,
+    "store_bytes": 45266794,
+    "model_bytes": 199188608,
+    "exe_bytes": 39422464
+  },
+  "metrics": {
+    "ndcg@10": 0.475663,
+    "recall@5": 0.562808,
+    "recall@10": 0.653941,
+    "recall@20": 0.713054,
+    "mrr@10": 0.419545,
+    "queries_scored": 1624,
+    "queries_empty": 0
+  },
+  "latency_ms": {
+    "scope": "one resident `mcp` session (models loaded once, helpers resident): JSON-RPC over stdio, per-query wall time",
+    "p50": 19.72,
+    "p95": 35.68,
+    "mean": 22.35,
+    "queries": 1624
+  },
+  "determinism": {
+    "checked": false,
+    "queries_checked": 0,
+    "identical_rankings": null,
+    "rankings_sha256": "b1a8463d3be68f271b4e168899f54dfed0df794b56fa168fcad9770b8243a6c9"
+  }
+}

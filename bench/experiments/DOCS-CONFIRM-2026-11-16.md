@@ -70,3 +70,7 @@ after the address fix: Footnote 53/53, Grounded Docs 53/53.
   and sibling chunks. Footnote embeds only the last heading and the chunk text. These are the next things to test, tuned on
   the two seen sets and decided on a third, unseen one.
 - Both question sets are now seen: any further tuning must be judged on a new set.
+
+Reported, not judged (06:01): Footnote with the same EmbeddingGemma-300M weights and `--per-source 1` on Grounded Docs' pages:
+nDCG@5 0.545, recall@5 0.729 (shipped pair, same pages: 0.557). The diagnostic gain on the reused set (+0.019 over Grounded
+Docs) did not hold either: on fresh questions the larger model did not beat the shipped pair inside Footnote.

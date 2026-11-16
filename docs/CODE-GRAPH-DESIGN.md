@@ -150,3 +150,24 @@ Target: EU organisations that must show conformity. Where this fits, stated care
 - [SWE-Explore] Zhang et al., arXiv 2606.07297 (abstract read).
 - [LocAgent] Chen et al., ACL 2025, arXiv 2503.09089 (abstract read).
 - Local: `D-Projets-GovernanceOS.db` read through SQLite in read-only mode; GovernanceOS file counts from `git ls-files`.
+
+## 9. Johan's answers (16 November 2026)
+
+1. **Languages:** at least JavaScript, TypeScript, Java, Rust and Python with the precise pass (scip-typescript covers
+   JavaScript and TypeScript, scip-java, rust-analyzer, scip-python); CSS as tree-sitter edges between selectors and the markup
+   or components that use them. COBOL (helping banks refactor legacy systems) is a study item: parsers and grammars to check.
+2. **Background toolchains:** yes, Footnote may run the SCIP indexers.
+3. **Scope, with an addition:** the graph maps the code and, separately, what it reads and writes (files, configuration,
+   environment variables, database tables, HTTP routes) as input/output nodes linked to the code that uses them, shown on
+   demand ("show inputs/outputs", split view). Artifact contents stay in the document corpus; only their names and links enter
+   the graph. Static detection of paths is a guess when paths are built at run time: such edges carry a confidence label.
+4. **Switch-over:** replace codebase-memory-mcp when Footnote is at least as good on the measured items.
+5. **Hands-on test:** go, on BorgKnowledge, BorgInvestor and GovernanceOS (mostly Rust), plus PilotageProjet (JavaScript/HTML)
+   for JavaScript coverage; tools run locally only, telemetry off (PilotageProjet is earlier work for his employer).
+6. **Design session:** after the technical tests.
+
+How impact is measured (Johan asked how an impact tool can be judged): three answer keys, from strictest to broadest.
+- **Mutation:** break one function on purpose, run the tests; the tests that fail are the true impact on tests. Compare with
+  the tests the tool predicted (precision and recall).
+- **Compiler truth:** the transitive callers from SCIP are the exact static blast radius of a symbol.
+- **History:** for past commits, the files changed together and the tests that broke in CI.

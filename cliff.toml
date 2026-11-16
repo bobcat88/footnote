@@ -1,0 +1,46 @@
+# git-cliff configuration (https://git-cliff.org): CHANGELOG.md from Conventional Commits.
+# git-cliff 2.14.2 (Apache-2.0/MIT, orhun/git-cliff): the release zip for x86_64-pc-windows-msvc, sha256
+# 6ece2112b3f4af462190ecbea4aeb1315fff6af415629b597f84319073c31131 (GitHub asset digest, built by its release workflow).
+#   python scripts/changelog.py <git-cliff>           refresh CHANGELOG.md's Unreleased section
+#   git cliff --bumped-version                         the next version their types call for
+# Commit rules (checked in CI by scripts/check-commits.py): type(scope)!: subject, at most 72 characters.
+
+[changelog]
+header = ""
+body = """
+{% if version %}\
+## {{ version | trim_start_matches(pat="v") }} - {{ timestamp | date(format="%Y-%m-%d") }}
+{% else %}\
+## Unreleased
+{% endif %}\
+{% for group, commits in commits | group_by(attribute="group") %}
+### {{ group | striptags | trim | upper_first }}
+{% for commit in commits %}
+- {% if commit.scope %}**{{ commit.scope }}:** {% endif %}{% if commit.breaking %}[**breaking**] {% endif %}{{ commit.message | upper_first }}\
+{% endfor %}
+{% endfor %}\n
+"""
+trim = true
+
+[git]
+conventional_commits = true
+filter_unconventional = true
+split_commits = false
+protect_breaking_commits = true
+filter_commits = false
+tag_pattern = "v[0-9].*"
+sort_commits = "oldest"
+commit_parsers = [
+  { message = "^feat", group = "<!-- 0 -->Added" },
+  { message = "^fix", group = "<!-- 1 -->Fixed" },
+  { message = "^perf", group = "<!-- 2 -->Performance" },
+  { message = "^refactor", group = "<!-- 3 -->Changed" },
+  { message = "^docs", group = "<!-- 4 -->Documentation" },
+  { message = "^test", group = "<!-- 5 -->Tests and benchmarks" },
+  { message = "^(build|ci)", group = "<!-- 6 -->Build and CI" },
+  { message = "^revert", group = "<!-- 7 -->Reverted" },
+  { message = "^bench", group = "<!-- 5 -->Tests and benchmarks" }, # type used before the CI rule (16 Nov 2026)
+  { message = "^design", group = "<!-- 4 -->Documentation" }, # idem
+  { message = "^(chore|style)", skip = true },
+  { message = "^Merge", skip = true },
+]

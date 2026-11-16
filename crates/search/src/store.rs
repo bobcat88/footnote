@@ -74,7 +74,22 @@ pub fn open(path: &Path, write: bool) -> Result<Connection> {
     }
     Ok(c)
 }
+/// Markdown heading level and text (`## Title` -> 2, "Title"); `#hashtag` and `#!/bin/sh` are not headings.
+fn heading_of(s: &str) -> Option<(usize, &str)> {
+    let level = s.chars().take_while(|&c| c == '#').count();
+    let rest = &s[level..];
+    ((1..=6).contains(&level) && (rest.is_empty() || rest.starts_with(' ')))
+        .then(|| (level, rest.trim()))
+}
+
+/// Chunks follow the page structure: a new chunk at each heading (outside fenced code) once the current one has 500
+/// characters, otherwise the short section joins the next one in the same parent; a chunk ends past 2,000 characters but
+/// never inside a code block (hard cap 3,000). Each chunk's heading is its path in the page, `Page title > Section >
+/// Subsection`, so a short section ("Default values") still says which page and part it belongs to.
 pub fn text_chunks(c: &Connection, id: i64, text: &str, page: Option<i64>) -> Result<()> {
+    const FLOOR: usize = 500;
+    const TARGET: usize = 2000;
+    const MAX: usize = 3000;
     let title = text
         .lines()
         .find_map(|l| l.strip_prefix("# "))
@@ -82,27 +97,58 @@ pub fn text_chunks(c: &Connection, id: i64, text: &str, page: Option<i64>) -> Re
         .chars()
         .take(500)
         .collect::<String>();
+    let mut path: Vec<String> = Vec::new();
     let mut heading = String::new();
     let mut chunk = String::new();
+    let (mut len, mut level0) = (0usize, 0usize); // chunk length in characters, level of the heading it started at
     let mut line = 1;
+    let mut fence = false;
     for (n, s) in text.lines().enumerate() {
-        if s.starts_with('#') || chunk.chars().count() + s.chars().count() > 2000 {
+        let t = s.trim_start();
+        let fence_line = t.starts_with("```") || t.starts_with("~~~");
+        let head = if fence { None } else { heading_of(s) };
+        let flush = match head {
+            Some((level, _)) => len >= FLOOR || level < level0,
+            None => !fence && len + s.chars().count() > TARGET,
+        };
+        if flush {
             add_chunk(c, id, &heading, page, line, &chunk, &title)?;
             chunk.clear();
-            if s.starts_with('#') {
-                heading = s.trim_start_matches('#').trim().chars().take(500).collect();
+            len = 0;
+        }
+        if let Some((level, h)) = head {
+            path.truncate(level - 1);
+            path.resize(level - 1, String::new());
+            path.push(h.to_string());
+            if len == 0 || level0 == 0 {
+                let parts: Vec<&str> = path
+                    .iter()
+                    .map(String::as_str)
+                    .filter(|p| !p.is_empty())
+                    .collect();
+                let mut joined = parts.join(" > ");
+                if !title.is_empty() && level > 1 && !joined.starts_with(title.as_str()) {
+                    joined = format!("{title} > {joined}");
+                }
+                heading = joined.chars().take(500).collect();
+                level0 = level;
             }
         }
-        if chunk.is_empty() {
+        if len == 0 {
             line = n as i64 + 1;
         }
         for ch in s.chars().chain(std::iter::once('\n')) {
-            if chunk.chars().count() == 2000 {
+            if len >= if fence { MAX } else { TARGET } {
                 add_chunk(c, id, &heading, page, line, &chunk, &title)?;
                 chunk.clear();
+                len = 0;
                 line = n as i64 + 1;
             }
             chunk.push(ch);
+            len += 1;
+        }
+        if fence_line {
+            fence = !fence;
         }
     }
     add_chunk(c, id, &heading, page, line, &chunk, &title)
@@ -151,6 +197,22 @@ pub fn hit(r: &rusqlite::Row<'_>, full: bool) -> rusqlite::Result<Value> {
         json!({"id":r.get::<_,i64>(0)?,"path":path,"sha256":sha,"revision":r.get::<_,i64>(3)?,"status":status,"extractor":r.get::<_,String>(5)?,"heading":r.get::<_,String>(6)?,"page":r.get::<_,Option<i64>>(7)?,"line":r.get::<_,i64>(8)?,"text":text.chars().take(if full {2000} else {500}).collect::<String>(),"freshness":freshness(&path,&sha,&status),"trust":"untrusted_source_data"}),
     )
 }
+/// What a search returns per hit: where it is and what it says. Hashes, revision, status and extractor stay in `get <id>`;
+/// the untrusted-data label is stated once per response (`TRUST`). About a third fewer characters per result list.
+pub fn lean(mut hits: Vec<Value>) -> Vec<Value> {
+    for v in &mut hits {
+        if let Some(o) = v.as_object_mut() {
+            for k in ["sha256", "revision", "status", "extractor", "trust"] {
+                o.remove(k);
+            }
+            if o.get("page").is_some_and(Value::is_null) {
+                o.remove("page");
+            }
+        }
+    }
+    hits
+}
+pub const TRUST: &str = "untrusted_source_data";
 pub const HIT: &str = "SELECT c.id,s.path,s.sha256,s.revision,s.status,s.extractor,c.heading,c.page,c.line,c.text FROM chunks c JOIN sources s ON s.id=c.source_id";
 /// Counts the chunks already returned from each source file, so one long file cannot fill the whole result list.
 pub struct PerSource {
@@ -239,7 +301,9 @@ pub fn search(
                 results.push(v);
             }
         }
-        return Ok(json!({"mode":"lexical_bm25","results":results,"records":records}));
+        return Ok(
+            json!({"mode":"lexical_bm25","results":lean(results),"records":records,"trust":TRUST}),
+        );
     }
     let sql = format!(
         "{HIT} JOIN search_fts f ON f.rowid=c.id WHERE search_fts MATCH ?1 AND s.status='indexed' AND c.id=(SELECT min(c2.id) FROM chunks c2 JOIN sources s2 ON s2.id=c2.source_id WHERE s2.sha256=s.sha256 AND s2.status='indexed' AND c2.heading=c.heading AND c2.page IS c.page AND c2.line=c.line AND c2.text=c.text) ORDER BY bm25(search_fts),c.id LIMIT ?2"
@@ -258,7 +322,7 @@ pub fn search(
         .filter(|v| cap.allow(v["path"].as_str().unwrap_or("")))
         .take(text_limit)
         .collect();
-    Ok(json!({"mode":"lexical_fts5","results":results,"records":records}))
+    Ok(json!({"mode":"lexical_fts5","results":lean(results),"records":records,"trust":TRUST}))
 }
 pub fn stats(c: &Connection) -> Result<Value> {
     let mut statuses = serde_json::Map::new();
@@ -295,4 +359,40 @@ pub fn backup(c: &Connection, output: &Path) -> Result<Value> {
         digest.update(&buffer[..n]);
     }
     Ok(json!({"backup":output,"sha256":format!("{:x}",digest.finalize())}))
+}
+
+#[cfg(test)]
+mod chunk_tests {
+    use super::*;
+
+    #[test]
+    fn chunks_follow_structure_merge_short_sections_and_keep_code_whole() {
+        let dir = tempfile::tempdir().unwrap();
+        let c = open(&dir.path().join("t.db"), true).unwrap();
+        c.execute("INSERT INTO sources(root,path,sha256,revision,status,extractor) VALUES('r','p','s',1,'indexed','md')", [])
+            .unwrap();
+        let id = c.last_insert_rowid();
+        let code = format!(
+            "# not a heading\n{}",
+            "let x = 1; // some code\n".repeat(90)
+        ); // ~2,000 chars
+        let doc = format!(
+            "# T\nintro\n## A\n{}\n## B\n```sh\n{code}```\n## C\nshort\n### D\nd\n# U\nu\n",
+            "a".repeat(600)
+        );
+        text_chunks(&c, id, &doc, None).unwrap();
+        let rows: Vec<(String, String)> = c
+            .prepare("SELECT heading, text FROM chunks ORDER BY id")
+            .unwrap()
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+            .unwrap()
+            .map(Result::unwrap)
+            .collect();
+        let heads: Vec<&str> = rows.iter().map(|r| r.0.as_str()).collect();
+        // A's short intro joins A; B keeps its whole code block; D joins its short parent C; U leaves C's parent.
+        assert_eq!(heads, ["T", "T > B", "T > C", "U"]);
+        assert_eq!(rows[1].1.matches("```").count(), 2);
+        assert!(rows[2].1.contains("### D"));
+        assert!(heading_of("#hashtag").is_none() && heading_of("#!/bin/sh").is_none());
+    }
 }

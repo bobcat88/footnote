@@ -1,6 +1,6 @@
 # Footnote backlog
 
-Last updated 15 November 2026. One prioritised list; Beads stays the authority for tracked tasks. Order inside a tier is the order
+Last updated 16 November 2026. One prioritised list; Beads stays the authority for tracked tasks. Order inside a tier is the order
 of work. "Johan" marks items waiting for his go.
 
 ## Recently done
@@ -9,6 +9,13 @@ of work. "Johan" marks items waiting for his go.
 - Test 6 ([results](../../bench/experiments/LLAMACPP-INPROCESS.md)): Jina v5 nano in-process, wired into the product
   (`--features llama`), held-out quality passes on the product: Alloprof +0.103 [+0.090, +0.115], mix-fr-en +0.083 [+0.074, +0.093].
 - Audit-chain fork fixed (two concurrent MCP sessions); Rust-encoder build with metrics installed (15 Nov).
+- Documentation optimisation (16 Nov, [protocol and results](../../bench/experiments/DOCS-OPTIMIZE-2026-11-16.md)), PRs #19
+  and #20: adaptive crawl (x3.6), heading path (+0.044), structure-aware chunks (+0.051), one passage per page (+0.029),
+  extraction fix for footer-only pages, lean search output (-42 % characters, rankings identical). Installed (metrics build).
+- **Sealed final against Grounded Docs: worse** (-0.203 nDCG@5): equivalent on Hono, lost on Flask, whose crawl Cloudflare
+  blocked after Grounded's scrape; Footnote also trails on Grounded's own Flask pages (-0.073). Next: look at Sphinx-built
+  docs (Flask, Python) on the development sets, and fix the final's design (alternate order or cool-down between systems)
+  before a new sealed set.
 
 ## P0: protect and finish what exists (small, this week)
 
@@ -21,7 +28,9 @@ of work. "Johan" marks items waiting for his go.
    Self-contained writing guidance added in the repository after a [600-memory bilingual synthetic pilot](../../bench/experiments/MEMORY-WRITTEN-RESULTS.md).
    Raw retrieval improves in that controlled fixture; the no-answer injection gate still fails. Live hybrid recall remains off;
    real agent-written memories and independent relevance review are still needed.
-5. **Jina nano latency on an idle machine** (Johan says when), then ship it as the opt-in French/mixed profile.
+5. **Ship Jina nano as the opt-in French/mixed profile.** Idle-machine latency measured 15 Nov evening
+   ([LLAMACPP-INPROCESS.md](../../bench/experiments/LLAMACPP-INPROCESS.md)): about +6 ms at p50, +26 ms at p95 per search. Left:
+   a `models install` recipe for the GGUF file and release builds with `--features llama` (CMake and LLVM in CI).
 6. **Memory review** around 21 November (baseline: memory 134).
 
 7. ~~Documentation tool for agents~~ done 15 Nov (Johan): Context7 removed from Claude, Codex and the shared agent contracts;
@@ -42,11 +51,16 @@ Plan and decisions: [P1-PLAN.md](P1-PLAN.md) (engine commands first, then design
     Kept on purpose: `tools/embed.py`, no longer on any product path, stays the reference recipe that benchmarks import and fingerprint
     (`rust_encoder.py`, `helper_speed.py`, `server_benchmark.py`, `engines.py` cache key).
 11. **Icons:** one family, one icon per product.
+11b. **Phones and tablets** (Johan 16 Nov, [study of T3 Code's remote access](../research/REMOTE-ACCESS-STUDY.md)): today through T3
+    Code, nothing to build. With the launcher: serve its screens on the LAN or tailnet with one-time QR pairing, per-device
+    scoped sessions, private addresses only. No hosted relay unless a customer asks.
 
 ## P2: new products
 
-12. **Footnote Alias** (pseudonymisation before the LLM): desk study first (Presidio, LLM Guard, GLiNER PII, French accuracy), then a
-    French + English prototype with underline-and-explain. Design notes below.
+12. **Footnote Alias** (pseudonymisation before the LLM): desk study done 16 Nov ([ALIAS-DESK-STUDY.md](../research/ALIAS-DESK-STUDY.md)):
+    French identifier rules in Rust (no tool ships them), one small model for names and addresses chosen by measurement on French
+    text (GLiNER2-PII, urchade multi PII, OpenAI Privacy Filter as reference), stable keyed pseudonyms. Next: a French + English
+    evaluation set and a decision rule for Johan to confirm, then the prototype with underline-and-explain. Design notes below.
 13. **Footnote Code:** code-graph study ([plan](../research/CODE-GRAPH-STUDY.md)); hands-on after Johan's go.
     Its graph visualizer uses the family's design language, decided with the launcher in the M2 studio
     ([analysis, section 5](../research/LAUNCHER-DESIGN-ANALYSIS.md)).
@@ -79,6 +93,10 @@ Plan and decisions: [P1-PLAN.md](P1-PLAN.md) (engine commands first, then design
   enough for a V1. Later, each measured before adoption: hits grouped by page (first), crawler improvements, page-cleaning passes
   before embedding, more retrieval techniques, and a larger embedding model for documentation only (indexed rarely, per version,
   so a slower build for better precision is an acceptable trade).
+  **Versions (Johan, 16 Nov; post-V1, after the full stack harness ships):** reuse vectors across documentation versions (a cache keyed by chunk-text hash and model, so a
+  new version only embeds changed passages), then measure how much two versions share (React 18/19, Python 3.12/3.13) before
+  deciding whether versions should share stored passages (a common store per source with a list per version, as git does)
+  instead of one full database each; the saving adds up across many stacks and versions.
 
 ## Later: company deployment (not urgent, Johan 15 Nov)
 
@@ -104,6 +122,15 @@ and MCP call, measured on an idle machine and turned into a cost per 1,000 users
 of users per server, so a light per-call footprint decides whether agents can be switched on for everyone; chained agents also put
 every hook on the critical path. Feeds the IT security (SSI) entry of the compliance kit.
 
+**Shared daemon throughput** (measured 16 Nov on an idle machine, `bench/work/mcp-load-idle-20261116/`, React docs, hybrid):
+the shared daemon plateaus at 281-286 requests/s from 20 clients on, p50 rising in step with the clients (70 ms at 20, 140 ms at
+40), while one server per client reaches 776 requests/s at 20 clients for 9.5 GB summed working set (daemon: 0.7 GB). Cause,
+from the code: every query's inference runs while holding the one global encoder-pool lock (`semantic.rs`, `ENCODERS`), and
+the keyword search holds the Tantivy cache lock (`lexical.rs`, `OPEN`), so about 3.5 ms per request is serialized across all
+sessions. Fix when company scale matters: a lock per model and a small pool of query sessions (2 threads each), the Tantivy
+reader shared without a lock (it is thread-safe); verify with the same load bench and identical rankings. Not needed for a
+handful of agents on one machine.
+
 ## Ideas, unranked
 
 - **AI sobriety: one view of usage, cost and savings** (Johan, 15 Nov). Explore a Footnote-family workspace that combines the
@@ -121,6 +148,23 @@ every hook on the critical path. Feeds the IT security (SSI) entry of the compli
 - Footnote Roadmap (visual roadmap from memories and Beads) and the project node map.
 - Baseline audit across projects: AI contracts and rules, security-reviewed skills, projects behind on push.
 - Progressive context levels (summary, overview, full on demand), after OpenViking.
+- **Leaner agent output** (Johan, 16 Nov). Measured on one Vite search (5 results, characters, not tokens): today 4,211;
+  the same results with 5 fields (id, path relative to the root, heading, line, text) 2,866 (68 %); those 5 fields as a
+  TOON-style table 2,686 (64 %); as plain Markdown 2,592 (62 %). Most of the saving is dropping fields an agent does not use in a
+  search (sha256, revision, status, extractor, `trust` per result, absolute path): do that first, it has no precision risk.
+  Formats on what remains are worth a few points only, because our results are mostly free text, not uniform short values.
+  - CSV: no (multi-line text). TOON: about 4 points more, quoting-heavy on Markdown and code.
+  - JTON (arXiv 2604.05865, one author, April 2026; Rust implementation with Python bindings, code licence not stated): JSON
+    superset with a header-once "Zen Grid" for arrays of same-shaped objects; 15-60 % fewer tokens on such arrays (o200k_base),
+    0 % on GitHub data without bare strings. Comprehension 59.1 % JSON vs 59.4 % JTON over 350 questions on 10 models (one
+    question; GPT-5.1 -8.6 pp), no confidence intervals, no Claude comprehension test, no accuracy comparison with TOON.
+  - If a format is tested: pre-registered agent-answer bench on our own questions with Claude, lean JSON vs Markdown vs JTON,
+    accuracy and tokens. MCP's JSON-RPC envelope stays JSON; only the tool result text can change, opt-in.
+- **Internal serialization: not pursued** (Johan's options of 16 Nov: MessagePack, Bincode, CBOR, FlatBuffers). Vectors are
+  already binary blobs in SQLite (388 bytes each), chunks are SQLite columns, Tantivy has its own format; the JSON left (jobs,
+  config and policy, crawl-hosts, receipts, CLI output) is meant to be read by people, the launcher and scripts, and is a few KB
+  written rarely. Bincode is not self-describing (a struct change breaks stored data). Reopen only if profiling (index build,
+  the daemon's ~285 requests/s plateau) shows JSON on a hot path; MessagePack first then.
 - Verify the DeepSeek memory hook. Product page v2 (`design/site/index.html`): QLoop review before commit.
 
 ## Footnote Alias, design notes

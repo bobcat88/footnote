@@ -40,7 +40,7 @@ fn title_context_is_searchable_within_child_sections() {
             .as_array()
             .unwrap()
             .iter()
-            .any(|r| r["heading"] == "WAL")
+            .any(|r| r["text"].as_str().unwrap_or("").contains("## WAL"))
     };
     assert!(has_wal(&call(&["search", "SQLite checkpoint"])));
     // A natural-language question with filler words used to return nothing (every word had to match).

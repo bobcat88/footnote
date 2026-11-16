@@ -678,8 +678,10 @@ fn recent_chunks(c: &Connection, limit: usize) -> Result<Vec<Value>> {
         "{} WHERE s.status='indexed' ORDER BY c.id DESC LIMIT ?1",
         app::HIT
     ))?;
-    Ok(s.query_map(params![limit as i64], |r| app::hit(r, false))?
-        .collect::<rusqlite::Result<_>>()?)
+    Ok(footnote_search::store::lean(
+        s.query_map(params![limit as i64], |r| app::hit(r, false))?
+            .collect::<rusqlite::Result<_>>()?,
+    ))
 }
 
 /// Structured proposals need the CLI's file allowlist and evidence hashing.
@@ -826,7 +828,7 @@ fn tool_definitions() -> Value {
                     "project": {"type": "string", "maxLength": 200},
                     "tested_version": {"type": "string", "maxLength": 200, "description": "component=exact-version"},
                     "status": {"type": "string", "enum": ["proposal", "validated", "superseded"]},
-                    "per_source": {"type": "integer", "minimum": 1, "maximum": 20, "description": "At most this many chunks of one source file in the results; use 1 to get the best chunk of each file."},
+                    "per_source": {"type": "integer", "minimum": 1, "maximum": 20, "description": "At most this many chunks of one source file in the results; use 1 to get the best chunk of each file (recommended for documentation: +0.03 nDCG@5 on 99 questions)."},
                     "model": {"oneOf": [{"type": "string", "maxLength": 200}, {"type": "array", "items": {"type": "string", "maxLength": 200}, "minItems": 1, "maxItems": 3}], "description": "Local embedding model directory, or up to three for an ensemble; required when mode=hybrid (mirrors CLI --model)."}
                 },
                 "required": ["query"],

@@ -50,6 +50,21 @@ When the daemon runs, it may relay the same events over its local socket for mil
 2. Design studio for the launcher: references, four directions, Johan picks and tunes, `DESIGN.md` locked. Screens: Overview
    (one card per product: on or off, health, this week's activity), Product (its options with their impact), Models (installed,
    recommended, disk), Activity (what memory saved and recalled: the visibility principle), Settings.
+   **Every module is always listed (Johan, 16 Nov):** products and models not installed appear greyed out with their install
+   action, so the user sees everything Footnote can do. Pattern taken from the ArtCraft launcher
+   ([storytold/craft-launcher](https://github.com/storytold/craft-launcher), MIT or Apache-2.0, `crates/ui-egui/src/views.rs`);
+   our layout and look stay our own:
+   - order: pinned, then installed, then a "Not installed" header with the rest;
+   - a missing module is drawn in greys (grey copy of its icon, muted text) and takes its colours back under the pointer, so
+     it stays readable and clearly available;
+   - a module not released yet shows "Coming soon" instead of Install (Code and Alias today); one locked by company policy
+     shows the lock and its reason;
+   - filters All / Installed / Updates / Not installed with counts, a grid or sortable table, "Update all";
+   - a card's states: available to install, downloading (size, percent, pause, cancel), installed and up to date, update
+     available (installed → released version), coming soon;
+   - modules can be hidden and found again behind a "Hidden" toggle.
+   Engine side: `footnote status` lists only Library and Memory today; M3 adds the full catalogue (every product and model with
+   its state) so the window draws from one command.
 3. Icons in the same pass: one family, one icon per product (Footnote, Library, Memory, Code, Alias). SVG master, then ICO for
    Windows and PNG sizes; ICNS with macOS.
 
