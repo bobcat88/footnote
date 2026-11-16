@@ -1,10 +1,15 @@
 import { useCallback, useEffect, useState } from "react";
 import Code from "./Code.jsx";
+import { Activity as ActivityScreen, Models, Projects as ProjectsScreen, Usage } from "./Screens.jsx";
 import { AGENTS, load, mb, num, seen, shortDate } from "./data.js";
 
 const SCREENS = {
   overview: { title: "Overview", note: "this week" },
   code: { title: "Code" },
+  projects: { title: "Projects" },
+  models: { title: "Models" },
+  activity: { title: "Activity", note: "what Memory did" },
+  usage: { title: "Usage", note: "tokens your agents used" },
   enterprise: { title: "Footnote Enterprise" },
 };
 
@@ -56,6 +61,14 @@ export default function App() {
           <Enterprise />
         ) : state.error ? (
           <Problem error={state.error} retry={refresh} />
+        ) : screen === "projects" ? (
+          <ProjectsScreen projects={projects} />
+        ) : screen === "models" ? (
+          <Models />
+        ) : screen === "activity" ? (
+          <ActivityScreen />
+        ) : screen === "usage" ? (
+          <Usage />
         ) : screen === "code" ? (
           <Code projects={projects} view={view === "symbol" ? "symbol" : "map"} go={(v) => go(`code/${v}`)} />
         ) : (
@@ -101,12 +114,11 @@ function Sidebar({ status, projects, screen, go }) {
       </nav>
       <h2 className="grp">Workspace</h2>
       <nav className="nav" aria-label="Workspace">
-        <span className="item">
-          Projects<span className="n">{projects ? num(projects.projects.length) : ""}</span>
-        </span>
-        <span className="item">
-          Models<span className="n">{status ? `${models.filter((m) => m.installed).length} / ${models.length}` : ""}</span>
-        </span>
+        {item("projects", "Projects", <span className="n">{projects ? num(projects.projects.length) : ""}</span>)}
+        {item("models", "Models",
+          <span className="n">{status ? `${models.filter((m) => m.installed).length} / ${models.length}` : ""}</span>)}
+        {item("activity", "Activity")}
+        {item("usage", "Usage")}
       </nav>
       {optional.length > 0 && (
         <>

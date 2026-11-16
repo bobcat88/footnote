@@ -101,8 +101,30 @@ const code = {
   }],
 };
 
+const day = (back, requests, output, read, price) => ({
+  date: iso(back), requests, output, cache_read: read, input: requests * 40, cache_write_5m: 0,
+  cache_write_1h: requests * 900, api_price_usd: price, unpriced_requests: 0,
+});
+const usageDays = [day(6, 410, 380000, 61e6, 21.4), day(5, 980, 910000, 140e6, 52.9), day(4, 0, 0, 0, 0),
+  day(3, 640, 600000, 95e6, 33.1), day(2, 1210, 1150000, 188e6, 71.6), day(1, 870, 790000, 133e6, 49.2),
+  day(0, 520, 470000, 79e6, 28.8)];
+const sum = (k) => usageDays.reduce((s, d) => s + d[k], 0);
+const usage = {
+  days: 7, prices: "2026-11-16", note: "",
+  totals: Object.fromEntries(["requests", "output", "cache_read", "input", "cache_write_5m", "cache_write_1h", "api_price_usd",
+    "unpriced_requests"].map((k) => [k, sum(k)])),
+  by_day: usageDays.filter((d) => d.requests > 0),
+  by_model: [
+    { model: "claude-opus-5-5", requests: 2600, api_price_usd: 171.2 },
+    { model: "claude-sonnet-5-5", requests: 1450, api_price_usd: 63.4 },
+    { model: "gpt-6.1-terra", requests: 580, api_price_usd: 22.4 },
+  ],
+  by_agent: [{ agent: "claude-code", requests: 4050 }, { agent: "codex", requests: 580 }],
+  unpriced_models: [],
+};
+
 export const fixtures = {
-  ok: { status, projects, activity, "models list": models, "code-map": codeMap, code },
+  ok: { status, projects, activity, "models list": models, "code-map": codeMap, code, usage },
   empty: {
     status: {
       ...status,
@@ -115,6 +137,7 @@ export const fixtures = {
     },
     projects: { projects: [] },
     activity: { activity_log: false, days: [], most_used: [] },
+    usage: { ...usage, totals: Object.fromEntries(Object.keys(usage.totals).map((k) => [k, 0])), by_day: [], by_model: [], by_agent: [] },
     "models list": { ...models, models: models.models.map((m) => ({ ...m, installed: false, bytes: undefined })) },
   },
 };

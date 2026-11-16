@@ -12,6 +12,7 @@ fn allowed(args: &[String]) -> bool {
     match a.as_slice() {
         ["status"] | ["projects"] | ["activity"] | ["models", "list"] => true,
         ["code", name, "--root", _] => !name.starts_with('-'),
+        ["activity" | "usage", "--days", d] => d.parse::<u16>().is_ok(),
         ["code-map", "--root", _] => true,
         ["code-map", "--root", _, "--depth", d] => d.parse::<u8>().is_ok(),
         _ => false,
@@ -96,5 +97,6 @@ mod tests {
         );
         assert!(!ok("forget 12") && !ok("install --memory") && !ok("models install jina-v5-nano"));
         assert!(!ok("code --root . --root") && !ok("code-map --root . --depth 2;rm"));
+        assert!(ok("usage --days 30") && ok("activity --days 7") && !ok("usage --days x"));
     }
 }
