@@ -21,7 +21,9 @@ of work. "Johan" marks items waiting for his go.
    Self-contained writing guidance added in the repository after a [600-memory bilingual synthetic pilot](../../bench/experiments/MEMORY-WRITTEN-RESULTS.md).
    Raw retrieval improves in that controlled fixture; the no-answer injection gate still fails. Live hybrid recall remains off;
    real agent-written memories and independent relevance review are still needed.
-5. **Jina nano latency on an idle machine** (Johan says when), then ship it as the opt-in French/mixed profile.
+5. **Ship Jina nano as the opt-in French/mixed profile.** Idle-machine latency measured 15 Nov evening
+   ([LLAMACPP-INPROCESS.md](../../bench/experiments/LLAMACPP-INPROCESS.md)): about +6 ms at p50, +26 ms at p95 per search. Left:
+   a `models install` recipe for the GGUF file and release builds with `--features llama` (CMake and LLVM in CI).
 6. **Memory review** around 21 November (baseline: memory 134).
 
 7. ~~Documentation tool for agents~~ done 15 Nov (Johan): Context7 removed from Claude, Codex and the shared agent contracts;
@@ -42,11 +44,16 @@ Plan and decisions: [P1-PLAN.md](P1-PLAN.md) (engine commands first, then design
     Kept on purpose: `tools/embed.py`, no longer on any product path, stays the reference recipe that benchmarks import and fingerprint
     (`rust_encoder.py`, `helper_speed.py`, `server_benchmark.py`, `engines.py` cache key).
 11. **Icons:** one family, one icon per product.
+11b. **Phones and tablets** (Johan 16 Nov, [study of T3 Code's remote access](../research/REMOTE-ACCESS-STUDY.md)): today through T3
+    Code, nothing to build. With the launcher: serve its screens on the LAN or tailnet with one-time QR pairing, per-device
+    scoped sessions, private addresses only. No hosted relay unless a customer asks.
 
 ## P2: new products
 
-12. **Footnote Alias** (pseudonymisation before the LLM): desk study first (Presidio, LLM Guard, GLiNER PII, French accuracy), then a
-    French + English prototype with underline-and-explain. Design notes below.
+12. **Footnote Alias** (pseudonymisation before the LLM): desk study done 16 Nov ([ALIAS-DESK-STUDY.md](../research/ALIAS-DESK-STUDY.md)):
+    French identifier rules in Rust (no tool ships them), one small model for names and addresses chosen by measurement on French
+    text (GLiNER2-PII, urchade multi PII, OpenAI Privacy Filter as reference), stable keyed pseudonyms. Next: a French + English
+    evaluation set and a decision rule for Johan to confirm, then the prototype with underline-and-explain. Design notes below.
 13. **Footnote Code:** code-graph study ([plan](../research/CODE-GRAPH-STUDY.md)); hands-on after Johan's go.
     Its graph visualizer uses the family's design language, decided with the launcher in the M2 studio
     ([analysis, section 5](../research/LAUNCHER-DESIGN-ANALYSIS.md)).
