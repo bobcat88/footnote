@@ -28,7 +28,10 @@ fn memory(_: &Path) -> Result<Value> {
 #[cfg(feature = "memory")]
 pub(crate) fn memory_db(state: &Path) -> Result<std::path::PathBuf> {
     let settings = footnote_core::config::product_settings(state, "memory")?;
-    Ok(settings["db"].as_str().map(std::path::PathBuf::from).unwrap_or_else(|| state.join("memory.db")))
+    Ok(settings["db"]
+        .as_str()
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| state.join("memory.db")))
 }
 
 #[cfg(feature = "memory")]

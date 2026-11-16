@@ -8,9 +8,19 @@ use std::{fs, path::Path};
 fn file_name(project: &str) -> String {
     let safe: String = project
         .chars()
-        .map(|c| if c.is_ascii_alphanumeric() || "._-".contains(c) { c } else { '-' })
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || "._-".contains(c) {
+                c
+            } else {
+                '-'
+            }
+        })
         .collect();
-    if safe.trim_matches(['.', '-']).is_empty() { "unnamed".into() } else { safe }
+    if safe.trim_matches(['.', '-']).is_empty() {
+        "unnamed".into()
+    } else {
+        safe
+    }
 }
 
 fn today() -> String {
@@ -29,7 +39,11 @@ pub fn seen(state: &Path, project: &str, root: &str) -> Result<()> {
         .and_then(|v| v["first_seen"].as_str().map(str::to_string))
         .unwrap_or_else(today);
     let tmp = path.with_extension("json.tmp");
-    fs::write(&tmp, json!({"name": project, "path": root, "first_seen": first, "last_seen": today()}).to_string())?;
+    fs::write(
+        &tmp,
+        json!({"name": project, "path": root, "first_seen": first, "last_seen": today()})
+            .to_string(),
+    )?;
     fs::rename(&tmp, &path)?;
     Ok(())
 }
@@ -53,7 +67,8 @@ pub fn list(state: &Path) -> Result<Value> {
         p["memories"] = json!(memories.get(&name).copied().unwrap_or(0));
         #[cfg(feature = "code")]
         {
-            p["code_graph"] = json!(crate::app::code_db(Path::new(&root)).is_ok_and(|db| db.exists()));
+            p["code_graph"] =
+                json!(crate::app::code_db(Path::new(&root)).is_ok_and(|db| db.exists()));
         }
         if p["exists"] == true {
             p["git"] = git_state(&root);
@@ -69,7 +84,9 @@ fn git_state(root: &str) -> Value {
     if top.is_empty() {
         return Value::Null;
     }
-    let unpushed = crate::hook::git(root, &["rev-list", "--count", "@{u}..HEAD"]).parse::<u64>().ok();
+    let unpushed = crate::hook::git(root, &["rev-list", "--count", "@{u}..HEAD"])
+        .parse::<u64>()
+        .ok();
     json!({"uncommitted": status.lines().filter(|l| !l.trim().is_empty()).count(), "unpushed": unpushed})
 }
 
@@ -91,7 +108,10 @@ mod tests {
     #[test]
     fn project_names_become_safe_file_names() {
         assert_eq!(super::file_name("footnote"), "footnote");
-        assert_eq!(super::file_name("dossier financier/../x"), "dossier-financier-..-x");
+        assert_eq!(
+            super::file_name("dossier financier/../x"),
+            "dossier-financier-..-x"
+        );
         assert_eq!(super::file_name(".."), "unnamed");
     }
 }

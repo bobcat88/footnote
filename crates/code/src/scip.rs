@@ -37,7 +37,9 @@ enum Value<'a> {
 fn varint(b: &[u8], i: &mut usize) -> Result<u64> {
     let (mut v, mut shift) = (0u64, 0);
     loop {
-        let Some(&x) = b.get(*i) else { bail!("truncated SCIP varint") };
+        let Some(&x) = b.get(*i) else {
+            bail!("truncated SCIP varint")
+        };
         *i += 1;
         if shift > 63 {
             bail!("SCIP varint too long");
@@ -59,7 +61,9 @@ fn fields(b: &[u8]) -> Result<Vec<(u64, Value<'_>)>> {
             0 => Value::Int(varint(b, &mut i)?),
             2 => {
                 let n = usize::try_from(varint(b, &mut i)?)?;
-                let Some(s) = b.get(i..i.saturating_add(n)) else { bail!("truncated SCIP field") };
+                let Some(s) = b.get(i..i.saturating_add(n)) else {
+                    bail!("truncated SCIP field")
+                };
                 i += n;
                 Value::Bytes(s)
             }
@@ -144,7 +148,9 @@ fn symbol(b: &[u8]) -> Result<Symbol> {
 pub fn read(index: &[u8]) -> Result<Vec<Document>> {
     let mut docs = Vec::new();
     for (f, v) in fields(index)? {
-        let (2, Value::Bytes(d)) = (f, v) else { continue };
+        let (2, Value::Bytes(d)) = (f, v) else {
+            continue;
+        };
         let mut doc = Document::default();
         for (g, w) in fields(d)? {
             match (g, w) {
@@ -185,8 +191,20 @@ mod tests {
         let docs = read(&field(2, &doc)).unwrap();
         assert_eq!(docs[0].path, "src/main.rs");
         let o = &docs[0].occurrences[0];
-        assert_eq!((o.range, o.symbol.as_str(), o.roles, o.enclosing), ([3, 4, 3, 9], "s", 1, Some([3, 0, 7, 1])));
-        assert_eq!((docs[0].symbols[0].display_name.as_str(), docs[0].symbols[0].signature.as_str()), ("main", "fn main()"));
-        assert!(read(&[0x12, 0x05, 1]).is_err(), "truncated input is an error, not a panic");
+        assert_eq!(
+            (o.range, o.symbol.as_str(), o.roles, o.enclosing),
+            ([3, 4, 3, 9], "s", 1, Some([3, 0, 7, 1]))
+        );
+        assert_eq!(
+            (
+                docs[0].symbols[0].display_name.as_str(),
+                docs[0].symbols[0].signature.as_str()
+            ),
+            ("main", "fn main()")
+        );
+        assert!(
+            read(&[0x12, 0x05, 1]).is_err(),
+            "truncated input is an error, not a panic"
+        );
     }
 }

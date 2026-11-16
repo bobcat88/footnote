@@ -42,7 +42,11 @@ fn short_name(symbol: &str) -> String {
     if s.ends_with(')') {
         s = s.rfind('(').map_or(s, |i| &s[..i]); // method disambiguator: `run().`, `run(+1).`
     }
-    s.rsplit(['/', '#', '.', ' ']).next().unwrap_or(s).trim_matches('`').to_string()
+    s.rsplit(['/', '#', '.', ' '])
+        .next()
+        .unwrap_or(s)
+        .trim_matches('`')
+        .to_string()
 }
 
 fn contains(outer: [i32; 4], at: [i32; 4]) -> bool {
@@ -53,7 +57,10 @@ fn contains(outer: [i32; 4], at: [i32; 4]) -> bool {
 pub fn index(root: &Path, db: &Path) -> Result<Value> {
     let started = Instant::now();
     if !root.join("Cargo.toml").is_file() {
-        bail!("no Cargo.toml in {}: Footnote Code reads Rust projects for now", root.display());
+        bail!(
+            "no Cargo.toml in {}: Footnote Code reads Rust projects for now",
+            root.display()
+        );
     }
     let parent = db.parent().context("database path")?;
     std::fs::create_dir_all(parent)?;
@@ -66,7 +73,10 @@ pub fn index(root: &Path, db: &Path) -> Result<Value> {
         .output()
         .context("run rust-analyzer (installed with `rustup component add rust-analyzer`)")?;
     if !out.status.success() {
-        bail!("rust-analyzer scip failed: {}", String::from_utf8_lossy(&out.stderr).trim());
+        bail!(
+            "rust-analyzer scip failed: {}",
+            String::from_utf8_lossy(&out.stderr).trim()
+        );
     }
     let indexer_ms = started.elapsed().as_millis();
     let bytes = std::fs::read(&scip_file)?;
@@ -76,15 +86,20 @@ pub fn index(root: &Path, db: &Path) -> Result<Value> {
     let _ = std::fs::remove_file(&building);
     let counts = write(&building, root, &docs)?;
     std::fs::rename(&building, db)?;
-    Ok(json!({"root": root, "db": db, "indexer": "rust-analyzer scip", "files": counts.0, "symbols": counts.1,
-        "references": counts.2, "indexer_ms": indexer_ms, "total_ms": started.elapsed().as_millis()}))
+    Ok(
+        json!({"root": root, "db": db, "indexer": "rust-analyzer scip", "files": counts.0, "symbols": counts.1,
+        "references": counts.2, "indexer_ms": indexer_ms, "total_ms": started.elapsed().as_millis()}),
+    )
 }
 
 fn write(db: &Path, root: &Path, docs: &[scip::Document]) -> Result<(usize, usize, usize)> {
     let mut c = Connection::open(db)?;
     c.execute_batch(SCHEMA)?;
     let tx = c.transaction()?;
-    tx.execute("INSERT INTO meta VALUES('root', ?1)", [root.to_string_lossy()])?;
+    tx.execute(
+        "INSERT INTO meta VALUES('root', ?1)",
+        [root.to_string_lossy()],
+    )?;
     let mut names: HashMap<&str, (&str, &str)> = HashMap::new();
     for d in docs {
         for s in &d.symbols {
@@ -93,16 +108,29 @@ fn write(db: &Path, root: &Path, docs: &[scip::Document]) -> Result<(usize, usiz
     }
     let (mut ids, mut file_ids) = (HashMap::<&str, i64>::new(), Vec::new());
     for d in docs {
-        let sha = std::fs::read(root.join(&d.path)).map(|b| footnote_core::hash(&b)).unwrap_or_default();
-        tx.execute("INSERT INTO files(path, sha256) VALUES(?1, ?2)", params![d.path, sha])?;
+        let sha = std::fs::read(root.join(&d.path))
+            .map(|b| footnote_core::hash(&b))
+            .unwrap_or_default();
+        tx.execute(
+            "INSERT INTO files(path, sha256) VALUES(?1, ?2)",
+            params![d.path, sha],
+        )?;
         let file = tx.last_insert_rowid();
         file_ids.push(file);
-        for o in d.occurrences.iter().filter(|o| o.roles & scip::DEFINITION != 0 && !o.symbol.starts_with("local ")) {
+        for o in d
+            .occurrences
+            .iter()
+            .filter(|o| o.roles & scip::DEFINITION != 0 && !o.symbol.starts_with("local "))
+        {
             if ids.contains_key(o.symbol.as_str()) {
                 continue;
             }
             let (display, signature) = names.get(o.symbol.as_str()).copied().unwrap_or(("", ""));
-            let name = if display.is_empty() { short_name(&o.symbol) } else { display.to_string() };
+            let name = if display.is_empty() {
+                short_name(&o.symbol)
+            } else {
+                display.to_string()
+            };
             let end = o.enclosing.unwrap_or(o.range)[2];
             tx.execute(
                 "INSERT INTO symbols(scip, name, kind, signature, file_id, line, end_line) VALUES(?1,?2,?3,?4,?5,?6,?7)",
@@ -119,11 +147,21 @@ fn write(db: &Path, root: &Path, docs: &[scip::Document]) -> Result<(usize, usiz
             let items: Vec<(&str, [i32; 4])> = d
                 .occurrences
                 .iter()
-                .filter(|o| o.roles & scip::DEFINITION != 0 && kind(&o.symbol) != "module" && !o.symbol.starts_with("local "))
+                .filter(|o| {
+                    o.roles & scip::DEFINITION != 0
+                        && kind(&o.symbol) != "module"
+                        && !o.symbol.starts_with("local ")
+                })
                 .filter_map(|o| o.enclosing.map(|e| (o.symbol.as_str(), e)))
                 .collect();
-            for o in d.occurrences.iter().filter(|o| o.roles & scip::DEFINITION == 0) {
-                let Some(&target) = ids.get(o.symbol.as_str()) else { continue };
+            for o in d
+                .occurrences
+                .iter()
+                .filter(|o| o.roles & scip::DEFINITION == 0)
+            {
+                let Some(&target) = ids.get(o.symbol.as_str()) else {
+                    continue;
+                };
                 let caller = items
                     .iter()
                     .filter(|(_, e)| contains(*e, o.range))
@@ -141,7 +179,12 @@ fn write(db: &Path, root: &Path, docs: &[scip::Document]) -> Result<(usize, usiz
 /// Definitions named `name`, each with signature, place, callers and callees. `stale` lists answer files changed since indexing.
 pub fn lookup(db: &Path, name: &str, limit: usize) -> Result<Value> {
     let c = Connection::open_with_flags(db, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
-        .with_context(|| format!("no code graph at {}; run `footnote code-index` first", db.display()))?;
+        .with_context(|| {
+            format!(
+                "no code graph at {}; run `footnote code-index` first",
+                db.display()
+            )
+        })?;
     let root: String = c.query_row("SELECT value FROM meta WHERE key='root'", [], |r| r.get(0))?;
     let mut defs = c.prepare(
         "SELECT s.id, s.name, s.kind, s.signature, f.path, s.line, s.end_line FROM symbols s JOIN files f ON f.id = s.file_id
@@ -158,8 +201,15 @@ pub fn lookup(db: &Path, name: &str, limit: usize) -> Result<Value> {
     let mut paths = Vec::new();
     let mut found = Vec::new();
     let rows = defs.query_map([name], |r| {
-        Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?, r.get::<_, String>(3)?,
-            r.get::<_, String>(4)?, r.get::<_, i64>(5)?, r.get::<_, i64>(6)?))
+        Ok((
+            r.get::<_, i64>(0)?,
+            r.get::<_, String>(1)?,
+            r.get::<_, String>(2)?,
+            r.get::<_, String>(3)?,
+            r.get::<_, String>(4)?,
+            r.get::<_, i64>(5)?,
+            r.get::<_, i64>(6)?,
+        ))
     })?;
     for row in rows {
         let (id, name, kind, signature, path, line, end) = row?;
@@ -177,9 +227,17 @@ pub fn lookup(db: &Path, name: &str, limit: usize) -> Result<Value> {
              GROUP BY r.symbol_id ORDER BY s.name LIMIT ?2",
             id,
         )?;
-        let references: i64 = c.query_row("SELECT count(*) FROM refs WHERE symbol_id = ?1", [id], |r| r.get(0))?;
+        let references: i64 = c.query_row(
+            "SELECT count(*) FROM refs WHERE symbol_id = ?1",
+            [id],
+            |r| r.get(0),
+        )?;
         paths.push(path.clone());
-        paths.extend(callers.iter().filter_map(|v| v["path"].as_str().map(str::to_string)));
+        paths.extend(
+            callers
+                .iter()
+                .filter_map(|v| v["path"].as_str().map(str::to_string)),
+        );
         found.push(json!({"name": name, "kind": kind, "signature": signature, "path": path, "lines": [line, end],
             "references": references, "callers": callers, "callees": callees}));
     }
@@ -187,8 +245,14 @@ pub fn lookup(db: &Path, name: &str, limit: usize) -> Result<Value> {
     paths.dedup();
     let mut stale = Vec::new();
     for p in paths {
-        let indexed: Option<String> = c.query_row("SELECT sha256 FROM files WHERE path = ?1", [&p], |r| r.get(0)).optional()?;
-        let now = std::fs::read(Path::new(&root).join(&p)).map(|b| footnote_core::hash(&b)).ok();
+        let indexed: Option<String> = c
+            .query_row("SELECT sha256 FROM files WHERE path = ?1", [&p], |r| {
+                r.get(0)
+            })
+            .optional()?;
+        let now = std::fs::read(Path::new(&root).join(&p))
+            .map(|b| footnote_core::hash(&b))
+            .ok();
         if indexed != now {
             stale.push(p);
         }

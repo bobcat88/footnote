@@ -438,7 +438,8 @@ fn handle(state: &Path, s: &Settings, event: &Value) -> Result<Option<Value>> {
         "SessionStart" => {
             let top = git(&e.cwd, &["rev-parse", "--show-toplevel"]);
             // Best effort: the project list must never cost the agent its memory pack.
-            let _ = crate::projects::seen(state, &project, if top.is_empty() { &e.cwd } else { &top });
+            let _ =
+                crate::projects::seen(state, &project, if top.is_empty() { &e.cwd } else { &top });
             embed_in_background(s, &db)?;
             if db.exists() {
                 let memories =

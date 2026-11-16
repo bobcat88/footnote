@@ -9,12 +9,20 @@ use sha2::{Digest, Sha256};
 use std::path::Path;
 use tokenizers::Tokenizer;
 
-const CATS: [&str; 8] = ["ACCOUNT", "ADDRESS", "DATE", "EMAIL", "PERSON", "PHONE", "URL", "SECRET"];
+const CATS: [&str; 8] = [
+    "ACCOUNT", "ADDRESS", "DATE", "EMAIL", "PERSON", "PHONE", "URL", "SECRET",
+];
 const N: usize = 1 + 4 * CATS.len();
 /// Pinned digests of the graph and tokenizer as benchmarked (ALIAS-EVAL.md).
 const PINNED: [(&str, &str); 2] = [
-    ("onnx/model_q4.onnx", "8f7dee8b46d096f052b359375dfba5d983cc4d18c44a783bf548615c472f8dea"),
-    ("tokenizer.json", "0614fe83cadab421296e664e1f48f4261fa8fef6e03e63bb75c20f38e37d07d3"),
+    (
+        "onnx/model_q4.onnx",
+        "8f7dee8b46d096f052b359375dfba5d983cc4d18c44a783bf548615c472f8dea",
+    ),
+    (
+        "tokenizer.json",
+        "0614fe83cadab421296e664e1f48f4261fa8fef6e03e63bb75c20f38e37d07d3",
+    ),
 ];
 /// Longest text one call accepts (characters); longer input is refused rather than silently truncated.
 const MAX_CHARS: usize = 100_000;
@@ -41,7 +49,15 @@ fn may_end(t: usize) -> bool {
 /// Best legal tag path for rows of log-probabilities (`N` per token).
 fn viterbi(logp: &[f32]) -> Vec<usize> {
     let rows: Vec<&[f32]> = logp.chunks(N).collect();
-    let mut score: Vec<f32> = (0..N).map(|t| if may_start(t) { rows[0][t] } else { f32::NEG_INFINITY }).collect();
+    let mut score: Vec<f32> = (0..N)
+        .map(|t| {
+            if may_start(t) {
+                rows[0][t]
+            } else {
+                f32::NEG_INFINITY
+            }
+        })
+        .collect();
     let mut back: Vec<Vec<usize>> = Vec::with_capacity(rows.len());
     for row in &rows[1..] {
         let mut next = vec![f32::NEG_INFINITY; N];
@@ -57,7 +73,10 @@ fn viterbi(logp: &[f32]) -> Vec<usize> {
         back.push(from);
         score = next;
     }
-    let mut t = (0..N).filter(|&t| may_end(t)).max_by(|&a, &b| score[a].total_cmp(&score[b])).unwrap_or(0);
+    let mut t = (0..N)
+        .filter(|&t| may_end(t))
+        .max_by(|&a, &b| score[a].total_cmp(&score[b]))
+        .unwrap_or(0);
     let mut path = vec![t];
     for from in back.iter().rev() {
         t = from[t];
@@ -76,17 +95,24 @@ impl PrivacyFilter {
     /// Load from a directory holding `onnx/model_q4.onnx`, its `model_q4.onnx_data` and `tokenizer.json`.
     pub fn load(dir: &Path) -> Result<Self> {
         for (file, want) in PINNED {
-            let bytes = std::fs::read(dir.join(file)).with_context(|| format!("read {}", dir.join(file).display()))?;
+            let bytes = std::fs::read(dir.join(file))
+                .with_context(|| format!("read {}", dir.join(file).display()))?;
             if format!("{:x}", Sha256::digest(&bytes)) != want {
                 bail!("{file} does not match the benchmarked Privacy Filter");
             }
         }
         // shortcut: the 875 MB weights file is hashed at install (`models install openai-privacy-filter`), not at each load
         // (seconds), and the graph is re-read by path after the check; acceptable while the model sits in the per-user state folder.
-        let tokenizer = Tokenizer::from_file(dir.join("tokenizer.json")).map_err(|e| anyhow!("tokenizer: {e}"))?;
+        let tokenizer = Tokenizer::from_file(dir.join("tokenizer.json"))
+            .map_err(|e| anyhow!("tokenizer: {e}"))?;
         // shortcut: its own ONNX Runtime environment; share the embedder's once Alias and embeddings run in one process.
-        let env = ort::init().with_telemetry(false).build().map_err(|e| anyhow!("{e}"))?;
-        let threads = std::thread::available_parallelism().map_or(4, |n| n.get()).clamp(2, 4);
+        let env = ort::init()
+            .with_telemetry(false)
+            .build()
+            .map_err(|e| anyhow!("{e}"))?;
+        let threads = std::thread::available_parallelism()
+            .map_or(4, |n| n.get())
+            .clamp(2, 4);
         let err = |e: ort::Error<_>| anyhow!("load Privacy Filter: {e}");
         let session = Session::builder(&env)
             .map_err(|e| anyhow!("load Privacy Filter: {e}"))?
@@ -105,7 +131,10 @@ impl PrivacyFilter {
         if chars.len() > MAX_CHARS {
             bail!("text longer than {MAX_CHARS} characters");
         }
-        let enc = self.tokenizer.encode_char_offsets(text, true).map_err(|e| anyhow!("tokenize: {e}"))?;
+        let enc = self
+            .tokenizer
+            .encode_char_offsets(text, true)
+            .map_err(|e| anyhow!("tokenize: {e}"))?;
         let ids: Vec<i64> = enc.get_ids().iter().map(|&x| i64::from(x)).collect();
         if ids.is_empty() {
             return Ok(Vec::new());
@@ -118,7 +147,9 @@ impl PrivacyFilter {
                 "attention_mask" => Tensor::from_array(([1, len], vec![1i64; len])).map_err(|e| anyhow!("{e}"))?,
             ])
             .map_err(|e| anyhow!("run Privacy Filter: {e}"))?;
-        let (shape, logits) = out[0].try_extract_tensor::<f32>().map_err(|e| anyhow!("{e}"))?;
+        let (shape, logits) = out[0]
+            .try_extract_tensor::<f32>()
+            .map_err(|e| anyhow!("{e}"))?;
         if shape.len() != 3 || shape[1] as usize != len || shape[2] as usize != N {
             bail!("unexpected Privacy Filter output shape {shape:?}");
         }
@@ -149,7 +180,12 @@ impl PrivacyFilter {
                 while s < e && chars[s].is_whitespace() {
                     s += 1;
                 }
-                (s < e).then(|| Hit { start: s, end: e, label: CATS[c], value: chars[s..e].iter().collect() })
+                (s < e).then(|| Hit {
+                    start: s,
+                    end: e,
+                    label: CATS[c],
+                    value: chars[s..e].iter().collect(),
+                })
             })
             .collect())
     }

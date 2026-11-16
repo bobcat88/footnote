@@ -219,7 +219,9 @@ pub fn lean(mut hits: Vec<Value>) -> Vec<Value> {
 /// Windows canonical paths carry the verbatim prefix `\\?\`, which many tools cannot open; agents get the ordinary form.
 fn plain_path(p: &str) -> String {
     match p.strip_prefix(r"\\?\") {
-        Some(rest) => rest.strip_prefix(r"UNC\").map_or_else(|| rest.to_string(), |share| format!(r"\\{share}")),
+        Some(rest) => rest
+            .strip_prefix(r"UNC\")
+            .map_or_else(|| rest.to_string(), |share| format!(r"\\{share}")),
         None => p.to_string(),
     }
 }
@@ -393,7 +395,9 @@ mod chunk_tests {
         assert_eq!(plain_path(r"\\?\D:\docs\a.md"), r"D:\docs\a.md");
         assert_eq!(plain_path(r"\\?\UNC\srv\share\a.md"), r"\\srv\share\a.md");
         assert_eq!(plain_path("/home/u/a.md"), "/home/u/a.md");
-        let out = lean(vec![json!({"path": r"\\?\D:\a.md", "sha256": "x", "page": null})]);
+        let out = lean(vec![
+            json!({"path": r"\\?\D:\a.md", "sha256": "x", "page": null}),
+        ]);
         assert_eq!(out[0], json!({"path": r"D:\a.md"}));
     }
 
