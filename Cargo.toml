@@ -55,13 +55,13 @@ repository.workspace = true
 rust-version.workspace = true
 
 [features]
-# Products (ADR 0001): a build can leave out a product it does not need. Default: all.
-default = ["library", "memory"]
+# Products (ADR 0001): a build can leave out a product it does not need. Default: all three free products.
+default = ["library", "memory", "code"]
 library = ["dep:footnote-library"]
 memory = ["dep:footnote-memory"]
 # Footnote Alias, not released yet (docs/research/ALIAS-DESK-STUDY.md): opt-in until it passes bench/experiments/ALIAS-EVAL.md.
 alias = ["dep:footnote-alias"]
-# Footnote Code, not released yet (docs/CODE-GRAPH-DESIGN.md): the precise pass from compiler indexes (rust-analyzer SCIP).
+# Footnote Code (docs/CODE-GRAPH-DESIGN.md): the precise pass from compiler indexes (rust-analyzer SCIP). In the free build.
 code = ["dep:footnote-code"]
 # Opt-in timings and failure tracking (crates/core/src/metrics.rs). Off in normal builds: zero cost.
 metrics = ["footnote-core/metrics", "footnote-search/metrics", "footnote-library?/metrics"]

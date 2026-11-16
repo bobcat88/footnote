@@ -281,14 +281,14 @@ enum Action {
         #[arg(long)]
         pseudonymise: bool,
     },
-    /// Footnote Code (not released): build the code graph of a Rust project from `rust-analyzer scip`.
+    /// Footnote Code: build the code graph of a Rust project from `rust-analyzer scip`.
     #[cfg(feature = "code")]
     CodeIndex {
         /// Project folder (holding Cargo.toml).
         #[arg(default_value = ".")]
         root: PathBuf,
     },
-    /// Footnote Code (not released): a symbol's signature, place, callers and callees, from the compiler's index.
+    /// Footnote Code: a symbol's signature, place, callers and callees, from the compiler's index.
     #[cfg(feature = "code")]
     Code {
         name: String,

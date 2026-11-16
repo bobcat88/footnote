@@ -53,6 +53,9 @@ fn contains(outer: [i32; 4], at: [i32; 4]) -> bool {
     (outer[0], outer[1]) <= (at[0], at[1]) && (at[2], at[3]) <= (outer[2], outer[3])
 }
 
+/// What to tell someone without the Rust indexer.
+pub const INSTALL_INDEXER: &str = "Footnote Code needs rust-analyzer to read Rust projects: install it with `rustup component add rust-analyzer`";
+
 /// Run the indexer on `root` and build the graph into `db` (written beside it, then renamed: a reader never sees half a graph).
 pub fn index(root: &Path, db: &Path) -> Result<Value> {
     let started = Instant::now();
@@ -70,8 +73,15 @@ pub fn index(root: &Path, db: &Path) -> Result<Value> {
         .arg(root)
         .arg("--output")
         .arg(&scip_file)
-        .output()
-        .context("run rust-analyzer (installed with `rustup component add rust-analyzer`)")?;
+        .output();
+    let out = match out {
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => bail!(INSTALL_INDEXER),
+        r => r.context("run rust-analyzer")?,
+    };
+    // rustup's proxy exists but the component is missing: it exits with "Unknown binary 'rust-analyzer'".
+    if !out.status.success() && String::from_utf8_lossy(&out.stderr).contains("Unknown binary") {
+        bail!(INSTALL_INDEXER);
+    }
     if !out.status.success() {
         bail!(
             "rust-analyzer scip failed: {}",

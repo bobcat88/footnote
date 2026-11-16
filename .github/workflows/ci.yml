@@ -88,10 +88,10 @@ jobs:
         run: cargo clippy --locked --workspace --all-targets --no-default-features --features library -- -D warnings
       - name: Clippy, Memory only
         run: cargo clippy --locked --workspace --all-targets --no-default-features --features memory -- -D warnings
+      - name: Clippy, Code only
+        run: cargo clippy --locked --workspace --all-targets --no-default-features --features code -- -D warnings
       - name: Clippy, with Alias (not released)
         run: cargo clippy --locked --workspace --all-targets --features alias -- -D warnings
-      - name: Clippy, with Code (not released)
-        run: cargo clippy --locked --workspace --all-targets --features code -- -D warnings
       # Releases include llama.cpp (dist-workspace.toml) for the opt-in French model; it needs CMake and libclang,
       # which both runner images ship.
       - name: Clippy, with llama.cpp
@@ -100,4 +100,4 @@ jobs:
       - name: Tests
         run: cargo test --locked --workspace --no-fail-fast -- --include-ignored
       - name: Tests, Code (needs rust-analyzer, skipped without it)
-        run: cargo test --locked --features code --test code
+        run: cargo test --locked --test code

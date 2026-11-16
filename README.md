@@ -171,6 +171,7 @@ For any other MCP host, add this entry to its MCP settings:
 | `footnote_export` | Bounded export of records |
 | `footnote_propose` | **Refused over MCP.** Writes need an explicit CLI command from you |
 | `footnote_remember`, `footnote_forget` | Agent memory only: add or retire a memory in the memory database. Refused on a document corpus |
+| `footnote_code` | Code: a symbol's signature, place, callers and callees, from the compiler's index of the project |
 
 The previous `borg_*` tool names keep working as aliases.
 
@@ -184,6 +185,17 @@ Besides your documents, Footnote can remember what an assistant learns while wor
 - every 10 prompts, at the end of a turn, it asks the agent once to save what it learned with `footnote_remember`, and `/remember` does the same on demand.
 
 Nothing leaves the agent you already use: the memories are written by that agent, in its own session, into a local file. Settings (`memory.json` in the state folder) are documented in [src/hook.rs](src/hook.rs), the design in [docs/AGENT-MEMORY-DESIGN.md](docs/AGENT-MEMORY-DESIGN.md).
+
+### Code graph
+
+Footnote Code answers "who calls this, and what does it call" from the compiler's own index, not from a guess. Rust only for now; it needs rust-analyzer (`rustup component add rust-analyzer`), and says so if it is missing.
+
+```sh
+footnote code-index .          # build the graph of the Rust project here (seconds; rebuild after big changes)
+footnote code lookup           # the symbol `lookup`: signature, file and lines, callers with call-site lines, callees
+```
+
+Agents get the same answer through `footnote_code`; files changed since indexing come back in `stale`. Design: [docs/CODE-GRAPH-DESIGN.md](docs/CODE-GRAPH-DESIGN.md).
 
 ## Security model
 

@@ -82,3 +82,35 @@ fn callers_and_callees_come_from_the_compiler_index() {
         serde_json::json!(["src/lib.rs"])
     );
 }
+
+/// Without rust-analyzer on PATH, indexing says how to install it instead of a raw "program not found".
+#[test]
+fn a_missing_indexer_says_how_to_install_it() {
+    let dir = tempfile::tempdir().unwrap();
+    let project = dir.path().join("demo");
+    fs::create_dir_all(&project).unwrap();
+    fs::write(
+        project.join("Cargo.toml"),
+        "[package]
+name = \"demo\"
+",
+    )
+    .unwrap();
+    let out = Command::new(assert_cmd::cargo::cargo_bin!("footnote"))
+        .env("FOOTNOTE_STATE_DIR", dir.path().join("state"))
+        .env("FOOTNOTE_POLICY_FILE", dir.path().join("no-policy.json"))
+        .env("PATH", dir.path().join("empty"))
+        .args(["code-index", project.to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert!(!out.status.success());
+    let text = format!(
+        "{}{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(
+        text.contains("rustup component add rust-analyzer"),
+        "{text}"
+    );
+}
