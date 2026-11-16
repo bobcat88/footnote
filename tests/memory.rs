@@ -409,6 +409,41 @@ fn tags_narrow_recall_before_ranking_and_untagged_memories_stay_candidates() {
             .any(|m| m["tags"] == json!(["daemon", "windows"]))
     );
 
+    // Tag engine: tags named as whole words in the query filter on their own; none named, no filter.
+    let inferred = run(
+        &db,
+        &[
+            "memory-recall",
+            "why does the daemon fail on Windows?",
+            "--project",
+            "footnote",
+            "--limit",
+            "5",
+            "--infer-tags",
+        ],
+        None,
+    );
+    assert_eq!(
+        inferred["tags_used"],
+        json!(["daemon", "windows"]),
+        "{inferred}"
+    );
+    let plain = run(
+        &db,
+        &[
+            "memory-recall",
+            "socket path",
+            "--project",
+            "footnote",
+            "--limit",
+            "5",
+            "--infer-tags",
+        ],
+        None,
+    );
+    assert_eq!(plain["tags_used"], json!([]));
+    assert_eq!(plain["candidates"], 3);
+
     // Validation: bad shape and more than ten tags are refused; nothing is stored.
     assert!(
         fails(

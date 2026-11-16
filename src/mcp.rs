@@ -584,14 +584,12 @@ fn memory_recall(db: &Path, args: &Value) -> Result<Value> {
     } else {
         model_args(args)?
     };
-    crate::memory::recall(
-        &read_db(db)?,
-        &query,
-        project.as_deref(),
-        limit,
-        &models,
-        &tags_arg(args)?,
-    )
+    let c = read_db(db)?;
+    let mut tags = tags_arg(args)?;
+    if tags.is_empty() && args["infer_tags"] == true {
+        tags = crate::memory::prompt_tags(&c, &query)?;
+    }
+    crate::memory::recall(&c, &query, project.as_deref(), limit, &models, &tags)
 }
 
 fn chunk_by_id(c: &Connection, id: i64) -> Result<Value> {

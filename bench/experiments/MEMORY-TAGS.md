@@ -32,3 +32,27 @@ Rule written now, before any tagged memory exists:
 - **Hook inference is adopted** (the hook names tags found as words in the prompt) only if, on those questions: survival ≥ 0.98
   with complete tags and ≥ 0.95 with 30 % removed, any@3 not lower than without filter, candidates reduced by at least a
   third, and latency added under 5 ms at p95.
+
+## Early run, 16 November 2026: the tag engine fails, it stays off
+
+Johan asked for the engine the same day, so it was built (`memory::prompt_tags`, option `memory.infer_tags`, default **off**;
+`memory-recall --infer-tags`) and checked at once instead of after the week. Deviations from the plan above, written before the
+run: Claude tagged the 164 in-scope memories of a copy of Johan's database (386 tag pairs, 117 distinct tags, from each memory's
+text) instead of agents during a week, and the questions are the 100 of [MEMORY-RECALL-SWITCH.md](MEMORY-RECALL-SWITCH.md)
+(written earlier, seen by the same author: bias toward passing). "Candidates reduced" is measured on prompts that name a tag;
+the others are unchanged by design. Runner: [memory_tag_engine.py](memory_tag_engine.py); hybrid recall, top 3; CPU 7 % before
+the run.
+
+| Measure | Rule | All tags | 30 % of tags removed |
+|---|---|---:|---:|
+| Prompts naming a tag | | 66 / 100 (EN 42, FR 24) | 62 / 100 |
+| Answer survives the filter | ≥ 0.98 / ≥ 0.95 | **0.94** | **0.90** |
+| any@3, without → with | not lower | 0.91 → **0.87** | 0.91 → **0.82** |
+| Candidates kept, prompts naming a tag | ≤ 2/3 | 4 % | 12 % |
+| Added latency, p95 (keyword path) | < 5 ms | −0.1 ms | |
+
+**Fails** on survival and any@3, with complete tags and more so with incomplete ones. It narrows hard and costs nothing, but a
+single incidental tag word in the prompt ("logo", "site", "search", "install", "scifact") becomes a hard filter that drops the
+answer, and it helped on one question only. Tags stay useful as an explicit filter an agent chooses (`footnote_recall` `tags`);
+automatic inference stays off. Not retried on these questions (they are now spent for this question). An idea for a later,
+separately registered test: tags as a ranking boost rather than a filter.

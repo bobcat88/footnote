@@ -147,6 +147,9 @@ enum Action {
         /// Only memories sharing one of these tags, plus untagged ones (repeatable); narrows before ranking.
         #[arg(long)]
         tag: Vec<String>,
+        /// Take the tags from the query's own words (the tag engine the hook uses when `infer_tags` is on).
+        #[arg(long)]
+        infer_tags: bool,
     },
     /// Serve the knowledge base to an agent; --mcp selects the MCP stdio transport.
     Serve {
@@ -614,7 +617,8 @@ fn execute(cli: Cli) -> Result<Value> {
             limit,
             model,
             resident,
-            tag,
+            mut tag,
+            infer_tags,
         } => {
             if resident {
                 let models: Vec<String> = model
@@ -624,9 +628,12 @@ fn execute(cli: Cli) -> Result<Value> {
                 crate::daemon::call(
                     db,
                     "footnote_memory_recall",
-                    &json!({"query": query, "project": project, "limit": limit, "tags": tag, "model": if models.is_empty() { Value::Null } else { json!(models) }}),
+                    &json!({"query": query, "project": project, "limit": limit, "tags": tag, "infer_tags": infer_tags, "model": if models.is_empty() { Value::Null } else { json!(models) }}),
                 )
             } else {
+                if infer_tags && tag.is_empty() {
+                    tag = crate::memory::prompt_tags(&c, &query)?;
+                }
                 crate::memory::recall(&c, &query, project.as_deref(), limit.into(), &model, &tag)
             }
         }

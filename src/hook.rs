@@ -26,6 +26,7 @@ const MAX_EVENT: u64 = 2 * 1024 * 1024;
 /// db: memory database (default memory.db in the state dir); models: embedding model folders, so memories are found by meaning;
 /// every_turns: prompts between save requests (10); recall_limit: memories per prompt (3); metrics: timings to metrics.jsonl;
 /// resident: recall by meaning through a daemon started on demand, gone after idle_seconds (1800). On by default since the recall switch passed (bench/experiments/MEMORY-RECALL-SWITCH.md); keyword answers when no daemon is ready.
+/// infer_tags: recall only among memories sharing a tag named in the prompt, plus untagged ones (bench/experiments/MEMORY-TAGS.md).
 /// enabled: false makes the hook do nothing (the launcher's switch). A company policy file overrides any of these
 /// (footnote_core::config); `footnote options` explains each one.
 #[derive(Deserialize)]
@@ -40,6 +41,7 @@ struct Settings {
     metrics: bool,
     resident: bool,
     idle_seconds: u64,
+    infer_tags: bool,
 }
 impl Default for Settings {
     fn default() -> Self {
@@ -53,6 +55,7 @@ impl Default for Settings {
             metrics: false,
             resident: true,
             idle_seconds: 1800,
+            infer_tags: false,
         }
     }
 }
@@ -318,7 +321,7 @@ fn recall(s: &Settings, db: &Path, project: &str, query: &str) -> Result<Value> 
         let (send, recv) = std::sync::mpsc::channel();
         let (resident_db, args) = (
             db.to_path_buf(),
-            json!({"query": query, "project": project, "limit": s.recall_limit, "model": s.models}),
+            json!({"query": query, "project": project, "limit": s.recall_limit, "model": s.models, "infer_tags": s.infer_tags}),
         );
         std::thread::spawn(move || {
             let _ = send.send(crate::daemon::call(
@@ -339,14 +342,13 @@ fn recall(s: &Settings, db: &Path, project: &str, query: &str) -> Result<Value> 
                 .arg(s.idle_seconds.to_string()),
         )?;
     }
-    crate::memory::recall(
-        &crate::app::open(db, false)?,
-        query,
-        Some(project),
-        s.recall_limit,
-        &[],
-        &[],
-    )
+    let c = crate::app::open(db, false)?;
+    let tags = if s.infer_tags {
+        crate::memory::prompt_tags(&c, query)?
+    } else {
+        vec![]
+    };
+    crate::memory::recall(&c, query, Some(project), s.recall_limit, &[], &tags)
 }
 
 fn metric(state: &Path, on: bool, mut row: Value) {

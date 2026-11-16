@@ -33,6 +33,13 @@ pub fn catalogue() -> Vec<OptionSpec> {
             cost: "A background process keeps the models in RAM until idle_seconds pass; about 450 MB with the default pair; some companies forbid resident processes. Recall@3 on real memories 0.91 against keyword 0.77, +13 ms per prompt at p95 (MEMORY-RECALL-SWITCH.md)",
         },
         OptionSpec {
+            key: "memory.infer_tags",
+            default: json!(false),
+            range: None,
+            gain: "Recall ranks only memories sharing a tag named in the prompt (plus untagged ones): fewer unrelated candidates",
+            cost: "A memory tagged without the word the prompt uses is left out; off until bench/experiments/MEMORY-TAGS.md passes",
+        },
+        OptionSpec {
             key: "memory.idle_seconds",
             default: json!(1800),
             range: Some((60, 86_400)),

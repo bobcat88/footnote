@@ -29,7 +29,8 @@ of work. "Johan" marks items waiting for his go.
    any@3 0.91 against 0.77 (+0.14 [+0.08, +0.21]; French 0.84 against 0.58), +13 ms per prompt at p95, daemon about 450 MB.
    `memory.resident` is now on by default. Still open: a no-answer decision so irrelevant memories stop being injected (both modes).
    Also 16 Nov ([MEMORY-TAGS.md](../../bench/experiments/MEMORY-TAGS.md)): project scope is now a pre-filter before ranking, and memories
-   carry up to 10 tags that narrow recall (untagged ones stay candidates). Evaluate hook tag inference at the 21 Nov review.
+   carry up to 10 tags that narrow recall (untagged ones stay candidates). Tag engine (tags inferred from the prompt) built and
+   tested the same day: fails (any@3 0.91 to 0.87, worse with incomplete tags), so `memory.infer_tags` stays off.
 5. **Ship Jina nano as the opt-in French/mixed profile.** Idle-machine latency measured 15 Nov evening
    ([LLAMACPP-INPROCESS.md](../../bench/experiments/LLAMACPP-INPROCESS.md)): about +6 ms at p50, +26 ms at p95 per search. Left:
    a `models install` recipe for the GGUF file and release builds with `--features llama` (CMake and LLVM in CI).

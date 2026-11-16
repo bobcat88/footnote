@@ -80,6 +80,33 @@ fn tags_of(c: &Connection, chunk: i64) -> Result<Vec<String>> {
         .collect::<rusqlite::Result<_>>()?)
 }
 
+/// Tag engine: the existing tags that appear as whole words in a prompt (`t3-code` matches "T3 Code"). No tag word, no filter.
+/// shortcut: exact English words only (a French prompt saying "démon" does not name `daemon`); add per-tag synonyms if the
+/// review shows French prompts lose the filter's benefit.
+pub fn prompt_tags(c: &Connection, prompt: &str) -> Result<Vec<String>> {
+    if !has_tags(c)? {
+        return Ok(vec![]);
+    }
+    let words: String = prompt
+        .to_lowercase()
+        .chars()
+        .map(|ch| if ch.is_ascii_alphanumeric() { ch } else { ' ' })
+        .collect();
+    let padded = format!(
+        " {} ",
+        words.split_whitespace().collect::<Vec<_>>().join(" ")
+    );
+    let mut s = c.prepare_cached("SELECT DISTINCT tag FROM memory_tags ORDER BY tag")?;
+    let tags = s
+        .query_map([], |r| r.get::<_, String>(0))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    Ok(tags
+        .into_iter()
+        .filter(|t| padded.contains(&format!(" {} ", t.replace('-', " "))))
+        .take(MAX_TAGS)
+        .collect())
+}
+
 /// Chunk ids recall may rank, chosen before ranking: live memories of `scope` (global ones plus that project; None: every
 /// scope) and, when `tags` are given, memories sharing one of them or carrying no tag at all (an untagged memory is unknown,
 /// not excluded, so incomplete tagging never hides a relevant memory).
@@ -342,8 +369,10 @@ pub fn recall(
     for t in tags {
         tag(t)?;
     }
+    let only = candidates(c, Some(project.unwrap_or("")), tags)?;
+    let pool = only.len();
     let filters = records::Filters {
-        only: Some(candidates(c, Some(project.unwrap_or("")), tags)?),
+        only: Some(only),
         ..Default::default()
     };
     // Ask for the maximum; the scope check below stays as a guard.
@@ -379,7 +408,9 @@ pub fn recall(
         }
     }
     // shortcut: no relevance threshold yet, the top `limit` are returned; calibrate one on held-out data before auto-injection ships.
-    Ok(json!({"kind": "memory_recall", "mode": found["mode"], "memories": out}))
+    Ok(
+        json!({"kind": "memory_recall", "mode": found["mode"], "tags_used": tags, "candidates": pool, "memories": out}),
+    )
 }
 
 /// Move every memory of one project scope to another name (a renamed project, or the switch from folder names to repository
