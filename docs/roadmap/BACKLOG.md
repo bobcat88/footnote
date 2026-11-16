@@ -157,6 +157,20 @@ handful of agents on one machine.
   token snapshot. For Footnote: (1), (2) and (4) are local reads that fit zero retention (counts only, never prompt text);
   (3) uses endpoints the providers do not document, so it can break or conflict with their terms: optional, off by default.
   No RTK-style counting layer is needed for this. Per person: Footnote One; team roll-ups: Enterprise.
+- **Spend and savings module** (Johan, 16 Nov; Footnote One per person, Enterprise for teams). One view: what you spent, what
+  Footnote saved stacked on top, over a day, 7 and 30 days; plus T3-style limits (5-hour and weekly with reset timers, context bar).
+  "Not 100 % exact but close, and we say how it is computed." Design rules from the checks:
+  - **Two kinds of saving, shown apart.** Measured: output filtering (RTK style) and lean results, where Footnote sees the size
+    before and after each call. Estimated: behaviour skills (ponytail, caveman), whose saving exists only against a benchmark
+    without them; shown as an estimate with its benchmark.
+  - **Price each saved token at the rate it would have cost.** A trimmed tool result would have been re-read on later turns as
+    cache reads (one tenth of the input price at Anthropic), so it is not simply tokens × input price.
+  - **Subscription vs API.** On a subscription the saving is headroom (share of the weekly limit kept), not money; on API
+    billing it is money. Johan's company example: 30 % saved on a 200 USD API budget does the work of 200 / 0.7 ≈ 286 USD.
+  - **Reset button:** T3 Code redeems Claude "reset credits" through undocumented account endpoints, an action on the user's
+    account. Optional, off by default, clearly labelled, or a link to the provider's page.
+  - **Reuse:** RTK is Apache-2.0 (86.8k stars), so its filters can be reused with its notice; ponytail and caveman licences to
+    check before taking anything.
 - **AI sobriety: one view of usage, cost and savings** (Johan, 15 Nov). Explore a Footnote-family workspace that combines the
   token/cost visibility Johan values in T3 Code with optimizations inspired by RTK, caveman and ponytail. Show input, output and
   cached tokens, model/provider and cost where authoritative usage and applicable prices are available; distinguish invoice or API
