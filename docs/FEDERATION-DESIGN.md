@@ -117,6 +117,47 @@ Nothing else is built until the test in section 6 has run.
 
 ## 9. Open questions
 
-- How a router learns which indexes a person may read (company directory groups, an access file per index, single sign-on). Decided with the first company pilot.
+- How a router learns which indexes a person may read: answered by section 10 (single sign-on plus the company's rights register).
 - How far Footnote Code fits the same model: one index per repository is natural (see `docs/CODE-GRAPH-DESIGN.md`).
 - Whether promotion needs one validator or two for some departments (legal, security).
+
+## 10. Rights from company single sign-on (decided 16 November 2026, not built)
+
+Johan's company already signs people in through single sign-on (SSO), and its developers already give an agent the same rights as
+the person logged in, by passing that person's JWT. Footnote follows the same model; what it adds is how those rights live inside
+an agent session, and for how long.
+
+**Who sees what**
+- A manager sees everything in their unit and the units below it, and nothing above unless someone above shares it. A share is
+  explicit, dated, revocable and logged.
+- The company's rights register (its directory) is the only source of truth. Footnote never keeps its own copy of who may read what.
+- An agent gets exactly its person's rights, never more, and holds no standing access of its own. A sub-agent inherits its parent
+  session and cannot extend it.
+
+**Three gates, all required; any failure is a refusal, and every refusal is logged**
+1. The app is one the company allows: proved by a client certificate the company issued (mutual TLS), not by a name it claims.
+2. The person is signed in: an SSO token whose signature checks against the company's published keys, with the right issuer and
+   audience, and not expired.
+3. The person's rights, read from the register for that token, cover the index asked for.
+
+Gates 1 and 2 replace a permanent API key per employee: such keys get copied into scripts, never expire, and keep working after
+someone leaves.
+
+**The session**
+- The launcher signs the person in (the standard browser flow, OpenID Connect with PKCE). The agent's Footnote process receives the
+  token and turns it into one in-memory session: person id, email, units, the indexes they may read, and an expiry. Nothing of it
+  is written to disk. The refresh token, if any, stays with the launcher in the operating system's key store; the agent process
+  never sees it.
+- **Expiry:** the earlier of the token's own expiry and a maximum set by the company policy file (the policy file that already
+  locks other options). Default 1 hour, the usual lifetime of an SSO access token; the company may set it between 5 minutes and
+  8 hours (one working day). A sensitive compartment (section 5b) may set a shorter one for its own indexes.
+- Every call checks the expiry first. An expired session is refused with "sign in again"; it is never extended silently. When the
+  launcher refreshes the token, the rights are read again from the register, so someone who leaves or changes unit loses access
+  within one expiry at most.
+- Every answer is logged with the person's id and the indexes searched, in the tamper-evident audit log Footnote already keeps.
+
+**In Rust:** JWT checking is a known crate (`jsonwebtoken`, to be security-reviewed before use) against the company's published
+keys, cached and re-fetched when they rotate. Nothing else needs a new dependency.
+
+**Open:** which claim carries the units (SSO groups or a register lookup per person), decided with the company's identity team;
+whether some indexes need the person present (a fresh sign-in) rather than a session started earlier.
