@@ -250,6 +250,9 @@ enum Action {
         #[command(subcommand)]
         action: ConfigAction,
     },
+    /// Footnote Alias (not released): personal-data identifiers in a JSON array of texts on stdin, by rules with check digits.
+    #[cfg(feature = "alias")]
+    AliasScan,
     /// Verify an append-only audit log (no database needed).
     Audit {
         #[command(subcommand)]
@@ -403,6 +406,12 @@ fn execute(cli: Cli) -> Result<Value> {
             };
         }
         Action::Audit { action } => return audit_command(action),
+        #[cfg(feature = "alias")]
+        Action::AliasScan => {
+            let texts: Vec<String> = serde_json::from_reader(std::io::stdin().lock())?;
+            let results: Vec<_> = texts.iter().map(|t| footnote_alias::scan(t)).collect();
+            return Ok(json!({ "results": results }));
+        }
         Action::Status => return crate::status::status(),
         #[cfg(feature = "library")]
         Action::Crawl {
@@ -619,6 +628,8 @@ fn execute(cli: Cli) -> Result<Value> {
         }
         #[cfg(feature = "library")]
         Action::Crawl { .. } => unreachable!("dispatched before the database is opened"),
+        #[cfg(feature = "alias")]
+        Action::AliasScan => unreachable!("dispatched before the database is opened"),
         Action::Audit { .. }
         | Action::Options
         | Action::Config { .. }
@@ -680,6 +691,8 @@ fn action_name(a: &Action) -> &'static str {
         #[cfg(feature = "memory")]
         Action::Hook { .. } => "hook",
         Action::Audit { .. } => "audit",
+        #[cfg(feature = "alias")]
+        Action::AliasScan => "alias-scan",
         Action::Options => "options",
         Action::Status => "status",
         #[cfg(feature = "library")]

@@ -15,6 +15,7 @@ footnote-core = { path = "crates/core" }
 footnote-search = { path = "crates/search" }
 footnote-library = { path = "crates/library" }
 footnote-memory = { path = "crates/memory" }
+footnote-alias = { path = "crates/alias" }
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }
 rusqlite = { version = "0.38", features = ["bundled", "backup"] }
@@ -57,6 +58,8 @@ rust-version.workspace = true
 default = ["library", "memory"]
 library = ["dep:footnote-library"]
 memory = ["dep:footnote-memory"]
+# Footnote Alias, not released yet (docs/research/ALIAS-DESK-STUDY.md): opt-in until it passes bench/experiments/ALIAS-EVAL.md.
+alias = ["dep:footnote-alias"]
 # Opt-in timings and failure tracking (crates/core/src/metrics.rs). Off in normal builds: zero cost.
 metrics = ["footnote-core/metrics", "footnote-search/metrics", "footnote-library?/metrics"]
 # Opt-in GGUF embedding models through llama.cpp, compiled in (bench/experiments/LLAMACPP-INPROCESS.md). Needs CMake and LLVM to build.
@@ -67,6 +70,7 @@ footnote-core.workspace = true
 footnote-search.workspace = true
 footnote-library = { workspace = true, optional = true }
 footnote-memory = { workspace = true, optional = true }
+footnote-alias = { workspace = true, optional = true }
 anyhow.workspace = true
 clap.workspace = true
 rusqlite.workspace = true

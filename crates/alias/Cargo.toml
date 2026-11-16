@@ -1,0 +1,12 @@
+[package]
+name = "footnote-alias"
+description = "Footnote Alias: find personal data in text before it reaches an AI (rules with check digits first)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+regex.workspace = true
+serde.workspace = true

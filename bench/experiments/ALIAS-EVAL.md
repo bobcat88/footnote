@@ -46,6 +46,22 @@ Privacy Filter (reference). The direct identifiers go to the Rust checksum rules
 The model candidates need third-party Python packages (`gliner`, `gliner2`, `transformers`). Each gets the usual security review
 first: real upstream repository, code read without running it, no install hooks.
 
+## Result 1 (16 November 2026): the Rust rules cover the direct identifiers
+
+Detector: `footnote alias-scan` (crate `footnote-alias`, build `--features alias`), rules with check digits only, no model. Scorer:
+[alias_eval.py](alias_eval.py). Developed on dev, then one held-out run.
+
+| Half | Direct identifiers recall | FR / EN | Names | Precision | Look-alikes hit | Time per text |
+|---|---:|---|---:|---:|---|---:|
+| dev | 1.000 | 1.000 / 1.000 | 0.000 | 1.000 | 0/144 | 0.10 ms |
+| **held-out** | **1.000** | 1.000 / 1.000 | 0.000 | 1.000 | 0/156 | 0.09 ms |
+
+- **Direct identifiers: pass** (rule ≥ 0.95), every label at 1.000 on held-out, nothing flagged that was not personal data.
+- **Names: not yet** (0.000): rules do not guess names by design; the model stage decides that part.
+- Read with care: the same author wrote the generator and the rules, so the formats match by construction. The useful evidence is
+  that check digits reject every look-alike (Luhn-failing tracking numbers included) at no measurable cost; real texts with
+  unusual formats (an IBAN split across lines, a phone with a missing digit) are the open risk.
+
 ## Limits
 
 One author wrote the templates and the data is synthetic: realistic structure, but none of the mess of real text (typos, signatures,

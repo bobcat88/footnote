@@ -870,6 +870,7 @@ dependencies = [
  "anyhow",
  "assert_cmd",
  "clap",
+ "footnote-alias",
  "footnote-core",
  "footnote-library",
  "footnote-memory",
@@ -887,6 +888,14 @@ dependencies = [
  "url",
  "wait-timeout",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "footnote-alias"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "regex",
+ "serde",
 ]
 
 [[package]]
