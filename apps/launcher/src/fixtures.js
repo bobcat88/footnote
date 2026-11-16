@@ -59,8 +59,50 @@ const activity = {
   ],
 };
 
+const codeMap = {
+  root: "D:/work/atlas-api", origin: "compiler", depth: 2,
+  blocks: [
+    { name: "src", files: 14, symbols: 212 },
+    { name: "crates/http", files: 6, symbols: 96 },
+    { name: "crates/store", files: 5, symbols: 74 },
+    { name: "crates/common", files: 4, symbols: 41 },
+    { name: "tests", files: 7, symbols: 58 },
+  ],
+  links: [
+    { from: "src", to: "crates/http", references: 64 },
+    { from: "src", to: "crates/store", references: 38 },
+    { from: "crates/http", to: "crates/common", references: 22 },
+    { from: "crates/store", to: "crates/common", references: 17 },
+    { from: "src", to: "crates/common", references: 9 },
+  ],
+  outside: [
+    { package: "serde_json", version: "1.0.140", references: 310, class: null, used_by: ["crates/http", "src"] },
+    { package: "sqlx", version: "0.8.6", references: 122, class: "database", used_by: ["crates/store"] },
+    { package: "reqwest", version: "0.12.22", references: 48, class: "network", used_by: ["crates/http"] },
+    { package: "async-openai", version: "0.29.0", references: 21, class: "model", used_by: ["src"] },
+    { package: "tokio", version: "1.47.1", references: 19, class: null, used_by: ["crates/http", "src", "crates/store"] },
+  ],
+};
+
+const code = {
+  root: "D:/work/atlas-api", origin: "compiler", stale: [],
+  symbols: [{
+    name: "fetch_page", kind: "function", path: "crates/store/src/pages.rs", lines: [41, 88], references: 3,
+    signature: "pub async fn fetch_page(db: &Pool, cursor: Option<Cursor>, limit: u32) -> Result<Page>",
+    callers: [
+      { name: "list_orders", kind: "function", path: "src/routes/orders.rs", lines: [57] },
+      { name: "list_invoices", kind: "function", path: "src/routes/invoices.rs", lines: [33] },
+      { name: "export_all", kind: "function", path: "src/jobs/export.rs", lines: [120] },
+    ],
+    callees: [
+      { name: "decode_cursor", kind: "function", path: "crates/common/src/cursor.rs", lines: [52] },
+      { name: "Page", kind: "type", path: "crates/store/src/pages.rs", lines: [80] },
+    ],
+  }],
+};
+
 export const fixtures = {
-  ok: { status, projects, activity, "models list": models },
+  ok: { status, projects, activity, "models list": models, "code-map": codeMap, code },
   empty: {
     status: {
       ...status,

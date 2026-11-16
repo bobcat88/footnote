@@ -260,7 +260,7 @@ pub fn lookup(db: &Path, name: &str, limit: usize) -> Result<Value> {
         // Callees: what its body references, defined in this project; the lines are where it refers to them.
         let callees = edges(
             "SELECT s.name, s.kind, f.path, group_concat(r.line) FROM refs r JOIN symbols s ON s.id = r.symbol_id
-             JOIN files f ON f.id = s.file_id WHERE r.caller_id = ?1 AND r.symbol_id != ?1
+             JOIN files f ON f.id = s.file_id WHERE r.caller_id = ?1 AND r.symbol_id != ?1 AND s.kind != 'module'
              GROUP BY r.symbol_id ORDER BY s.name LIMIT ?2",
             id,
         )?;

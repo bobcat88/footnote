@@ -1,18 +1,21 @@
 import { useCallback, useEffect, useState } from "react";
+import Code from "./Code.jsx";
 import { AGENTS, load, mb, num, seen, shortDate } from "./data.js";
 
 const SCREENS = {
   overview: { title: "Overview", note: "this week" },
+  code: { title: "Code" },
   enterprise: { title: "Footnote Enterprise" },
 };
 
+/** `#/code/symbol?mock=1` -> ["code", "symbol"]. */
 const route = () => {
-  const name = location.hash.replace(/^#\/?/, "").split("?")[0];
-  return name in SCREENS ? name : "overview";
+  const [name, view] = location.hash.replace(/^#\/?/, "").split("?")[0].split("/");
+  return name in SCREENS ? [name, view] : ["overview"];
 };
 
 export default function App() {
-  const [screen, setScreen] = useState(route);
+  const [[screen, view], setScreen] = useState(route);
   const [state, setState] = useState({ loading: true });
 
   const refresh = useCallback(async () => {
@@ -53,6 +56,8 @@ export default function App() {
           <Enterprise />
         ) : state.error ? (
           <Problem error={state.error} retry={refresh} />
+        ) : screen === "code" ? (
+          <Code projects={projects} view={view === "symbol" ? "symbol" : "map"} go={(v) => go(`code/${v}`)} />
         ) : (
           <Overview status={status} projects={projects} />
         )}
@@ -91,10 +96,8 @@ function Sidebar({ status, projects, screen, go }) {
           <span className={status?.products?.library?.built ? "dot" : "dot off"} />
           Library
         </span>
-        <span className="item">
-          <span className={status?.products?.code?.graphs ? "dot" : "dot off"} />
-          Code<span className="n">{graphs(status?.products?.code?.graphs)}</span>
-        </span>
+        {item("code", <><span className={status?.products?.code?.graphs ? "dot" : "dot off"} />Code</>,
+          <span className="n">{graphs(status?.products?.code?.graphs)}</span>)}
       </nav>
       <h2 className="grp">Workspace</h2>
       <nav className="nav" aria-label="Workspace">
