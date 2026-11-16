@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import Code from "./Code.jsx";
+import { switchTo } from "./Mini.jsx";
 import { Activity as ActivityScreen, Models, Projects as ProjectsScreen, Usage } from "./Screens.jsx";
 import { AGENTS, load, mb, num, seen, shortDate } from "./data.js";
 
@@ -52,6 +53,7 @@ export default function App() {
           <h1>{meta.title}</h1>
           {meta.note && <span>· {meta.note}</span>}
           <div className="end">
+            <button className="btn" onClick={() => switchTo("mini")}>Mini mode</button>
             <button className="btn" onClick={refresh} disabled={state.loading}>
               {state.loading ? "Reading…" : "Refresh"}
             </button>

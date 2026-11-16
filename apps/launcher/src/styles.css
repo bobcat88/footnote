@@ -162,6 +162,29 @@ code.cmd { font-family: var(--f-mono); font-size: var(--t-s); color: var(--text)
 .barcell span { display: block; height: 6px; border-radius: 3px; background: var(--acc); opacity: 0.6; min-width: 2px; }
 .id { color: var(--acc); }
 
+/* Mini mode: the D2 lens look, lively (DESIGN.md section 11) */
+.mini { position: relative; height: 100%; overflow: hidden; display: grid; grid-template-rows: 1fr auto;
+  background: radial-gradient(420px 260px at 50% 45%, #0f2018 0%, var(--bg) 70%); }
+.mini .flow { position: absolute; inset: 0 0 auto 0; width: 100%; height: 200px; pointer-events: none; }
+.mini .flow path { fill: none; stroke: var(--acc); stroke-opacity: 0.25; stroke-width: 1.2; }
+.mini .flow circle { fill: var(--acc); }
+.glass { position: absolute; border-radius: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  text-align: center; gap: 0;
+  background: radial-gradient(circle at 35% 30%, rgb(234 240 235 / 0.14), rgb(95 211 195 / 0.05) 45%, rgb(9 18 11 / 0.35) 70%);
+  box-shadow: inset 0 0 0 1px rgb(95 211 195 / 0.35), inset 0 2px 24px rgb(234 240 235 / 0.08), 0 18px 40px rgb(9 18 11 / 0.6); }
+.glass .mark { font: 500 var(--t-ui) var(--f-mono); color: var(--acc); }
+.glass .lname { font: 600 var(--t-s) var(--f-title); color: var(--text); }
+.glass b { font: 700 var(--t-big) / 1.1 var(--f-title); font-variant-numeric: tabular-nums; }
+.glass .lsub { font-size: var(--t-xs); color: var(--mute); }
+.glass.mem { width: 136px; height: 136px; left: calc(50% - 68px); top: 26px; animation: breathe 6s ease-in-out infinite; }
+.glass.lib, .glass.code { width: 88px; height: 88px; top: 60px; }
+.glass.lib { left: 16px; }
+.glass.code { right: 16px; }
+.glass.lib b, .glass.code b { font-size: var(--t-brand); }
+@keyframes breathe { 50% { transform: scale(1.03); } }
+.minibar { position: relative; display: flex; justify-content: space-between; align-items: center; padding: 8px 12px;
+  border-top: 1px solid var(--line); background: rgb(13 24 16 / 0.85); grid-row: 2; }
+
 /* Messages and the Enterprise page */
 .msg { max-width: 560px; margin: 64px auto; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-card);
   padding: 20px 22px; display: flex; flex-direction: column; gap: 10px; color: var(--mute); }

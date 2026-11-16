@@ -1,7 +1,16 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "The main window: core features only; engine calls go through the `footnote` command and its allowlist.",
-  "windows": ["main"],
-  "permissions": ["core:default"]
+  "description": "Both windows: core features, showing, hiding, focusing and dragging the windows (mini mode); engine calls go through the `footnote` command and its allowlist.",
+  "windows": [
+    "main",
+    "mini"
+  ],
+  "permissions": [
+    "core:default",
+    "core:window:allow-show",
+    "core:window:allow-hide",
+    "core:window:allow-set-focus",
+    "core:window:allow-start-dragging"
+  ]
 }

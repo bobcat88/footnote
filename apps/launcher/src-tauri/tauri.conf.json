@@ -11,7 +11,25 @@
   },
   "app": {
     "windows": [
-      { "label": "main", "title": "Footnote", "width": 1440, "height": 900, "minWidth": 1100, "minHeight": 680 }
+      {
+        "label": "main",
+        "title": "Footnote",
+        "width": 1440,
+        "height": 900,
+        "minWidth": 1100,
+        "minHeight": 680
+      },
+      {
+        "label": "mini",
+        "title": "Footnote",
+        "width": 380,
+        "height": 248,
+        "resizable": false,
+        "alwaysOnTop": true,
+        "decorations": false,
+        "visible": false,
+        "skipTaskbar": true
+      }
     ],
     "security": {
       "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src ipc: http://ipc.localhost"
@@ -19,6 +37,9 @@
   },
   "bundle": {
     "active": false,
-    "icon": ["icons/icon.ico", "icons/icon.png"]
+    "icon": [
+      "icons/icon.ico",
+      "icons/icon.png"
+    ]
   }
 }

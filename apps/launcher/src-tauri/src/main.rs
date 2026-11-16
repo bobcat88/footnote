@@ -5,6 +5,7 @@
 use serde_json::Value;
 use std::path::PathBuf;
 use std::process::Command;
+use tauri::Manager;
 
 /// The engine commands the window may run, all read-only.
 fn allowed(args: &[String]) -> bool {
@@ -75,6 +76,14 @@ fn footnote(args: Vec<String>) -> Result<Value, String> {
 fn main() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![footnote])
+        // Closing the full window quits, even while the hidden mini window exists.
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { .. } = event
+                && window.label() == "main"
+            {
+                window.app_handle().exit(0);
+            }
+        })
         .run(tauri::generate_context!())
         .expect("run the Footnote window");
 }
