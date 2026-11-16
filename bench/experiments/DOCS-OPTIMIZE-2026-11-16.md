@@ -44,6 +44,8 @@ End to end (added 16 November, 06:05, before any measurement of it):
   hybrid, EmbeddingGemma), nDCG@5, paired bootstrap over 40 questions (10,000 resamples, seed 20261117). Equivalent: lower bound
   above −0.05; better: above 0. If at least equivalent, the crawler ships with the kept changes as defaults.
 - Reported, not judged: end-to-end time (crawl plus index) of both systems on the sealed libraries, index size.
+- **Competitor runs (Johan, 16 November):** candidates are A/B-tested against Footnote's own previous version only; Grounded
+  Docs is run once, on the sealed set, after gains have accumulated, and not at all if no candidate is kept.
 
 ## Result E, adaptive concurrency (16 November, 06:03, `bench/work/dev/crawl-speed/`)
 

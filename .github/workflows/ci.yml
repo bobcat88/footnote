@@ -15,6 +15,24 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  commits:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Commit messages (Conventional Commits, 72 characters)
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          python3 scripts/check-commits.py "$BASE"
+          printf '%s
+' "$TITLE" > pr-title.txt
+          python3 scripts/check-commits.py --message pr-title.txt
+
   check:
     strategy:
       fail-fast: false
