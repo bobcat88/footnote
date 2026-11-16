@@ -316,3 +316,29 @@ fn background_embeddings_and_opt_in_resident_recall() {
         .unwrap();
     assert!(!result.status.success(), "idle daemon did not leave");
 }
+
+#[test]
+fn session_start_records_the_project_for_the_projects_list() {
+    let t = tempfile::tempdir().unwrap();
+    let state = t.path();
+    seed(state, &[]);
+    hook(state, event("SessionStart", ""));
+    let out = command(state).arg("projects").assert().success().get_output().stdout.clone();
+    let list: Value = serde_json::from_slice(&out).unwrap();
+    let p = &list["projects"][0];
+    // This repository: named after its remote, recorded at its top folder, with git state read live.
+    assert!(p["name"].as_str().is_some_and(|n| !n.is_empty()), "{list}");
+    assert_eq!(
+        fs::canonicalize(p["path"].as_str().unwrap()).unwrap(),
+        fs::canonicalize(env!("CARGO_MANIFEST_DIR")).unwrap(),
+        "{list}"
+    );
+    assert_eq!(p["exists"], true);
+    assert!(p["git"]["uncommitted"].is_u64(), "{list}");
+    assert_eq!(p["memories"], 0, "the seeded memories belong to `global` and `other`: {list}");
+    let first = p["first_seen"].clone();
+    hook(state, event("SessionStart", ""));
+    let again: Value = serde_json::from_slice(&command(state).arg("projects").assert().success().get_output().stdout).unwrap();
+    assert_eq!(again["projects"].as_array().unwrap().len(), 1);
+    assert_eq!(again["projects"][0]["first_seen"], first);
+}

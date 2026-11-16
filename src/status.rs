@@ -24,13 +24,17 @@ fn memory(_: &Path) -> Result<Value> {
     Ok(json!({"built": false}))
 }
 
+/// Footnote Memory's database: the one its settings name, else `<state>/memory.db`.
+#[cfg(feature = "memory")]
+pub(crate) fn memory_db(state: &Path) -> Result<std::path::PathBuf> {
+    let settings = footnote_core::config::product_settings(state, "memory")?;
+    Ok(settings["db"].as_str().map(std::path::PathBuf::from).unwrap_or_else(|| state.join("memory.db")))
+}
+
 #[cfg(feature = "memory")]
 fn memory(state: &Path) -> Result<Value> {
     let settings = footnote_core::config::product_settings(state, "memory")?;
-    let db = settings["db"]
-        .as_str()
-        .map(std::path::PathBuf::from)
-        .unwrap_or_else(|| state.join("memory.db"));
+    let db = memory_db(state)?;
     let mut out = json!({
         "built": true,
         "enabled": settings["enabled"].as_bool().unwrap_or(true),

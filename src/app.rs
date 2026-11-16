@@ -236,6 +236,10 @@ enum Action {
     Status,
     /// Running and recent long steps (downloads, indexing) with their progress, whoever started them.
     Jobs,
+    /// Projects agents worked in (recorded automatically at each session start): memories, code graph, uncommitted and
+    /// unpushed git work.
+    #[cfg(feature = "memory")]
+    Projects,
     /// What memory did, day by day: memories saved, sessions and prompts given memories, the memories used most.
     #[cfg(feature = "memory")]
     Activity {
@@ -521,6 +525,8 @@ fn execute(cli: Cli) -> Result<Value> {
         }
         Action::Jobs => return footnote_core::jobs::list(&crate::state::state_dir()?),
         #[cfg(feature = "memory")]
+        Action::Projects => return crate::projects::list(&crate::state::state_dir()?),
+        #[cfg(feature = "memory")]
         Action::Activity { days } => return crate::activity::activity(*days),
         Action::Options => return footnote_core::config::options(&crate::state::state_dir()?),
         Action::Models { action } => {
@@ -706,6 +712,8 @@ fn execute(cli: Cli) -> Result<Value> {
             unreachable!("dispatched before the database is opened")
         }
         #[cfg(feature = "memory")]
+        Action::Projects => unreachable!("dispatched before the database is opened"),
+        #[cfg(feature = "memory")]
         Action::Hook { .. } => unreachable!("the hook is dispatched before the database is opened"),
         Action::Install { .. } | Action::Embed { .. } => {
             unreachable!("dispatched before the database is opened")
@@ -789,6 +797,8 @@ fn action_name(a: &Action) -> &'static str {
         #[cfg(feature = "library")]
         Action::Crawl { .. } => "crawl",
         Action::Jobs => "jobs",
+        #[cfg(feature = "memory")]
+        Action::Projects => "projects",
         #[cfg(feature = "memory")]
         Action::Activity { .. } => "activity",
         #[cfg(feature = "memory")]

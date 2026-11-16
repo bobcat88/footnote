@@ -144,7 +144,7 @@ fn project_of(cwd: &str) -> String {
 }
 
 /// One git query with a 5-second bound; empty on any failure.
-fn git(cwd: &str, args: &[&str]) -> String {
+pub(crate) fn git(cwd: &str, args: &[&str]) -> String {
     (|| -> Result<String> {
         let mut child = hidden(
             Command::new("git")
@@ -436,6 +436,9 @@ fn handle(state: &Path, s: &Settings, event: &Value) -> Result<Option<Value>> {
     let mut out = None;
     match e.name.as_str() {
         "SessionStart" => {
+            let top = git(&e.cwd, &["rev-parse", "--show-toplevel"]);
+            // Best effort: the project list must never cost the agent its memory pack.
+            let _ = crate::projects::seen(state, &project, if top.is_empty() { &e.cwd } else { &top });
             embed_in_background(s, &db)?;
             if db.exists() {
                 let memories =

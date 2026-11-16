@@ -8,6 +8,8 @@ mod hook;
 mod install;
 mod mcp;
 mod models;
+#[cfg(feature = "memory")]
+mod projects;
 mod status;
 
 // Moved to library crates (ADR 0001); imported here so `crate::<module>` paths keep working.
