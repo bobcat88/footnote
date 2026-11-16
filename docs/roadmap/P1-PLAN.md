@@ -63,6 +63,11 @@ When the daemon runs, it may relay the same events over its local socket for mil
    - a card's states: available to install, downloading (size, percent, pause, cancel), installed and up to date, update
      available (installed → released version), coming soon;
    - modules can be hidden and found again behind a "Hidden" toggle.
+   - **Enterprise modules (Johan, 17 Nov):** Footnote One also lists the paid modules (Alias, sign-on and rights, company
+     portfolio...) so users see what Enterprise adds. They sit in one "Footnote Enterprise" group at the end of the list, muted,
+     with "Learn more" instead of Install; never a pop-up, a badge or a reminder elsewhere, so the free edition stays simple and
+     does not nag. "Upgrading" means installing the Enterprise build (the free build does not contain the paid code), not a key
+     that unlocks hidden features.
    Engine side: `footnote status` lists only Library and Memory today; M3 adds the full catalogue (every product and model with
    its state) so the window draws from one command.
 3. Icons in the same pass: one family, one icon per product (Footnote, Library, Memory, Code, Alias). SVG master, then ICO for
