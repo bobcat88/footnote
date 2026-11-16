@@ -148,6 +148,15 @@ handful of agents on one machine.
 
 ## Ideas, unranked
 
+- **How T3 Code gets its usage numbers** (read in its source, MIT, 16 Nov; `apps/server/src/usage/`). No token-counting proxy:
+  (1) it reads the agents' own local session files (Claude Code and Codex transcripts record each turn's input, output and cache
+  tokens), scanning only new bytes since the last pass, guarded by a hash so a rewritten file is re-read; (2) cost = tokens ×
+  a price table (LiteLLM's, with user overrides), including cache-write and long-context tiers; (3) plan limits ("Session 84 %,
+  Weekly 45 %") come from each provider's account usage endpoint, called with the user's own sign-in (Anthropic's
+  `api/oauth/usage`, ChatGPT's `backend-api/wham/usage`, Google's quota summary); (4) the context bar comes from the thread's
+  token snapshot. For Footnote: (1), (2) and (4) are local reads that fit zero retention (counts only, never prompt text);
+  (3) uses endpoints the providers do not document, so it can break or conflict with their terms: optional, off by default.
+  No RTK-style counting layer is needed for this. Per person: Footnote One; team roll-ups: Enterprise.
 - **AI sobriety: one view of usage, cost and savings** (Johan, 15 Nov). Explore a Footnote-family workspace that combines the
   token/cost visibility Johan values in T3 Code with optimizations inspired by RTK, caveman and ponytail. Show input, output and
   cached tokens, model/provider and cost where authoritative usage and applicable prices are available; distinguish invoice or API
