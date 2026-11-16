@@ -96,6 +96,30 @@ than 5 % were all footer-only before (for example `nis.html` now opens with "Dep
 3.13"); React, FastAPI, Vite, Tailwind CSS, Pydantic and Svelte: 0 pages changed. The three earlier tries are kept as
 `G-try1..3` and `changes-try1..3.json`.
 
+D and F made concrete (added 16 November, 09:10, before measuring either; Johan gave the go the same morning to run the final
+alone once D and F are settled):
+- **D, measured:** the B2 development databases searched hybrid, `--limit 5`, with `--per-source 1` against no per-file cap
+  (today's product default; the metric already counts each page once, so a repeated page wastes a slot). **Keep D** by the
+  search rule on the development questions (pooled up, neither set down by more than 0.01). If kept, the final passes
+  `--per-source 1` and the MCP tool description recommends it for documentation; the product default stays unchanged until
+  a guard run with the cap exists (the guard harness has no per-file option).
+- **F, this round:** profile the index build per development library (index: extraction, chunking and keyword index; then
+  vectors per model) on an idle machine (live CPU sampled first, Process Lasso ignored). A speed-up is kept only if the
+  rebuilt databases return identical rankings on the 99 development questions and the build is faster in wall time. Indexing
+  while crawling is reported as a design note if the profile shows it would pay; it is not built in this round.
+
+**Result D (B2 databases, `bench/work/dev/D-nocap/`):** no per-file cap against `--per-source 1`: gd 0.6894 (-0.0239
+[-0.0428, -0.0084]), confirm 0.6008 (-0.0369 [-0.0695, -0.0111]), pooled 0.6536 (-0.0292 [-0.0457, -0.0144]). **Kept:** the cap
+of one passage per page is worth +0.029 nDCG@5 pooled; the final passes `--per-source 1`, the MCP tool description recommends
+it for documentation.
+
+**Result F, this round:** the 14 November build study (`BUILD-SPEED.md`) already profiled the build: encoding is 97-99.9 %
+ONNX inference, both models already saturate the CPU (two models at once: 0.94x, rejected), and batch size or order changes
+the int8 vectors. What changed since: B2 embeds 30 % fewer chunks on the development libraries (29,678 -> 20,860) and the
+seven builds took 771 s against 916 s for A (84 %; same machine, not certified idle). Indexing while crawling would overlap at
+most the crawl itself (about 38 s against about 754 s of indexing on five libraries), so it is not worth building now. The
+lever left is document encoding on the GPU (test 3 of `BUILD-SPEED.md`, never run), kept only if vectors match the CPU.
+
 ## Rules
 
 - **Keep a search change** when mean nDCG@5 rises on the pooled development questions (99) and neither development set drops

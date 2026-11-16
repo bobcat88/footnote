@@ -4,7 +4,8 @@
 
 Indexes each set's exported pages (Grounded Docs' crawl) into bench/work/dev/<label>/<set>/<lib>.db, searches hybrid with the
 shipped pair and `--per-source 1` (8 at a time; quality only), scores against that set's Grounded Docs hybrid run, and compares
-with the label `baseline` (or `DOCS_REF`) when it exists.
+with the label `baseline` (or `DOCS_REF`) when it exists. `DOCS_DBS=<label>` searches that label's databases instead of
+building new ones; `DOCS_PER_SOURCE=0` drops the per-file cap.
 """
 from __future__ import annotations
 
@@ -31,15 +32,17 @@ def run(label: str, extra: list[str]) -> dict:
     for name, (run_dir, dataset) in SETS.items():
         qs = [e["vars"] for e in yaml.safe_load(dataset.read_text(encoding="utf-8"))["entries"]]
         manifest = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
-        folder = OUT / label / name
+        folder = OUT / os.environ.get("DOCS_DBS", label) / name
         folder.mkdir(parents=True, exist_ok=True)
+        (OUT / label).mkdir(exist_ok=True)
         for lib in sorted({q["library"] for q in qs}):
             db = folder / f"{lib}.db"
             if not db.exists():
                 t = time.time()
                 g.fn_build(db, run_dir / "corpus" / lib)
                 print(f"{time.strftime('%H:%M:%S')} {label}/{name}/{lib} built in {time.time() - t:.0f} s", flush=True)
-        args = ["--limit", "5", "--per-source", "1", "--mode", "hybrid", *[a for m in g.MODELS for a in ("--model", m)], *extra]
+        cap = os.environ.get("DOCS_PER_SOURCE", "1")
+        args = ["--limit", "5", *(["--per-source", cap] if cap != "0" else []), "--mode", "hybrid", *[a for m in g.MODELS for a in ("--model", m)], *extra]
 
         def one(i: int):
             q = qs[i]
