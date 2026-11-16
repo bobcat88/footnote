@@ -46,9 +46,31 @@ untouched, Arkea-Next-Desktop untouched. If an item is blocked, write why in its
 - Done when: a short results note in `bench/experiments/` with the build outcome and, if measured, the numbers and the verdict.
   No product change in this item.
 
+## Added at launch (Johan, 22:00): the night is eight hours, so more goals; what is not done carries over
+Johan confirmed the machine stays idle all night (no games), so item 5's timing runs (live load sampled first).
+
+### 6. Launcher, Code screens (medium; DESIGN.md section 11)
+- Symbol view: search a symbol, callers and callees as an ego graph, file and line, from `footnote code`.
+- Architecture view: blocks and links from `footnote code-map` (item 2); the hairball stays a later, optional "cool view".
+
+### 7. Launcher, Projects, Models and Activity screens (medium)
+- The sidebar's other screens from the same data commands; Models shows licence and installed state, Install stays a
+  command shown to copy (no download from the UI tonight).
+
+### 8. Launcher, mini mode (medium)
+- The D2 lens look as a small always-on-top window (three lenses, last recall), toggled from the full window and back.
+  Motion respects reduced-motion.
+
+### 9. Third-party notices (small)
+- A generated list of every Rust dependency and its licence (cargo-about or a script over `cargo metadata`, whichever
+  passes the security review), checked in, plus a test or script that flags a dependency without a commercial-use licence.
+
+### 10. Docs catch-up (small)
+- README, CHANGELOG and BACKLOG updated for everything merged tonight; the morning report table at the end of this file.
+
 ## Order and stop
 1, 2, 4 and 5 are engine work that does not depend on each other; 3 depends only on the locked design. Order for the night:
-1, 2, 3, 4, 5. Report in the morning: one table, item, PR, result, what was skipped and why.
+1, 2, 3, 4, 5, then 9, 6, 7, 8, 10 (10 always runs last, even if others are left). Report in the morning: one table, item, PR, result, what was skipped and why.
 
 ## Not tonight (needs Johan)
 Memory review (21 Nov), more Code languages (third-party indexers need a security review first), Alias out of the free repo
