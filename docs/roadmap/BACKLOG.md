@@ -71,7 +71,9 @@ Plan and decisions: [P1-PLAN.md](P1-PLAN.md) (engine commands first, then design
     held-out (0.913, misses are lone first names). Done 16 Nov: both inside the binary (`alias-scan --model`, same held-out scores,
     34 ms per text) with stable keyed pseudonyms (`--pseudonymise`). Installed with `footnote models install openai-privacy-filter`
     (every file pinned). Next: the underline-and-explain prototype; GLiNER2-PII only on a new set v2 if names need more margin. Design notes below.
-13. **Footnote Code:** code-graph study ([plan](../research/CODE-GRAPH-STUDY.md)); hands-on after Johan's go.
+13. **Footnote Code:** code-graph study ([plan](../research/CODE-GRAPH-STUDY.md)). Stage 1 built 16 Nov
+    ([design, section 10](../CODE-GRAPH-DESIGN.md)): `code-index` and `code <name>` from `rust-analyzer scip` (callers, callees,
+    stale files), opt-in feature `code`. Next: the MCP tool, the other languages' SCIP indexers, then the tree-sitter pass.
     Its graph visualizer uses the family's design language, decided with the launcher in the M2 studio
     ([analysis, section 5](../research/LAUNCHER-DESIGN-ANALYSIS.md)).
 14. **Documentation ingestion in Footnote Library** (Johan 15 Nov): crawl and index a documentation site on demand, one index per

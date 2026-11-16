@@ -277,6 +277,23 @@ enum Action {
         #[arg(long)]
         pseudonymise: bool,
     },
+    /// Footnote Code (not released): build the code graph of a Rust project from `rust-analyzer scip`.
+    #[cfg(feature = "code")]
+    CodeIndex {
+        /// Project folder (holding Cargo.toml).
+        #[arg(default_value = ".")]
+        root: PathBuf,
+    },
+    /// Footnote Code (not released): a symbol's signature, place, callers and callees, from the compiler's index.
+    #[cfg(feature = "code")]
+    Code {
+        name: String,
+        /// Project folder indexed with `code-index`.
+        #[arg(long, default_value = ".")]
+        root: PathBuf,
+        #[arg(long, default_value_t = 30)]
+        limit: usize,
+    },
     /// Verify an append-only audit log (no database needed).
     Audit {
         #[command(subcommand)]
@@ -430,6 +447,10 @@ fn execute(cli: Cli) -> Result<Value> {
             };
         }
         Action::Audit { action } => return audit_command(action),
+        #[cfg(feature = "code")]
+        Action::CodeIndex { root } => return footnote_code::index(&canonical(root)?, &code_db(root)?),
+        #[cfg(feature = "code")]
+        Action::Code { name, root, limit } => return footnote_code::lookup(&code_db(root)?, name, *limit),
         #[cfg(feature = "alias")]
         Action::AliasScan { model, pseudonymise } => {
             let texts: Vec<String> = serde_json::from_reader(std::io::stdin().lock())?;
@@ -672,6 +693,8 @@ fn execute(cli: Cli) -> Result<Value> {
         }
         #[cfg(feature = "library")]
         Action::Crawl { .. } => unreachable!("dispatched before the database is opened"),
+        #[cfg(feature = "code")]
+        Action::CodeIndex { .. } | Action::Code { .. } => unreachable!("dispatched before the database is opened"),
         #[cfg(feature = "alias")]
         Action::AliasScan { .. } => unreachable!("dispatched before the database is opened"),
         Action::Audit { .. }
@@ -707,6 +730,18 @@ fn writes(a: &Action) -> bool {
         _ => false,
     }
 }
+#[cfg(feature = "code")]
+fn canonical(root: &Path) -> Result<PathBuf> {
+    std::path::absolute(root).map_err(|e| anyhow::anyhow!("project folder {}: {e}", root.display()))
+}
+
+/// One graph per project, in the state folder (never inside the repository), named after the project's canonical path.
+#[cfg(feature = "code")]
+fn code_db(root: &Path) -> Result<PathBuf> {
+    let key = footnote_core::hash(canonical(root)?.to_string_lossy().as_bytes());
+    Ok(crate::state::state_dir()?.join("code").join(format!("{}.db", &key[..16])))
+}
+
 /// Step name of a command in the metrics file.
 #[cfg(feature = "metrics")]
 fn action_name(a: &Action) -> &'static str {
@@ -745,6 +780,10 @@ fn action_name(a: &Action) -> &'static str {
         Action::Audit { .. } => "audit",
         #[cfg(feature = "alias")]
         Action::AliasScan { .. } => "alias-scan",
+        #[cfg(feature = "code")]
+        Action::CodeIndex { .. } => "code-index",
+        #[cfg(feature = "code")]
+        Action::Code { .. } => "code",
         Action::Options => "options",
         Action::Status => "status",
         #[cfg(feature = "library")]

@@ -171,3 +171,26 @@ How impact is measured (Johan asked how an impact tool can be judged): three ans
   the tests the tool predicted (precision and recall).
 - **Compiler truth:** the transitive callers from SCIP are the exact static blast radius of a symbol.
 - **History:** for past commits, the files changed together and the tests that broke in CI.
+
+## 10. Stage 1 built: the precise pass for Rust (16 November 2026)
+
+Johan asked for a base. Built first: the part every later stage needs, and the answer key the hands-on comparison
+([CODE-GRAPH-STUDY.md](research/CODE-GRAPH-STUDY.md), part 2) needs anyway.
+
+- `footnote code-index [root]` runs `rust-analyzer scip` (shipped with the Rust toolchain), reads the SCIP index with a small
+  hand-written protobuf reader (`crates/code/src/scip.rs`, no new dependency) and writes one SQLite graph per project in the
+  state folder (never inside the repository), built beside the old one and renamed into place.
+- Stored: files with their SHA-256, definitions (name, kind, signature, line range), references with the item whose body
+  holds them (the caller) and `origin = compiler`. Local variables and references to code outside the project are left out.
+- `footnote code <name> [--root]`: each definition with that name, its signature and lines, its callers (with call lines),
+  its callees in the project, and `stale`: files of the answer changed since indexing (the agent should read them directly).
+- Opt-in build feature `code`, not released; CLI only, no MCP tool yet (design: at most two, `footnote_code` and
+  `footnote_impact`).
+
+First measures on BorgKnowledge (52 Rust files, 523 KB of code): 857 definitions, 2,452 references; index in 4.3 s warm
+(10.5 s cold, almost all of it rust-analyzer), graph 412 KB (0.8 times the code; target at most 10 times), a lookup in 58 ms
+including process start. Callers of `store::lean` matched a manual grep exactly (5 references, 4 calling functions).
+
+Not built yet, in order: the MCP tool; TypeScript, JavaScript, Python and Java through their SCIP indexers; the tree-sitter pass
+(fast, labelled guesses) for files and languages with no compiler index; inputs and outputs (files, configuration, environment
+variables, tables, routes); freshness by watcher; then the comparison against codebase-memory-mcp on the measured items.

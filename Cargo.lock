@@ -871,6 +871,7 @@ dependencies = [
  "assert_cmd",
  "clap",
  "footnote-alias",
+ "footnote-code",
  "footnote-core",
  "footnote-library",
  "footnote-memory",
@@ -901,6 +902,16 @@ dependencies = [
  "serde",
  "sha2",
  "tokenizers",
+]
+
+[[package]]
+name = "footnote-code"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "anyhow",
+ "footnote-core",
+ "rusqlite",
+ "serde_json",
 ]
 
 [[package]]
