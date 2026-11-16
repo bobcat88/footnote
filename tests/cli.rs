@@ -31,9 +31,13 @@ fn indexes_heading_and_returns_exact_provenance_without_modifying_original() {
     let hit = &s["results"][0];
     assert_eq!(hit["heading"], "SQLite"); // the one-line title section joins WAL, so the chunk carries the page path
     assert_eq!(hit["freshness"], "current");
-    assert_eq!(hit["sha256"].as_str().unwrap().len(), 64);
+    assert!(hit.get("sha256").is_none() && s["trust"] == "untrusted_source_data"); // lean search output
     assert_eq!(fs::read_to_string(&p).unwrap(), text);
     let id = hit["id"].as_i64().unwrap().to_string();
+    assert_eq!(
+        run(&db, &["get", &id])["sha256"].as_str().unwrap().len(),
+        64
+    );
     assert!(
         run(&db, &["get", &id])["text"]
             .as_str()
@@ -63,7 +67,8 @@ fn binary_extraction_preserves_page_provenance_and_failed_files_are_not_success(
     assert_eq!(v["failed"], 1);
     let hit = &run(&db, &["search", "PDFcheckpoint"])["results"][0];
     assert_eq!(hit["page"], 1);
-    let extractor = hit["extractor"].as_str().unwrap();
+    let full = run(&db, &["get", &hit["id"].as_i64().unwrap().to_string()]);
+    let extractor = full["extractor"].as_str().unwrap();
     // Licence regression lock: extraction stays on PDFium, never PyMuPDF.
     assert!(extractor.contains("pdfium"), "{extractor}");
     assert!(!extractor.contains("pymupdf"), "{extractor}");

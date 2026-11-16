@@ -197,6 +197,22 @@ pub fn hit(r: &rusqlite::Row<'_>, full: bool) -> rusqlite::Result<Value> {
         json!({"id":r.get::<_,i64>(0)?,"path":path,"sha256":sha,"revision":r.get::<_,i64>(3)?,"status":status,"extractor":r.get::<_,String>(5)?,"heading":r.get::<_,String>(6)?,"page":r.get::<_,Option<i64>>(7)?,"line":r.get::<_,i64>(8)?,"text":text.chars().take(if full {2000} else {500}).collect::<String>(),"freshness":freshness(&path,&sha,&status),"trust":"untrusted_source_data"}),
     )
 }
+/// What a search returns per hit: where it is and what it says. Hashes, revision, status and extractor stay in `get <id>`;
+/// the untrusted-data label is stated once per response (`TRUST`). About a third fewer characters per result list.
+pub fn lean(mut hits: Vec<Value>) -> Vec<Value> {
+    for v in &mut hits {
+        if let Some(o) = v.as_object_mut() {
+            for k in ["sha256", "revision", "status", "extractor", "trust"] {
+                o.remove(k);
+            }
+            if o.get("page").is_some_and(Value::is_null) {
+                o.remove("page");
+            }
+        }
+    }
+    hits
+}
+pub const TRUST: &str = "untrusted_source_data";
 pub const HIT: &str = "SELECT c.id,s.path,s.sha256,s.revision,s.status,s.extractor,c.heading,c.page,c.line,c.text FROM chunks c JOIN sources s ON s.id=c.source_id";
 /// Counts the chunks already returned from each source file, so one long file cannot fill the whole result list.
 pub struct PerSource {
@@ -285,7 +301,9 @@ pub fn search(
                 results.push(v);
             }
         }
-        return Ok(json!({"mode":"lexical_bm25","results":results,"records":records}));
+        return Ok(
+            json!({"mode":"lexical_bm25","results":lean(results),"records":records,"trust":TRUST}),
+        );
     }
     let sql = format!(
         "{HIT} JOIN search_fts f ON f.rowid=c.id WHERE search_fts MATCH ?1 AND s.status='indexed' AND c.id=(SELECT min(c2.id) FROM chunks c2 JOIN sources s2 ON s2.id=c2.source_id WHERE s2.sha256=s.sha256 AND s2.status='indexed' AND c2.heading=c.heading AND c2.page IS c.page AND c2.line=c.line AND c2.text=c.text) ORDER BY bm25(search_fts),c.id LIMIT ?2"
@@ -304,7 +322,7 @@ pub fn search(
         .filter(|v| cap.allow(v["path"].as_str().unwrap_or("")))
         .take(text_limit)
         .collect();
-    Ok(json!({"mode":"lexical_fts5","results":results,"records":records}))
+    Ok(json!({"mode":"lexical_fts5","results":lean(results),"records":records,"trust":TRUST}))
 }
 pub fn stats(c: &Connection) -> Result<Value> {
     let mut statuses = serde_json::Map::new();

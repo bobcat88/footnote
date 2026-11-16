@@ -659,7 +659,6 @@ pub fn search(
         "record" => eligible.contains(&id),
         _ => !structured,
     };
-    let n = recipes.len();
     let dense = crate::metrics::timed!(
         "search.vectors",
         (|| -> Result<_> {
@@ -775,17 +774,9 @@ pub fn search(
             results.push(v)
         }
     }
-    let manifests = recipes
-        .iter()
-        .map(|r| serde_json::from_str::<Value>(&r.2))
-        .collect::<Result<Vec<_>, _>>()?;
-    let identities: Vec<&String> = recipes.iter().map(|r| &r.1).collect();
     Ok(json!({
-        "mode":"hybrid_cc","models":manifests,"model_sha256":identities,
-        "results":results,"records":records,"answerability":"not_estimated",
-        "ranking":format!("convex combination {ALPHA} dense + {:.2} BM25 (z-scores over the top {POOL}); dense = mean of {n} model(s), exact scan up to {SCAN_LIMIT} entries else over a BM25 shortlist of {SHORTLIST}; scores are not confidence", 1.0 - ALPHA),
-        "strategy":if scan {"full_dense_scan"} else {"lexical_shortlist"},"candidates":cands.len(),"with_vectors":with_vectors,
-        "freshness_policy":"point-in-time source/evidence hashes; stale citations remain explicitly labeled"
+        "mode":"hybrid_cc","results":crate::store::lean(results),"records":records,"trust":crate::store::TRUST,
+        "strategy":if scan {"full_dense_scan"} else {"lexical_shortlist"},"candidates":cands.len(),"with_vectors":with_vectors
     }))
 }
 

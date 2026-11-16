@@ -80,13 +80,14 @@ fn changes_deletions_duplicates_and_missing_index_do_not_reuse_stale_vectors() {
     assert_eq!(v["with_vectors"], 0);
     assert!(v["results"].as_array().unwrap().is_empty());
     run(&db, &["rebuild-embeddings", "--model", MODEL]);
-    assert_eq!(
-        run(
-            &db,
-            &["search", "ETag", "--mode", "hybrid", "--model", MODEL]
-        )["results"][0]["revision"],
-        2
-    );
+    let etag = run(
+        &db,
+        &["search", "ETag", "--mode", "hybrid", "--model", MODEL],
+    )["results"][0]["id"]
+        .as_i64()
+        .unwrap()
+        .to_string();
+    assert_eq!(run(&db, &["get", &etag])["revision"], 2);
     let c = rusqlite::Connection::open(&db).unwrap();
     c.execute("UPDATE embedding_models SET helper_sha256='tampered'", [])
         .unwrap();
