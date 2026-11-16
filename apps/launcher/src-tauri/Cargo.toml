@@ -1,0 +1,17 @@
+[package]
+name = "footnote-launcher"
+version = "0.1.0"
+description = "Footnote One: the desktop window over the footnote engine"
+edition = "2024"
+license = "Apache-2.0"
+rust-version = "1.92"
+
+# Its own workspace: Tauri stays out of the engine's build and CI.
+[workspace]
+
+[build-dependencies]
+tauri-build = { version = "=2.7.4", features = [] }
+
+[dependencies]
+tauri = { version = "=2.12.5", features = [] }
+serde_json = "1"

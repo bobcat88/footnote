@@ -79,7 +79,8 @@ When the daemon runs, it may relay the same events over its local socket for mil
 
 ### M3: launcher
 
-`apps/launcher`: Tauri 2, web interface (React + Tailwind, matching the study), calling `footnote` commands. Windows first, built
+`apps/launcher`: Tauri 2, web interface (React with the study's CSS tokens; Tailwind dropped on 17 Nov because the locked mock
+is plain CSS and Tailwind 4 adds a native compiler), calling `footnote` commands. First screen built 17 Nov (overnight item 3). Windows first, built
 for Linux and macOS in CI. QLoop UI gates before acceptance.
 
 ### M4: distribution (later)

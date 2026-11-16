@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "The main window: core features only; engine calls go through the `footnote` command and its allowlist.",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}
