@@ -68,6 +68,10 @@ When the daemon runs, it may relay the same events over its local socket for mil
      with "Learn more" instead of Install; never a pop-up, a badge or a reminder elsewhere, so the free edition stays simple and
      does not nag. "Upgrading" means installing the Enterprise build (the free build does not contain the paid code), not a key
      that unlocks hidden features.
+   - **Support link (Johan, 17 Nov):** one small "Support the project" link in the footer or About screen, to a donation page
+     (Liberapay: no platform fee; Ko-fi: 5 % on its free plan; GitHub Sponsors: fee to confirm on GitHub's own page), and a
+     "Footnote Enterprise" link for companies. Nothing else: no pop-up, badge or reminder. How donations are taxed in France
+     (micro-entreprise or not) is for Johan's accountant; no clear official answer found.
    Engine side: `footnote status` lists only Library and Memory today; M3 adds the full catalogue (every product and model with
    its state) so the window draws from one command.
 3. Icons in the same pass: one family, one icon per product (Footnote, Library, Memory, Code, Alias). SVG master, then ICO for
