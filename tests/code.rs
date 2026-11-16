@@ -83,6 +83,83 @@ fn callers_and_callees_come_from_the_compiler_index() {
     );
 }
 
+/// Two crates and one package outside the indexed folder: the map gives each crate as a block, the link from `b` to `a`
+/// counted in references, and `ext` as an outside package used by `b`.
+#[test]
+fn the_architecture_map_counts_blocks_links_and_outside_packages() {
+    if std::process::Command::new("rust-analyzer")
+        .arg("--version")
+        .output()
+        .is_err()
+    {
+        eprintln!("rust-analyzer not installed: skipped");
+        return;
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let (state, root, ext) = (
+        dir.path().join("state"),
+        dir.path().join("ws"),
+        dir.path().join("ext"),
+    );
+    let file = |p: &Path, text: &str| {
+        fs::create_dir_all(p.parent().unwrap()).unwrap();
+        fs::write(p, text).unwrap();
+    };
+    let manifest = |name: &str, deps: &str| {
+        format!(
+            "[package]\nname = \"{name}\"\nversion = \"0.1.0\"\nedition = \"2021\"\n[dependencies]\n{deps}"
+        )
+    };
+    file(
+        &root.join("Cargo.toml"),
+        "[workspace]\nmembers = [\"crates/a\", \"crates/b\"]\nresolver = \"2\"\n",
+    );
+    file(&root.join("crates/a/Cargo.toml"), &manifest("a", ""));
+    file(
+        &root.join("crates/a/src/lib.rs"),
+        "pub fn base() -> u8 {\n    1\n}\n",
+    );
+    file(
+        &root.join("crates/b/Cargo.toml"),
+        &manifest(
+            "b",
+            "a = { path = \"../a\" }\next = { path = \"../../../ext\" }\n",
+        ),
+    );
+    file(
+        &root.join("crates/b/src/lib.rs"),
+        "pub fn top() -> u8 {\n    a::base() + a::base() + ext::call()\n}\n",
+    );
+    file(&ext.join("Cargo.toml"), &manifest("ext", ""));
+    file(&ext.join("src/lib.rs"), "pub fn call() -> u8 {\n    7\n}\n");
+    let root = root.to_str().unwrap();
+
+    footnote(&state, &["code-index", root]);
+    let map = footnote(&state, &["code-map", "--root", root]);
+    let names: Vec<&str> = map["blocks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|b| b["name"].as_str().unwrap())
+        .collect();
+    assert!(
+        names.contains(&"crates/a") && names.contains(&"crates/b"),
+        "{map}"
+    );
+    assert_eq!(
+        map["links"],
+        serde_json::json!([{"from": "crates/b", "to": "crates/a", "references": 2}]),
+        "{map}"
+    );
+    let ext = &map["outside"][0];
+    assert_eq!(
+        (ext["package"].as_str(), ext["references"].as_i64()),
+        (Some("ext"), Some(1)),
+        "{map}"
+    );
+    assert_eq!(ext["used_by"], serde_json::json!(["crates/b"]), "{map}");
+}
+
 /// Without rust-analyzer on PATH, indexing says how to install it instead of a raw "program not found".
 #[test]
 fn a_missing_indexer_says_how_to_install_it() {

@@ -19,7 +19,19 @@ CREATE INDEX symbols_name ON symbols(name);
 CREATE TABLE refs(symbol_id INTEGER NOT NULL REFERENCES symbols(id), file_id INTEGER NOT NULL REFERENCES files(id),
   line INTEGER NOT NULL, caller_id INTEGER REFERENCES symbols(id), origin TEXT NOT NULL);
 CREATE INDEX refs_symbol ON refs(symbol_id);
-CREATE INDEX refs_caller ON refs(caller_id);";
+CREATE INDEX refs_caller ON refs(caller_id);
+CREATE TABLE outside(file_id INTEGER NOT NULL REFERENCES files(id), package TEXT NOT NULL, version TEXT NOT NULL,
+  refs INTEGER NOT NULL);";
+
+/// Package and version of a SCIP symbol (`<scheme> <manager> <package> <version> <descriptors>`).
+fn package(symbol: &str) -> Option<(&str, &str)> {
+    if symbol.starts_with("local ") {
+        return None;
+    }
+    let mut f = symbol.splitn(5, ' ');
+    let (_, _, pkg, ver) = (f.next()?, f.next()?, f.next()?, f.next()?);
+    Some((pkg, ver))
+}
 
 /// What a SCIP symbol is, from its last descriptor (`().` method, `#` type, `/` namespace, `.` term).
 fn kind(symbol: &str) -> &'static str {
@@ -150,6 +162,9 @@ fn write(db: &Path, root: &Path, docs: &[scip::Document]) -> Result<(usize, usiz
         }
     }
     let mut refs = 0;
+    let ours: std::collections::HashSet<&str> =
+        ids.keys().filter_map(|s| package(s).map(|p| p.0)).collect();
+    let mut outside: HashMap<(i64, &str, &str), i64> = HashMap::new();
     {
         let mut add = tx.prepare("INSERT INTO refs VALUES(?1, ?2, ?3, ?4, 'compiler')")?;
         for (d, &file) in docs.iter().zip(&file_ids) {
@@ -170,6 +185,12 @@ fn write(db: &Path, root: &Path, docs: &[scip::Document]) -> Result<(usize, usiz
                 .filter(|o| o.roles & scip::DEFINITION == 0)
             {
                 let Some(&target) = ids.get(o.symbol.as_str()) else {
+                    // A reference into another package (not a bare path to it): kept as a count for the architecture map.
+                    if let Some((pkg, ver)) = package(&o.symbol)
+                        .filter(|p| !ours.contains(p.0) && kind(&o.symbol) != "module")
+                    {
+                        *outside.entry((file, pkg, ver)).or_default() += 1;
+                    }
                     continue;
                 };
                 let caller = items
@@ -181,6 +202,12 @@ fn write(db: &Path, root: &Path, docs: &[scip::Document]) -> Result<(usize, usiz
                 refs += 1;
             }
         }
+    }
+    for ((file, pkg, ver), n) in outside {
+        tx.execute(
+            "INSERT INTO outside VALUES(?1, ?2, ?3, ?4)",
+            params![file, pkg, ver, n],
+        )?;
     }
     tx.commit()?;
     Ok((docs.len(), ids.len(), refs))
@@ -270,6 +297,115 @@ pub fn lookup(db: &Path, name: &str, limit: usize) -> Result<Value> {
     Ok(json!({"root": root, "origin": "compiler", "symbols": found, "stale": stale}))
 }
 
+/// What an outside package is for, from a short hand-written list; `None` when not listed.
+fn class(package: &str) -> Option<&'static str> {
+    Some(match package {
+        "rusqlite" | "sqlx" | "diesel" | "postgres" | "tokio-postgres" | "redis" | "mongodb"
+        | "sled" | "rocksdb" | "duckdb" | "libsql" | "tantivy" | "qdrant-client" | "lancedb"
+        | "sea-orm" => "database",
+        "reqwest" | "ureq" | "hyper" | "axum" | "actix-web" | "warp" | "tonic" | "url" | "http"
+        | "isahc" | "surf" | "tungstenite" | "tokio-tungstenite" | "rocket" | "poem" | "iroh" => {
+            "network"
+        }
+        "async-openai" | "openai" | "anthropic" | "ollama-rs" | "rig-core" | "genai" | "ort"
+        | "llama-cpp-2" | "candle-core" | "tokenizers" | "mistralrs" => "model",
+        "std" | "core" | "alloc" => "standard library",
+        _ => return None,
+    })
+}
+
+/// The block a file belongs to: the first `depth` folders of its path (`.` for files at the root).
+fn block(path: &str, depth: usize) -> String {
+    let parts: Vec<&str> = path.split(['/', '\\']).collect();
+    let dirs = &parts[..parts.len() - 1];
+    if dirs.is_empty() {
+        ".".into()
+    } else {
+        dirs[..depth.min(dirs.len())].join("/")
+    }
+}
+
+/// The architecture map: blocks (folders, `depth` deep) with their symbols, links between blocks counted in
+/// references, and the outside packages each block uses.
+pub fn map(db: &Path, depth: usize) -> Result<Value> {
+    let c = Connection::open_with_flags(db, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+        .with_context(|| {
+            format!(
+                "no code graph at {}; run `footnote code-index` first",
+                db.display()
+            )
+        })?;
+    let has_outside: bool = c.query_row(
+        "SELECT count(*) > 0 FROM sqlite_master WHERE name = 'outside'",
+        [],
+        |r| r.get(0),
+    )?;
+    if !has_outside {
+        bail!(
+            "this code graph was built before the architecture map; run `footnote code-index` again"
+        );
+    }
+    let root: String = c.query_row("SELECT value FROM meta WHERE key='root'", [], |r| r.get(0))?;
+    let blocks: HashMap<i64, String> = c
+        .prepare("SELECT id, path FROM files")?
+        .query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?)))?
+        .map(|r| r.map(|(id, p)| (id, block(&p, depth))))
+        .collect::<rusqlite::Result<_>>()?;
+    let rows = |sql: &str| -> Result<Vec<(i64, i64, i64)>> {
+        Ok(c.prepare(sql)?
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?
+            .collect::<rusqlite::Result<_>>()?)
+    };
+    let mut sizes: HashMap<&str, (i64, i64)> = HashMap::new(); // block -> (files, symbols)
+    for b in blocks.values() {
+        sizes.entry(b).or_default().0 += 1;
+    }
+    for (file, n, _) in
+        rows("SELECT file_id, count(*), 0 FROM symbols WHERE kind != 'module' GROUP BY file_id")?
+    {
+        sizes.entry(&blocks[&file]).or_default().1 += n;
+    }
+    let mut links: HashMap<(&str, &str), i64> = HashMap::new();
+    for (from, to, n) in rows(
+        "SELECT r.file_id, s.file_id, count(*) FROM refs r JOIN symbols s ON s.id = r.symbol_id WHERE s.kind != 'module' GROUP BY 1, 2",
+    )? {
+        let (a, b) = (blocks[&from].as_str(), blocks[&to].as_str());
+        if a != b {
+            *links.entry((a, b)).or_default() += n;
+        }
+    }
+    let mut outside: HashMap<(String, String), (i64, std::collections::BTreeSet<&str>)> =
+        HashMap::new();
+    let mut q = c.prepare("SELECT file_id, package, version, refs FROM outside")?;
+    let found = q.query_map([], |r| {
+        Ok((
+            r.get::<_, i64>(0)?,
+            r.get::<_, String>(1)?,
+            r.get::<_, String>(2)?,
+            r.get::<_, i64>(3)?,
+        ))
+    })?;
+    for r in found {
+        let (file, pkg, ver, n) = r?;
+        let e = outside.entry((pkg, ver)).or_default();
+        e.0 += n;
+        e.1.insert(&blocks[&file]);
+    }
+    let mut blocks: Vec<_> = sizes.into_iter().collect();
+    blocks.sort_by(|a, b| b.1.1.cmp(&a.1.1).then(a.0.cmp(b.0)));
+    let mut links: Vec<_> = links.into_iter().collect();
+    links.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+    let mut outside: Vec<_> = outside.into_iter().collect();
+    outside.sort_by(|a, b| b.1.0.cmp(&a.1.0).then(a.0.cmp(&b.0)));
+    Ok(json!({
+        "root": root, "origin": "compiler", "depth": depth,
+        "blocks": blocks.iter().map(|(b, (f, s))| json!({"name": b, "files": f, "symbols": s})).collect::<Vec<_>>(),
+        "links": links.iter().map(|((a, b), n)| json!({"from": a, "to": b, "references": n})).collect::<Vec<_>>(),
+        "outside": outside.iter().map(|((p, v), (n, used))| json!({"package": p, "version": v, "references": n,
+            "class": class(p), "used_by": used})).collect::<Vec<_>>(),
+    }))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -281,5 +417,18 @@ mod tests {
         let t = "rust-analyzer cargo footnote 0.1.0 store/Filters#";
         assert_eq!((kind(t), short_name(t).as_str()), ("type", "Filters"));
         assert!(contains([1, 0, 9, 1], [4, 2, 4, 8]) && !contains([1, 0, 3, 1], [4, 2, 4, 8]));
+        assert_eq!(
+            package("rust-analyzer cargo serde_json 1.0.1 Value#"),
+            Some(("serde_json", "1.0.1"))
+        );
+        assert_eq!(package("local 3"), None);
+    }
+
+    #[test]
+    fn blocks_are_the_first_folders_of_a_path() {
+        assert_eq!(block("crates\\code\\src\\lib.rs", 2), "crates/code");
+        assert_eq!(block("src/app.rs", 2), "src");
+        assert_eq!(block("build.rs", 2), ".");
+        assert_eq!(block("crates/code/src/lib.rs", 1), "crates");
     }
 }

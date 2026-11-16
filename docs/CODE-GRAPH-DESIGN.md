@@ -195,7 +195,7 @@ Not built yet, in order: the MCP tool; TypeScript, JavaScript, Python and Java t
 (fast, labelled guesses) for files and languages with no compiler index; inputs and outputs (files, configuration, environment
 variables, tables, routes); freshness by watcher; then the comparison against codebase-memory-mcp on the measured items.
 
-## 11. Architecture map (Johan, 16 November 2026; research, nothing built)
+## 11. Architecture map (Johan, 16 November 2026; engine side built 17 November)
 
 Johan wants two views behind one toggle: the **useful view**, an architecture map (blocks of code, how much each depends on the
 others, the outside services it calls, as in repowise's map), and the **cool view**, the whole-graph "hairball" as ambient motion.
@@ -224,3 +224,13 @@ have the indexers used in the benchmarks above). A module-level map needs only i
 languages (Emerge does 12), so the map can cover more languages than the call graph.
 
 **The cool view** costs little: the same nodes and links drawn with a force layout, no labels, slow motion, in mini mode.
+
+**Engine side built (17 November 2026, overnight item 2).** `footnote code-map [--root .] [--depth 2]` reads the same compiler
+index: blocks are the first `depth` folders of each file (`crates/code`, `src`), with file and symbol counts; links between
+blocks are counted in references to items (bare paths to a crate or module are left out, so `a::base()` counts once); outside
+packages come from the package field of each SCIP symbol, counted per package and version, with the blocks that use them and a
+class from a short hand-written list (database, network, model, standard library). On this repository it gives 8 blocks,
+`src → crates/core` (67 references) and `src → crates/search` (59) as the heaviest links, and serde_json, anyhow, rusqlite and
+tantivy as the most used outside packages. The standard library does not appear: rust-analyzer emits no `std` symbols here.
+Graphs built before this need `footnote code-index` again (the map says so). Not built: clustering by links instead of folders
+(Emerge's Louvain idea), names for blocks, the launcher view (overnight item 6), the benchmark against the projects above.

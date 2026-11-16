@@ -288,6 +288,17 @@ enum Action {
         #[arg(default_value = ".")]
         root: PathBuf,
     },
+    /// Footnote Code: the architecture map, blocks (folders) with symbol counts, links between them counted in references,
+    /// and the outside packages each block uses.
+    #[cfg(feature = "code")]
+    CodeMap {
+        /// Project folder indexed with `code-index`.
+        #[arg(long, default_value = ".")]
+        root: PathBuf,
+        /// How many folders deep a block goes (`crates/code` is 2).
+        #[arg(long, default_value_t = 2)]
+        depth: usize,
+    },
     /// Footnote Code: a symbol's signature, place, callers and callees, from the compiler's index.
     #[cfg(feature = "code")]
     Code {
@@ -454,6 +465,10 @@ fn execute(cli: Cli) -> Result<Value> {
         #[cfg(feature = "code")]
         Action::CodeIndex { root } => {
             return footnote_code::index(&canonical(root)?, &code_db(root)?);
+        }
+        #[cfg(feature = "code")]
+        Action::CodeMap { root, depth } => {
+            return footnote_code::map(&code_db(root)?, (*depth).max(1));
         }
         #[cfg(feature = "code")]
         Action::Code { name, root, limit } => {
@@ -721,7 +736,7 @@ fn execute(cli: Cli) -> Result<Value> {
         #[cfg(feature = "library")]
         Action::Crawl { .. } => unreachable!("dispatched before the database is opened"),
         #[cfg(feature = "code")]
-        Action::CodeIndex { .. } | Action::Code { .. } => {
+        Action::CodeIndex { .. } | Action::Code { .. } | Action::CodeMap { .. } => {
             unreachable!("dispatched before the database is opened")
         }
         #[cfg(feature = "alias")]
@@ -817,6 +832,8 @@ fn action_name(a: &Action) -> &'static str {
         Action::CodeIndex { .. } => "code-index",
         #[cfg(feature = "code")]
         Action::Code { .. } => "code",
+        #[cfg(feature = "code")]
+        Action::CodeMap { .. } => "code-map",
         Action::Options => "options",
         Action::Status => "status",
         #[cfg(feature = "library")]

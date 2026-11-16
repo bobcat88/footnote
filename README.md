@@ -193,6 +193,7 @@ Footnote Code answers "who calls this, and what does it call" from the compiler'
 ```sh
 footnote code-index .          # build the graph of the Rust project here (seconds; rebuild after big changes)
 footnote code lookup           # the symbol `lookup`: signature, file and lines, callers with call-site lines, callees
+footnote code-map               # architecture map: folders as blocks, links between them, outside packages used
 ```
 
 Agents get the same answer through `footnote_code`; files changed since indexing come back in `stale`. Design: [docs/CODE-GRAPH-DESIGN.md](docs/CODE-GRAPH-DESIGN.md).
