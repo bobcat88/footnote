@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Footnote · Lens</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700&family=Hanken+Grotesk:wght@400;500&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#09120B;--surf:#121C15;--line:#29332C;--text:#EAF0EB;--mute:#A2AFA5;--acc:#2B9185;--glow:#5FD3C3;--mint:#D7EFE8;--ink:#0B1A12;--warn:#F2B84B}
+*{box-sizing:border-box;margin:0}
+body{background:#050a06;color:var(--text);font:16px/1.5 "Hanken Grotesk",sans-serif}
+.app{position:relative;width:1440px;height:900px;margin:24px auto;border-radius:28px;overflow:hidden;background:radial-gradient(1200px 700px at 50% 55%,#0f2018 0%,var(--bg) 60%);border:1px solid var(--line)}
+header{position:absolute;inset:0 0 auto 0;height:96px;display:flex;align-items:center;padding:0 40px;gap:14px;z-index:2}
+header h1{font:600 22px "Plus Jakarta Sans";letter-spacing:-.01em}
+header .pill{margin-left:auto;display:flex;gap:8px}
+.pill a{padding:8px 16px;border-radius:999px;border:1px solid var(--line);color:var(--mute);text-decoration:none;font-size:14px}
+.pill a.on{background:var(--mint);color:var(--ink);border-color:var(--mint)}
+.field{position:absolute;inset:0 0 auto 0;height:120px;opacity:.55}
+/* the three lenses */
+.stage{position:absolute;inset:0}
+.lens{position:absolute;border-radius:50%;display:grid;place-items:center;text-align:center;
+ background:radial-gradient(circle at 35% 30%,rgba(255,255,255,.14),rgba(95,211,195,.05) 45%,rgba(9,18,11,.35) 70%);
+ box-shadow:inset 0 0 0 1px rgba(95,211,195,.35),inset 0 2px 24px rgba(255,255,255,.08),0 30px 80px rgba(0,0,0,.45);backdrop-filter:blur(14px) saturate(1.14)}
+.lens .mark{font:600 34px "JetBrains Mono";color:var(--glow)}
+.lens h2{font:600 26px "Plus Jakarta Sans";margin-top:4px}
+.lens p{color:var(--mute);font-size:14px}
+.lens .n{font:700 40px "Plus Jakarta Sans";font-variant-numeric:tabular-nums}
+.mem{width:360px;height:360px;left:540px;top:250px}
+.lib{width:250px;height:250px;left:200px;top:330px}
+.code{width:250px;height:250px;left:990px;top:330px}
+.orbit{position:absolute;left:720px;top:430px;width:0;height:0}
+.orbit span{position:absolute;width:8px;height:8px;margin:-4px;border-radius:50%;background:var(--glow);box-shadow:0 0 12px var(--glow);animation:spin 9s linear infinite;offset-path:circle(230px at 0 0)}
+@keyframes spin{to{offset-distance:100%}}
+.orbit span:nth-child(2){animation-delay:-3s;width:6px;height:6px}
+.orbit span:nth-child(3){animation-delay:-6s;width:5px;height:5px;opacity:.7}
+.recall{position:absolute;left:520px;top:660px;width:400px;text-align:center;color:var(--mute);font-size:14px}
+.recall b{color:var(--glow);font-weight:500}
+.dock{position:absolute;left:40px;right:40px;bottom:32px;display:flex;gap:14px;align-items:center}
+.chip{padding:10px 18px;border-radius:999px;background:var(--surf);border:1px solid var(--line);font-size:14px;color:var(--mute)}
+.chip b{color:var(--text);font-weight:500}
+.chip.grey{color:#8d978f;border-style:dashed}
+.chip.ent{margin-left:auto;color:#8d978f;background:transparent}
+.support{position:absolute;right:40px;top:78px;font-size:13px;color:#8d978f}
+.support a{color:#8d978f}
+.flow{stroke:var(--glow);stroke-width:1.2;fill:none;opacity:.25}
+.drop{fill:var(--glow)}
+@media (prefers-reduced-motion:reduce){*{animation:none!important}.drop{display:none}}
+/* graph screen */
+.glens{position:absolute;left:470px;top:180px;width:500px;height:500px;border-radius:50%;
+ background:radial-gradient(circle at 38% 30%,rgba(255,255,255,.12),rgba(95,211,195,.06) 50%,rgba(9,18,11,.2) 72%);
+ box-shadow:inset 0 0 0 1.5px rgba(95,211,195,.45),inset 0 0 60px rgba(95,211,195,.08),0 40px 100px rgba(0,0,0,.5)}
+.node{position:absolute;padding:10px 16px;border-radius:21px;background:var(--surf);border:1px solid var(--line);font:400 13px "JetBrains Mono";color:var(--mute)}
+.node.big{font-size:18px;color:var(--text);border-color:var(--glow);box-shadow:0 12px 30px rgba(0,0,0,.45);padding:14px 22px}
+.side{position:absolute;right:40px;top:150px;width:300px;padding:22px;border-radius:21px;background:var(--mint);color:var(--ink)}
+.side h3{font:600 18px "Plus Jakarta Sans"}
+.side p{font-size:14px;color:#3D5A4D;margin-top:6px}
+.side code{font:12px "JetBrains Mono";color:var(--ink)}
+</style></head><body>
+
+<div class="app">
+ <svg class="field" viewBox="0 0 1440 120" preserveAspectRatio="none" aria-hidden="true">
+  <g fill="#5FD3C3">
+   <circle r="1.4"><animateMotion dur="14s" repeatCount="indefinite" path="M-20 40 C400 10 900 70 1460 30"/></circle>
+   <circle r="1.1"><animateMotion dur="18s" begin="-6s" repeatCount="indefinite" path="M-20 70 C500 40 1000 100 1460 60"/></circle>
+   <circle r="1.6"><animateMotion dur="11s" begin="-3s" repeatCount="indefinite" path="M-20 95 C300 80 1100 110 1460 90"/></circle>
+   <circle r="1.2"><animateMotion dur="16s" begin="-9s" repeatCount="indefinite" path="M-20 20 C600 50 900 0 1460 25"/></circle>
+  </g>
+ </svg>
+ <header><svg width="30" height="30" viewBox="0 0 30 30"><circle cx="15" cy="15" r="13" fill="none" stroke="#5FD3C3" stroke-width="1.6"/><text x="11" y="20" fill="#5FD3C3" font-family="JetBrains Mono" font-size="13">1</text></svg>
+  <h1>Footnote</h1><nav class="pill"><a class="on" href="#">Overview</a><a href="#">Projects</a><a href="#">Models</a><a href="#">Activity</a></nav></header>
+ <div class="support"><a href="#">Support the project</a></div>
+
+ <svg class="stage" viewBox="0 0 1440 900" aria-hidden="true">
+  <path class="flow" id="f1" d="M325 455 C430 455 470 430 560 430"/>
+  <path class="flow" id="f2" d="M1115 455 C1010 455 970 430 880 430"/>
+  <circle class="drop" r="3"><animateMotion dur="2.4s" repeatCount="indefinite"><mpath href="#f1"/></animateMotion></circle>
+  <circle class="drop" r="3"><animateMotion dur="2.8s" begin="-1.2s" repeatCount="indefinite"><mpath href="#f2"/></animateMotion></circle>
+ </svg>
+ <div class="lens lib"><div><div class="mark">≡</div><h2>Library</h2><div class="n">5</div><p>corpora · 1 stale</p></div></div>
+ <div class="lens mem"><div><div class="mark">◎</div><h2>Memory</h2><div class="n">215</div><p>memories · 162 recalls this week</p></div></div>
+ <div class="lens code"><div><div class="mark">{x}</div><h2>Code</h2><div class="n">857</div><p>symbols in footnote</p></div></div>
+ <div class="orbit"><span></span><span></span><span></span></div>
+ <div class="recall">Just recalled into Claude Code: <b>#209 · #200 · #126</b></div>
+ <div class="dock">
+  <span class="chip"><b>footnote</b> · 96 memories</span><span class="chip"><b>borginvestor</b> · 3 unpushed</span><span class="chip"><b>governanceos</b> · 5 unpushed</span>
+  <span class="chip grey">+ Jina v5 nano (French) · Install</span>
+  <span class="chip ent">Footnote Enterprise: Alias, sign-on, portfolio · Learn more</span>
+ </div>
+</div>
+
+<div class="app">
+ <header><h1>Code · footnote</h1><nav class="pill"><a href="#">Search a symbol</a></nav></header>
+ <div class="glens"></div>
+ <div class="node big" style="left:650px;top:405px">lookup</div>
+ <div class="node" style="left:540px;top:250px">run · app.rs:453</div>
+ <div class="node" style="left:520px;top:560px">dispatch · mcp.rs:478</div>
+ <div class="node" style="left:850px;top:300px">hash · core</div>
+ <div class="node" style="left:180px;top:260px;opacity:.6">index</div>
+ <div class="node" style="left:230px;top:620px;opacity:.6">write</div>
+ <div class="node" style="left:1020px;top:640px;opacity:.6">scip::read</div>
+ <svg class="stage" viewBox="0 0 1440 900" aria-hidden="true" style="pointer-events:none">
+  <path class="flow" id="g1" d="M620 280 C660 330 690 370 700 405" style="opacity:.6"/>
+  <path class="flow" id="g2" d="M600 560 C640 510 680 480 700 450" style="opacity:.6"/>
+  <path class="flow" d="M760 420 C820 380 850 340 880 320" style="opacity:.6"/>
+  <circle class="drop" r="3"><animateMotion dur="1.8s" repeatCount="indefinite"><mpath href="#g1"/></animateMotion></circle>
+  <circle class="drop" r="3"><animateMotion dur="2.2s" begin="-.8s" repeatCount="indefinite"><mpath href="#g2"/></animateMotion></circle>
+ </svg>
+ <div class="side"><h3>lookup</h3><p><code>pub fn lookup(db, name, limit) -&gt; Result&lt;Value&gt;</code></p><p>crates/code/src/lib.rs · lines 142 to 197</p><p>2 callers · 1 callee · from the compiler · current</p></div>
+</div>
+</body></html>

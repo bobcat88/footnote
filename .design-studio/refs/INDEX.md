@@ -5,12 +5,12 @@ tags:
   - domain/design
   - domain/dev/ui
   - type/reference
-date_maj: 2026-11-14
+date_maj: 2026-11-16
 ---
 # Design references: captured sites
 Up: [[UI-Design-Ruleset]] · Related: [[WebUI Preferred Style Guide - Dataiku Dobre Ponder]] · [[ui-slop-patterns]] · [[qloop-ui-protocol]]
 
-Captured 2026-11-14 at 1920×1080 with `ref-capture` (`AI-Agents/skills/ui-ux-qloop/scripts/ref-capture/`). Tokens are read from computed styles; library names are signatures found in scripts, evidence not proof. Cross-origin CSS cannot be read (count shown).
+Captured 2026-11-16 at 1920×1080 with `ref-capture` (`AI-Agents/skills/ui-ux-qloop/scripts/ref-capture/`). Tokens are read from computed styles; library names are signatures found in scripts, evidence not proof. Cross-origin CSS cannot be read (count shown).
 
 | Tier | Meaning | Skills in the stack |
 |---|---|---|
@@ -22,9 +22,11 @@ Captured 2026-11-14 at 1920×1080 with `ref-capture` (`AI-Agents/skills/ui-ux-ql
 |---|---|---|---|---|
 | [fabric-vc-portfolio](#fabric-vc-portfolio) | webgl | - | yes | lottie, webflow, three, shaders |
 | [langchain-com](#langchain-com) | scripted | - | yes | gsap, splitText, ScrollTrigger, lottie, webflow, swiper |
+| [linear-app](#linear-app) | scripted | view-transitions-api | yes | - |
 | [mem0-ai](#mem0-ai) | webgl | - | no | shaders, framerMotion, viewTransitions |
 | [mode-com](#mode-com) | scripted | - | yes | gsap, ScrollTrigger, lottie |
 | [raycast-com](#raycast-com) | webgl | - | yes | viewTransitions, framerMotion, three, shaders, postprocessing |
+| [t3-codes](#t3-codes) | css | - | no | - |
 | [warp-dev](#warp-dev) | scripted | - | yes | framerMotion, viewTransitions |
 | [zed-dev](#zed-dev) | webgl | - | yes | framerMotion, shaders, viewTransitions |
 
@@ -77,6 +79,29 @@ Captured 2026-11-14 at 1920×1080 with `ref-capture` (`AI-Agents/skills/ui-ux-ql
 ![langchain-com 04.jpg](langchain-com/04.jpg)
 ![langchain-com 05.jpg](langchain-com/05.jpg)
 ![langchain-com 06.jpg](langchain-com/06.jpg)
+
+## linear-app
+<https://linear.app>
+
+**What I like:** _(yours, one or two lines)_
+
+- **Scheme:** dark · bg #08090a · text #d0d6e0, #8a8f98, #f7f8f8
+- **Colours by area:** #08090a, #0f1011, #090a0b, #101112, #161718, #e4f222
+- **Fonts:** Inter Variable, Berkeley Mono · h1 64px/510 · body 15px
+- **Radii:** 9999px, 8px, 12px, 4px, 9px · **Shadows:** 3
+- **Transitions (property, duration, easing):** color 0.1s cubic-bezier(0.25, 0.46, 0.45, 0.94) · color 0.1s ease · filter 0.16s cubic-bezier(0.25, 0.46, 0.45, 0.94) · transform 0.16s cubic-bezier(0.25, 0.46, 0.45, 0.94) · color 0.16s cubic-bezier(0.25, 0.46, 0.45, 0.94)
+- **Keyframes:** _6QN9Vq_tooltipOpen, _6QN9Vq_tooltipClose, WinFxq_contextMenuIn, WinFxq_contextMenuOut, TZTsQG_mobileMenuIn, TZTsQG_mobileMenuOut, TZTsQG_slideFromRight, TZTsQG_slideFromLeft · scroll-driven CSS: yes · reduced-motion rule: yes · unreadable stylesheets: 0
+- **Motion:** scripted · rAF 3/s idle · WAAPI calls 50 · canvases 0 (no context) · native scroll
+- **Libraries seen:** none found
+- **Rendered with:** chrome · ANGLE (AMD, AMD Radeon RX 6800 (0x000073BF) Direct3D11 vs_5_0 ps_5_0, D3D11)
+- Frames: `01-hero` first screen, `01b` 0.9 s later (idle motion), `01c` after moving the cursor across the hero (reaction); the rest are scroll positions. One frame at a time: easing and feel need your eyes.
+
+![linear-app 01-hero.jpg](linear-app/01-hero.jpg)
+![linear-app 01b-hero-plus-0.9s.jpg](linear-app/01b-hero-plus-0.9s.jpg)
+![linear-app 01c-hero-cursor.jpg](linear-app/01c-hero-cursor.jpg)
+![linear-app 02.jpg](linear-app/02.jpg)
+![linear-app 03.jpg](linear-app/03.jpg)
+![linear-app 04.jpg](linear-app/04.jpg)
 
 ## mem0-ai
 <https://mem0.ai>
@@ -152,6 +177,29 @@ Captured 2026-11-14 at 1920×1080 with `ref-capture` (`AI-Agents/skills/ui-ux-ql
 ![raycast-com 04.jpg](raycast-com/04.jpg)
 ![raycast-com 05.jpg](raycast-com/05.jpg)
 ![raycast-com 06.jpg](raycast-com/06.jpg)
+
+## t3-codes
+<https://t3.codes>
+
+**What I like:** _(yours, one or two lines)_
+
+- **Scheme:** dark · bg #000000 · text #f5f5f5, #a3a3a3, #737373
+- **Colours by area:** #0a0a0a, #000000, #0d0d0d, #f5f5f5, #262626
+- **Fonts:** Inter Variable · h1 76px/600 · body 19px
+- **Radii:** 10px, 50%, 6px, 25%, 8px · **Shadows:** 2
+- **Transitions (property, duration, easing):** background 0.18s ease · border-color 0.18s ease · color 0.18s ease · color 0.2s ease · transform 0.18s ease
+- **Keyframes:** fade-in, rise, mark-in, endorsementMarquee, blink · scroll-driven CSS: yes · reduced-motion rule: yes · unreadable stylesheets: 0
+- **Motion:** css · rAF 0/s idle · WAAPI calls 0 · canvases 0 (no context) · native scroll
+- **Libraries seen:** none found
+- **Rendered with:** chrome · ANGLE (AMD, AMD Radeon RX 6800 (0x000073BF) Direct3D11 vs_5_0 ps_5_0, D3D11)
+- Frames: `01-hero` first screen, `01b` 0.9 s later (idle motion), `01c` after moving the cursor across the hero (reaction); the rest are scroll positions. One frame at a time: easing and feel need your eyes.
+
+![t3-codes 01-hero.jpg](t3-codes/01-hero.jpg)
+![t3-codes 01b-hero-plus-0.9s.jpg](t3-codes/01b-hero-plus-0.9s.jpg)
+![t3-codes 01c-hero-cursor.jpg](t3-codes/01c-hero-cursor.jpg)
+![t3-codes 02.jpg](t3-codes/02.jpg)
+![t3-codes 03.jpg](t3-codes/03.jpg)
+![t3-codes 04.jpg](t3-codes/04.jpg)
 
 ## warp-dev
 <https://www.warp.dev>

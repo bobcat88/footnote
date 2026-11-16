@@ -87,9 +87,29 @@ Sketches: `.design-studio/logo/index.html` (concepts A, B, C), `.design-studio/l
 - Footnote Code is shown as "soon" until it ships.
 - Banned words: "supercharge", "unlock", "seamless", "next-generation", "revolutionize"; no fake testimonials, logo walls or invented customer counts.
 
+## 11. Launcher (app), locked 16 November 2026
+Studio run with four divergent directions (`.design-studio/launcher/`, studio page https://claude.ai/artifact/GQrHYr68hMgGzo3GXGe4rx).
+Johan chose D1's structure for the full window and D2's lenses for the mini mode, with the family's colours and fonts on both,
+and asked for these settings to be applied for him. Composition reference: `.design-studio/launcher/chosen/index.html`.
+
+- **Full window (D1 "Console" structure):** sidebar 232 px (products, workspace, not installed, Footnote Enterprise group, quiet
+  support link at the foot), top bar 44 px, content, activity column 320 px. Dense like T3 Code: tables for projects and agents,
+  three product cards with one big number each.
+- **Mini mode (D2 "Lens"):** the tray panel and the floating bubble: one glass lens per product, live data moving between them, a
+  few numbers. A switch moves between mini mode and the full window.
+- **Tokens:** the site's palette (section 3), Plus Jakarta Sans for titles and big numbers, Hanken Grotesk 14 px for UI text,
+  JetBrains Mono for paths, ids and timings. App radius 12 px for cards, 8 px for controls, full round for lenses and pills (the
+  site's 21 px stays for marketing blocks). Functional text never below 11 px. Dark only.
+- **Motion:** full window subtle (160 ms, transform and opacity only); mini mode lively (the lenses and data flow); nothing moves
+  under reduced motion.
+- **Code views, by zoom level:** architecture map (blocks with import counts and outside services as dashed nodes: the inputs and
+  outputs), then a block's files, then one symbol's callers and callees. Never the whole graph at once; the full "hairball" only
+  as ambient decoration in mini mode.
+
 ## 10. Decision log
 | Date | Decision | Reason | Rejected alternative |
 |---|---|---|---|
+| 2026-11-16 | Launcher: D1 structure (full window) + D2 lenses (mini mode), family palette and fonts | Johan: D2 innovative but poor in data, D1 has all the information he needs; one look for both modes so the switch feels like one app | D3 Ledger (light paper, serif), D4 Palette (command box first) |
 | 2026-11-14 | Base direction D2 "Afterglow", tuned: green-black ground, teal accent, Jakarta + Hanken, radius 21, lively motion | Johan's pick in the Design Studio; D1, D3 and D4 looked too similar to each other | D1 Workbench, D3 Living memory, D4 Paper |
 | 2026-11-14 | Slight liquid glass over a data-flow background | Johan's note: Footnote is transparent, the company's knowledge comes into focus | Flat dark cards only; glass everywhere |
 | 2026-11-14 | Logo concept A (lens numeral), mark becomes the product | The family stays legible (Footnote) and each product is one glyph | B focus tile as the main logo (kept as the app-icon candidate), C mark system |
