@@ -95,7 +95,7 @@ credits; the installed binary replaced after items 2, 4 and 6 (old copies rename
 | 10 | Docs catch-up | this PR | README (usage, code map, desktop window), BACKLOG, this report. CHANGELOG left to `scripts/changelog.py`: git-cliff is not installed here. |
 
 **Needs you:** item 5's choice (install Strawberry Perl, or let me try SQLite3 Multiple Ciphers first, my pick); a support page
-URL for the quiet support link; 17 old `footnote.exe.replaced-*` copies in `%LOCALAPPDATA%\Programsootnote` you may want
+URL for the quiet support link; 19 old `footnote.exe.replaced-*` copies in `%LOCALAPPDATA%\Programsootnote` you may want
 deleted (one at a time, your call); restart T3 Code so the agents reconnect to the new engine.
 
 **Not checked:** the independent QLoop critic (needs a subagent), Linux and macOS builds of the launcher, light theme (dark only
