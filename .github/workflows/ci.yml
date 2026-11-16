@@ -81,6 +81,10 @@ jobs:
       - name: Format
         run: cargo fmt --all --check
 
+      # Every shipped dependency is listed with its licence, and each licence allows commercial use (Footnote Enterprise).
+      - name: Third-party notices
+        run: python scripts/third_party.py --check
+
       # Every product combination must build cleanly: a company build may leave a product out.
       - name: Clippy, all products
         run: cargo clippy --locked --workspace --all-targets -- -D warnings
