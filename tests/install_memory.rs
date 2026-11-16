@@ -222,6 +222,11 @@ fn memory_uninstall_removes_only_what_install_added_and_keeps_memories() {
     };
     let before = status();
     assert_eq!(before["products"]["memory"]["memories"], 0, "{before}");
+    assert_eq!(
+        before["products"]["code"]["built"],
+        cfg!(feature = "code"),
+        "{before}"
+    );
     assert!(registered(&before).iter().all(|r| *r), "{before}");
     // A dry run reports and changes nothing.
     let installed = fs::read_to_string(home.join(".claude/settings.json")).unwrap();

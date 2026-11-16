@@ -14,9 +14,29 @@ pub fn status() -> Result<Value> {
         "products": {
             "library": {"built": cfg!(feature = "library")},
             "memory": memory(&state)?,
+            "code": code(&state),
         },
         "models": crate::models::list(&state)?,
     }))
+}
+
+/// Footnote Code: built in or not, how many project graphs exist, and whether the Rust indexer it needs is on the PATH.
+fn code(state: &Path) -> Value {
+    if !cfg!(feature = "code") {
+        return json!({"built": false});
+    }
+    let graphs = std::fs::read_dir(state.join("code")).map_or(0, |d| {
+        d.flatten()
+            .filter(|e| e.path().extension().is_some_and(|x| x == "db"))
+            .count()
+    });
+    let indexer = std::process::Command::new("rust-analyzer")
+        .arg("--version")
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .is_ok_and(|s| s.success());
+    json!({"built": true, "graphs": graphs, "rust_indexer": indexer})
 }
 
 #[cfg(not(feature = "memory"))]
