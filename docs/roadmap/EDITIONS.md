@@ -1,4 +1,4 @@
-# Editions: free and commercial
+# Editions: Footnote One (free) and Footnote Enterprise (paid)
 
 Decided by Johan on 16 November 2026. Nothing built yet.
 
@@ -44,6 +44,30 @@ Cost: the engine's interface to that crate must stay stable, so changing it some
 - Company session flow ([FEDERATION-DESIGN.md](../FEDERATION-DESIGN.md) section 10): Johan's fallback is a sign-in screen when the
   launcher opens and 4-hour sessions. Recommended: at normal expiry Footnote refuses calls ("sign in again") instead of killing
   agents, which would lose their work; agents are stopped only on a real revocation (someone leaves, an admin cuts access).
+
+## Decisions of 16 November 2026 (evening)
+
+- **Names:** Footnote One (free, this repository) and Footnote Enterprise (paid, private repository bobcat88/footnote-enterprise,
+  which depends on this engine and holds the paid roadmap).
+- **Footnote One keeps:** agent memory (personal and project), Code graph, Library, the best engine for personal use, token-saving
+  measures, single-project views. It must be good on its own: it is the product people talk about.
+- **Footnote Enterprise gets:** Alias (anonymisation), single sign-on and rights, encryption with company keys, federation, the
+  view across every project, curated company skills, Johan's GSD layer and design room. Every model and library it uses must
+  allow commercial use.
+- **Alias** was copied to the Enterprise repository (builds and passes its tests there). It stays here, unchanged, until an
+  Enterprise build can include it; removing it now would leave no runnable build with it.
+- **Before this repository goes public:** its git history contains Alias and company designs. Pushed history is not rewritten, so
+  the public repository starts as a fresh copy without them.
+
+**Push-backs, checked 16 Nov**
+1. **The best personal engine cannot ship as Footnote One's default for teams.** Jina v5 nano is CC BY-NC 4.0 (its Hugging Face
+   card: "for commercial use, please contact us"). A small company running the free edition at work is commercial use. Options:
+   a permissive default model with Jina as an optional install for personal, non-commercial use, or a commercial licence from Jina.
+2. **Encryption is split, not all paid.** Earlier the same day Johan asked that the free edition encrypt personal data. Proposed:
+   encryption of one's own data on one's own machine stays free (trust is what makes people adopt a memory tool); company key
+   management, sensitive compartments and key recovery are Enterprise.
+3. **A plain list of one person's projects stays free;** the graph, roll-ups and reporting across projects are Enterprise. A solo
+   developer with many repositories is Footnote One's first user.
 
 ## Free edition: private by default, up to five linked devices (Johan, 16 November 2026; design only)
 
