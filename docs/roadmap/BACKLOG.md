@@ -8,6 +8,10 @@ of work. "Johan" marks items waiting for his go.
 - Test 5 (llama.cpp models, [rule and results](../../bench/experiments/LLAMACPP-MODELS.md)): no model adopted through an HTTP server.
 - Test 6 ([results](../../bench/experiments/LLAMACPP-INPROCESS.md)): Jina v5 nano in-process, wired into the product
   (`--features llama`), held-out quality passes on the product: Alloprof +0.103 [+0.090, +0.115], mix-fr-en +0.083 [+0.074, +0.093].
+- 16 Nov, PRs #21 to #29: Jina nano installable (`footnote models install jina-v5-nano`, release builds with `--features llama`);
+  hybrid recall on every prompt through the resident daemon; Library search hybrid by default when the corpus models are installed;
+  scope and tags as pre-filters before ranking; Alias rules plus OpenAI Privacy Filter pass on held-out; the tag engine (tags
+  guessed from the prompt) built, failed its test ([MEMORY-TAGS.md](../../bench/experiments/MEMORY-TAGS.md)), left off.
 - Audit-chain fork fixed (two concurrent MCP sessions); Rust-encoder build with metrics installed (15 Nov).
 - Documentation optimisation (16 Nov, [protocol and results](../../bench/experiments/DOCS-OPTIMIZE-2026-11-16.md)), PRs #19
   and #20: adaptive crawl (x3.6), heading path (+0.044), structure-aware chunks (+0.051), one passage per page (+0.029),
@@ -31,9 +35,8 @@ of work. "Johan" marks items waiting for his go.
    Also 16 Nov ([MEMORY-TAGS.md](../../bench/experiments/MEMORY-TAGS.md)): project scope is now a pre-filter before ranking, and memories
    carry up to 10 tags that narrow recall (untagged ones stay candidates). Tag engine (tags inferred from the prompt) built and
    tested the same day: fails (any@3 0.91 to 0.87, worse with incomplete tags), so `memory.infer_tags` stays off.
-5. **Ship Jina nano as the opt-in French/mixed profile.** Idle-machine latency measured 15 Nov evening
-   ([LLAMACPP-INPROCESS.md](../../bench/experiments/LLAMACPP-INPROCESS.md)): about +6 ms at p50, +26 ms at p95 per search. Left:
-   a `models install` recipe for the GGUF file and release builds with `--features llama` (CMake and LLVM in CI).
+5. ~~Ship Jina nano as the opt-in French/mixed profile~~ done 16 Nov (PR #22): `models install jina-v5-nano`
+   (CC-BY-NC-4.0, shown at install), release builds with `--features llama`. Linux build untested while CI is blocked.
 6. **Memory review** around 21 November (baseline: memory 134).
 
 7. ~~Documentation tool for agents~~ done 15 Nov (Johan): Context7 removed from Claude, Codex and the shared agent contracts;
@@ -64,8 +67,9 @@ Plan and decisions: [P1-PLAN.md](P1-PLAN.md) (engine commands first, then design
     French identifier rules in Rust (no tool ships them), one small model for names and addresses chosen by measurement on French
     text (GLiNER2-PII, urchade multi PII, OpenAI Privacy Filter as reference), stable keyed pseudonyms. Done 16 Nov: evaluation
     set v1 and rule ([ALIAS-EVAL.md](../../bench/experiments/ALIAS-EVAL.md)); the Rust rules (`crates/alias`, `footnote alias-scan`)
-    pass the identifiers part on held-out (1.000, no look-alike hit). Next: security review of the Python packages, then the name
-    model chosen on dev; then pseudonyms and the underline-and-explain prototype. Design notes below.
+    pass the identifiers part on held-out (1.000, no look-alike hit). Rules plus OpenAI Privacy Filter (ONNX q4) pass names on
+    held-out (0.913, misses are lone first names). Next: the name model inside the Rust product, stable keyed pseudonyms, then
+    the underline-and-explain prototype; GLiNER2-PII only on a new set v2 if names need more margin. Design notes below.
 13. **Footnote Code:** code-graph study ([plan](../research/CODE-GRAPH-STUDY.md)); hands-on after Johan's go.
     Its graph visualizer uses the family's design language, decided with the launcher in the M2 studio
     ([analysis, section 5](../research/LAUNCHER-DESIGN-ANALYSIS.md)).
@@ -153,11 +157,9 @@ handful of agents on one machine.
 - Footnote Roadmap (visual roadmap from memories and Beads) and the project node map.
 - Baseline audit across projects: AI contracts and rules, security-reviewed skills, projects behind on push.
 - Progressive context levels (summary, overview, full on demand), after OpenViking.
-- **Leaner agent output** (Johan, 16 Nov). Measured on one Vite search (5 results, characters, not tokens): today 4,211;
-  the same results with 5 fields (id, path relative to the root, heading, line, text) 2,866 (68 %); those 5 fields as a
-  TOON-style table 2,686 (64 %); as plain Markdown 2,592 (62 %). Most of the saving is dropping fields an agent does not use in a
-  search (sha256, revision, status, extractor, `trust` per result, absolute path): do that first, it has no precision risk.
-  Formats on what remains are worth a few points only, because our results are mostly free text, not uniform short values.
+- **Leaner agent output** (Johan, 16 Nov). Field trimming done (PR #20, `store::lean`): one Vite search (5 results) went from
+  4,211 to 3,510 characters, and paths lost the Windows `\\?\` prefix. What remains is mostly the passage text. Formats on what
+  remains are worth a few points only, because results are mostly free text, not uniform short values.
   - CSV: no (multi-line text). TOON: about 4 points more, quoting-heavy on Markdown and code.
   - JTON (arXiv 2604.05865, one author, April 2026; Rust implementation with Python bindings, code licence not stated): JSON
     superset with a header-once "Zen Grid" for arrays of same-shaped objects; 15-60 % fewer tokens on such arrays (o200k_base),

@@ -208,9 +208,20 @@ pub fn lean(mut hits: Vec<Value>) -> Vec<Value> {
             if o.get("page").is_some_and(Value::is_null) {
                 o.remove("page");
             }
+            if let Some(p) = o.get("path").and_then(Value::as_str) {
+                let plain = plain_path(p);
+                o.insert("path".into(), plain.into());
+            }
         }
     }
     hits
+}
+/// Windows canonical paths carry the verbatim prefix `\\?\`, which many tools cannot open; agents get the ordinary form.
+fn plain_path(p: &str) -> String {
+    match p.strip_prefix(r"\\?\") {
+        Some(rest) => rest.strip_prefix(r"UNC\").map_or_else(|| rest.to_string(), |share| format!(r"\\{share}")),
+        None => p.to_string(),
+    }
 }
 pub const TRUST: &str = "untrusted_source_data";
 pub const HIT: &str = "SELECT c.id,s.path,s.sha256,s.revision,s.status,s.extractor,c.heading,c.page,c.line,c.text FROM chunks c JOIN sources s ON s.id=c.source_id";
@@ -376,6 +387,15 @@ pub fn backup(c: &Connection, output: &Path) -> Result<Value> {
 #[cfg(test)]
 mod chunk_tests {
     use super::*;
+
+    #[test]
+    fn search_paths_drop_the_windows_verbatim_prefix() {
+        assert_eq!(plain_path(r"\\?\D:\docs\a.md"), r"D:\docs\a.md");
+        assert_eq!(plain_path(r"\\?\UNC\srv\share\a.md"), r"\\srv\share\a.md");
+        assert_eq!(plain_path("/home/u/a.md"), "/home/u/a.md");
+        let out = lean(vec![json!({"path": r"\\?\D:\a.md", "sha256": "x", "page": null})]);
+        assert_eq!(out[0], json!({"path": r"D:\a.md"}));
+    }
 
     #[test]
     fn chunks_follow_structure_merge_short_sections_and_keep_code_whole() {
