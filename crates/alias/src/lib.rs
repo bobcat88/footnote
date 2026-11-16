@@ -1,6 +1,8 @@
 //! Footnote Alias, stage 1: identifiers with a fixed format, found by rules and kept only when their check digits are valid
 //! (docs/research/ALIAS-DESK-STUDY.md). French first: NIR, SIREN/SIRET, French IBAN and phones; e-mail, cards and IPv4 everywhere.
-//! Names and addresses need a model (stage 2); nothing here guesses them.
+//! Stage 2, names, addresses and dates, is a model ([`model`]); [`find`] combines both and [`pseudonymise`] replaces the hits.
+pub mod model;
+
 use regex::Regex;
 use serde::Serialize;
 use std::sync::LazyLock;
@@ -150,9 +152,98 @@ pub fn scan(text: &str) -> Vec<Hit> {
         .collect()
 }
 
+/// Rules first, then the model's spans that no rule already claimed (the "alias" detector of ALIAS-EVAL.md).
+pub fn find(text: &str, model: Option<&mut model::PrivacyFilter>) -> anyhow::Result<Vec<Hit>> {
+    let mut hits = scan(text);
+    if let Some(m) = model {
+        let extra: Vec<Hit> = m
+            .detect(text)?
+            .into_iter()
+            .filter(|p| !hits.iter().any(|h| p.start < h.end && h.start < p.end))
+            .collect();
+        hits.extend(extra);
+    }
+    // A value found once is hidden everywhere in the text, whatever its case: the model can miss "élodie" after "Élodie".
+    let low: Vec<char> = text.chars().map(fold).collect();
+    let mut repeats = Vec::new();
+    for h in &hits {
+        let needle: Vec<char> = h.value.chars().map(fold).collect();
+        for s in 0..low.len().saturating_sub(needle.len() - 1) {
+            let e = s + needle.len();
+            let whole = |i: Option<&char>| i.is_none_or(|c| !c.is_alphanumeric());
+            if low[s..e] == needle[..]
+                && whole(s.checked_sub(1).and_then(|i| low.get(i)))
+                && whole(low.get(e))
+                && !hits.iter().chain(&repeats).any(|o: &Hit| s < o.end && o.start < e)
+            {
+                let value = text.chars().skip(s).take(needle.len()).collect();
+                repeats.push(Hit { start: s, end: e, label: h.label, value });
+            }
+        }
+    }
+    hits.extend(repeats);
+    hits.sort_by_key(|h| h.start);
+    Ok(hits)
+}
+
+/// One character to one character, so offsets survive (`to_lowercase` can return several).
+fn fold(c: char) -> char {
+    c.to_lowercase().next().unwrap_or(c)
+}
+
+#[derive(Debug, Serialize)]
+pub struct Replacement {
+    pub pseudonym: String,
+    pub label: &'static str,
+    pub value: String,
+}
+
+/// Replace each hit by a keyed pseudonym such as `[PERSON_3f9a1c]`. The same value (case and spacing ignored) gets the same
+/// pseudonym across texts and runs under one key, so an AI can follow who is who; without the key it cannot be reversed.
+pub fn pseudonymise(text: &str, hits: &[Hit], key: &[u8]) -> (String, Vec<Replacement>) {
+    let chars: Vec<char> = text.chars().collect();
+    let (mut out, mut at, mut table) = (String::new(), 0, Vec::<Replacement>::new());
+    for h in hits {
+        if h.start < at {
+            continue;
+        }
+        let norm: String = h.value.to_lowercase().split_whitespace().collect();
+        let mac = footnote_core::audit::hmac_sha256(key, format!("{}|{norm}", h.label).as_bytes());
+        let pseudonym = format!("[{}_{}]", h.label, &mac[..6]);
+        out.extend(&chars[at..h.start]);
+        out.push_str(&pseudonym);
+        at = h.end;
+        if !table.iter().any(|r| r.pseudonym == pseudonym) {
+            table.push(Replacement { pseudonym, label: h.label, value: h.value.clone() });
+        }
+    }
+    out.extend(&chars[at..]);
+    (out, table)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_value_found_once_is_hidden_everywhere_whatever_its_case() {
+        let text = "IBAN FR76 3000 6000 0112 3456 7890 189, recopié fr76 3000 6000 0112 3456 7890 189, pas xfr76 3000 6000 0112 3456 7890 189";
+        let hits = find(text, None).unwrap();
+        let values: Vec<&str> = hits.iter().map(|h| h.value.as_str()).collect();
+        assert_eq!(values, ["FR76 3000 6000 0112 3456 7890 189", "fr76 3000 6000 0112 3456 7890 189"], "{hits:?}");
+        assert!(hits.iter().all(|h| h.label == "IBAN"));
+    }
+
+    #[test]
+    fn pseudonyms_are_stable_keyed_and_replace_in_place() {
+        let text = "Écrire à elodie.roux@example.org puis à ELODIE.ROUX@example.org, tel 06 12 34 56 78.";
+        let (out, table) = pseudonymise(text, &scan(text), &[7; 32]);
+        assert_eq!(table.len(), 2, "same address in two cases is one person: {table:?}");
+        assert!(out.starts_with("Écrire à [EMAIL_") && out.ends_with("].") && !out.contains('@'), "{out}");
+        assert_eq!(out.matches(&table[0].pseudonym).count(), 2, "{out}");
+        let (other, _) = pseudonymise(text, &scan(text), &[8; 32]);
+        assert_ne!(out, other, "another key gives other pseudonyms");
+    }
 
     fn labels(text: &str) -> Vec<(&'static str, String)> {
         scan(text).into_iter().map(|h| (h.label, h.value)).collect()

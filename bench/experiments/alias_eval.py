@@ -1,8 +1,9 @@
 """Score a Footnote Alias detector on bench/datasets/alias-v1 with the measures fixed in ALIAS-EVAL.md.
 
-    bench/.labenv/Scripts/python.exe -I bench/experiments/alias_eval.py <footnote.exe built with --features alias> dev|heldout [rules|pf|rules+pf|alias]
+    bench/.labenv/Scripts/python.exe -I bench/experiments/alias_eval.py <footnote.exe built with --features alias> dev|heldout [rules|pf|rules+pf|alias|footnote]
 
-Detectors: the Rust rules (`footnote alias-scan`), OpenAI Privacy Filter (alias_pf.py), both (union of their spans), or alias (both, without the model's account guesses). Found = every letter and digit of a gold value inside predicted spans,
+Detectors: the Rust rules (`footnote alias-scan`), OpenAI Privacy Filter (alias_pf.py), both (union of their spans), or alias (both, without the model's account guesses), or footnote
+(the same, all inside the Rust binary: `alias-scan --model`). Found = every letter and digit of a gold value inside predicted spans,
 any label. Precision = predicted spans overlapping a gold value / predicted spans. Look-alikes hit = look-alikes overlapped.
 """
 from __future__ import annotations
@@ -29,6 +30,15 @@ def main() -> None:
     texts = [r["text"] for r in rows]
     preds: list[list[dict]] = [[] for _ in rows]
     timings = {}
+    if DETECTOR == "footnote":
+        pf_dir = Path(__file__).resolve().parents[2] / "artifacts/alias-models/openai-privacy-filter"
+        subprocess.run([EXE, "alias-scan", "--model", str(pf_dir)], input=json.dumps(texts[:1]), capture_output=True,
+                       text=True, encoding="utf-8", check=True)  # warm-up: file cache
+        t = time.perf_counter()
+        out = subprocess.run([EXE, "alias-scan", "--model", str(pf_dir)], input=json.dumps(texts), capture_output=True,
+                             text=True, encoding="utf-8", check=True).stdout
+        timings["footnote"] = (time.perf_counter() - t) * 1000 / len(rows)
+        preds = json.loads(out)["results"]
     if "rules" in DETECTOR or DETECTOR == "alias":
         t = time.perf_counter()
         out = subprocess.run([EXE, "alias-scan"], input=json.dumps(texts), capture_output=True, text=True, encoding="utf-8",

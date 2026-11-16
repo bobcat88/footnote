@@ -68,7 +68,8 @@ Plan and decisions: [P1-PLAN.md](P1-PLAN.md) (engine commands first, then design
     text (GLiNER2-PII, urchade multi PII, OpenAI Privacy Filter as reference), stable keyed pseudonyms. Done 16 Nov: evaluation
     set v1 and rule ([ALIAS-EVAL.md](../../bench/experiments/ALIAS-EVAL.md)); the Rust rules (`crates/alias`, `footnote alias-scan`)
     pass the identifiers part on held-out (1.000, no look-alike hit). Rules plus OpenAI Privacy Filter (ONNX q4) pass names on
-    held-out (0.913, misses are lone first names). Next: the name model inside the Rust product, stable keyed pseudonyms, then
+    held-out (0.913, misses are lone first names). Done 16 Nov: both inside the binary (`alias-scan --model`, same held-out scores,
+    34 ms per text) with stable keyed pseudonyms (`--pseudonymise`). Next: a `models install` recipe for the 875 MB model, then
     the underline-and-explain prototype; GLiNER2-PII only on a new set v2 if names need more margin. Design notes below.
 13. **Footnote Code:** code-graph study ([plan](../research/CODE-GRAPH-STUDY.md)); hands-on after Johan's go.
     Its graph visualizer uses the family's design language, decided with the launcher in the M2 studio

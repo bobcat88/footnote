@@ -266,9 +266,17 @@ enum Action {
         #[command(subcommand)]
         action: ConfigAction,
     },
-    /// Footnote Alias (not released): personal-data identifiers in a JSON array of texts on stdin, by rules with check digits.
+    /// Footnote Alias (not released): personal data in a JSON array of texts on stdin, by rules with check digits and, when
+    /// installed, OpenAI Privacy Filter for names, addresses and dates.
     #[cfg(feature = "alias")]
-    AliasScan,
+    AliasScan {
+        /// Privacy Filter folder (default: `models/openai-privacy-filter` in the state folder, if present).
+        #[arg(long)]
+        model: Option<PathBuf>,
+        /// Return each text with keyed pseudonyms (`[PERSON_3f9a1c]`) and the replacement table, instead of the hits.
+        #[arg(long)]
+        pseudonymise: bool,
+    },
     /// Verify an append-only audit log (no database needed).
     Audit {
         #[command(subcommand)]
@@ -423,10 +431,27 @@ fn execute(cli: Cli) -> Result<Value> {
         }
         Action::Audit { action } => return audit_command(action),
         #[cfg(feature = "alias")]
-        Action::AliasScan => {
+        Action::AliasScan { model, pseudonymise } => {
             let texts: Vec<String> = serde_json::from_reader(std::io::stdin().lock())?;
-            let results: Vec<_> = texts.iter().map(|t| footnote_alias::scan(t)).collect();
-            return Ok(json!({ "results": results }));
+            let dir = match model {
+                Some(d) => Some(d.clone()),
+                None => Some(crate::models::models_dir(&crate::state::state_dir()?).join("openai-privacy-filter"))
+                    .filter(|d| d.is_dir()),
+            };
+            let mut pf = dir.as_deref().map(footnote_alias::model::PrivacyFilter::load).transpose()?;
+            let key = if *pseudonymise { crate::state::load_or_create_alias_key()? } else { Vec::new() };
+            let mut results = Vec::with_capacity(texts.len());
+            for t in &texts {
+                let hits = footnote_alias::find(t, pf.as_mut())?;
+                results.push(if *pseudonymise {
+                    let (text, replacements) = footnote_alias::pseudonymise(t, &hits, &key);
+                    json!({ "text": text, "replacements": replacements })
+                } else {
+                    json!(hits)
+                });
+            }
+            let detectors = if pf.is_some() { json!(["rules", "privacy-filter"]) } else { json!(["rules"]) };
+            return Ok(json!({ "detectors": detectors, "results": results }));
         }
         Action::Status => return crate::status::status(),
         #[cfg(feature = "library")]
@@ -648,7 +673,7 @@ fn execute(cli: Cli) -> Result<Value> {
         #[cfg(feature = "library")]
         Action::Crawl { .. } => unreachable!("dispatched before the database is opened"),
         #[cfg(feature = "alias")]
-        Action::AliasScan => unreachable!("dispatched before the database is opened"),
+        Action::AliasScan { .. } => unreachable!("dispatched before the database is opened"),
         Action::Audit { .. }
         | Action::Options
         | Action::Config { .. }
@@ -719,7 +744,7 @@ fn action_name(a: &Action) -> &'static str {
         Action::Hook { .. } => "hook",
         Action::Audit { .. } => "audit",
         #[cfg(feature = "alias")]
-        Action::AliasScan => "alias-scan",
+        Action::AliasScan { .. } => "alias-scan",
         Action::Options => "options",
         Action::Status => "status",
         #[cfg(feature = "library")]

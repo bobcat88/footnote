@@ -92,6 +92,24 @@ account-like identifiers with check digits, so "alias" drops that label. Remaini
 - Next candidate if names need a margin: GLiNER2-PII (best recall on SPY). This held-out half is now spent for that question;
   a new comparison needs a v2 set.
 
+## Inside the Rust binary (16 November 2026)
+
+`footnote alias-scan --model <dir>` runs the same pipeline without Python (`crates/alias/src/model.rs`: same ONNX q4 graph and
+tokenizer, pinned by hash; same log-softmax and constrained Viterbi). Check of the port, not a new choice: on dev the model spans are
+identical to the Python runner's (290 spans, none missing, none extra). One addition, from a hand-made sentence, not from the
+evaluation sets: a value found once is hidden at every other place in the text, case ignored, because the model found
+"Élodie Lefèvre" and missed "élodie lefèvre" two lines later.
+
+| Half | Direct identifiers | Names | Precision | Look-alikes hit | Time per text (CPU, one process for all texts) |
+|---|---:|---:|---:|---|---:|
+| dev | 1.000 | 0.978 | 0.925 | 26/144 | 35 ms |
+| held-out | **1.000** | **0.913** | 0.899 | 33/156 | 34 ms |
+
+Recall is unchanged; precision is lower only because the Python scorer counted twice a span both the rules and the model found,
+and the binary keeps one. About twice as fast as the Python runner (63 ms). `--pseudonymise` returns each text with keyed
+pseudonyms (`[PERSON_e29dd2]`, HMAC-SHA256 of label and value under a per-user key `alias.key`, case and spacing ignored) and the
+replacement table, so the same person gets the same pseudonym in every text.
+
 ## Limits
 
 One author wrote the templates and the data is synthetic: realistic structure, but none of the mess of real text (typos, signatures,
