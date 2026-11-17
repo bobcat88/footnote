@@ -10,6 +10,14 @@ fn each_agent_search_records_its_saving_and_usage_sums_it() {
     let footnote = || {
         let mut c = Command::new(assert_cmd::cargo::cargo_bin!("footnote"));
         c.env("FOOTNOTE_STATE_DIR", &state);
+        // Never the user's real agent sessions: `usage` would read (and time) all of them.
+        for (var, dir) in [
+            ("CLAUDE_CONFIG_DIR", "claude"),
+            ("CODEX_HOME", "codex"),
+            ("DSH_HOME", "dsh"),
+        ] {
+            c.env(var, t.path().join(dir));
+        }
         c
     };
     let root = t.path().join("notes");

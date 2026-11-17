@@ -8,6 +8,7 @@ fn usage(dir: &Path) -> Value {
         .env("FOOTNOTE_POLICY_FILE", dir.join("no-policy.json"))
         .env("CLAUDE_CONFIG_DIR", dir.join("claude"))
         .env("CODEX_HOME", dir.join("codex"))
+        .env("DSH_HOME", dir.join("dsh"))
         .args(["usage", "--days", "1"])
         .output()
         .unwrap();
