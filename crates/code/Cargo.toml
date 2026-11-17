@@ -12,3 +12,17 @@ footnote-core.workspace = true
 anyhow.workspace = true
 rusqlite.workspace = true
 serde_json.workspace = true
+# Tree-sitter base layer (CODE-GRAPH-DESIGN.md section 12). Reviewed 17 Nov 2026: official tree-sitter crates, MIT; build
+# scripts only compile the bundled C parsers with `cc`; wasm and bindgen stay off (default features).
+tree-sitter = { version = "=0.27.1", default-features = false, features = ["std"] }
+streaming-iterator = "0.1.9"
+tree-sitter-rust = "=0.24.2"
+tree-sitter-typescript = "=0.23.2"
+tree-sitter-javascript = "=0.25.0"
+tree-sitter-python = "=0.25.0"
+tree-sitter-java = "=0.23.5"
+tree-sitter-go = "=0.25.0"
+walkdir.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

@@ -2,6 +2,7 @@
 //! (`rust-analyzer scip` for Rust); Footnote keeps the project's definitions, references and who calls whom in one SQLite file.
 //! Every edge says how it was made (`origin`: `compiler` here); the tree-sitter pass for other languages comes later.
 pub mod scip;
+mod ts;
 
 use anyhow::{Context, Result, bail};
 use rusqlite::{Connection, OptionalExtension, params};
@@ -22,6 +23,18 @@ CREATE INDEX refs_symbol ON refs(symbol_id);
 CREATE INDEX refs_caller ON refs(caller_id);
 CREATE TABLE outside(file_id INTEGER NOT NULL REFERENCES files(id), package TEXT NOT NULL, version TEXT NOT NULL,
   refs INTEGER NOT NULL);";
+
+/// How the graph's links were made: `compiler` (a precise indexer) or `resolved` (tree-sitter, through scopes and imports).
+/// Graphs built before the grade was stored are compiler graphs.
+fn origin(c: &Connection) -> Result<String> {
+    Ok(
+        c.query_row("SELECT value FROM meta WHERE key='origin'", [], |r| {
+            r.get(0)
+        })
+        .optional()?
+        .unwrap_or_else(|| "compiler".into()),
+    )
+}
 
 /// Package and version of a SCIP symbol (`<scheme> <manager> <package> <version> <descriptors>`).
 fn package(symbol: &str) -> Option<(&str, &str)> {
@@ -162,13 +175,41 @@ fn indexer(root: &Path, out: &Path) -> Result<Indexer> {
     )
 }
 
-/// Run the indexer on `root` and build the graph into `db` (written beside it, then renamed: a reader never sees half a graph).
+/// Build the graph of `root` into `db` (written beside it, then renamed: a reader never sees half a graph). The precise pass runs
+/// when the project's compiler indexer is installed and succeeds; otherwise the tree-sitter base layer builds the graph and the
+/// answer's `upgrade` says what would make it precise (CODE-GRAPH-DESIGN.md section 12).
 pub fn index(root: &Path, db: &Path) -> Result<Value> {
     let started = Instant::now();
     let parent = db.parent().context("database path")?;
     std::fs::create_dir_all(parent)?;
     let scip_file = std::path::absolute(db.with_extension("scip"))?;
-    let ix = indexer(root, &scip_file)?;
+    let (name, docs, origin, upgrade) = match precise(root, &scip_file) {
+        Ok((name, docs)) => (name, docs, "compiler", None),
+        Err(e) => {
+            let project = root.file_name().map_or_else(
+                || "project".into(),
+                |n| n.to_string_lossy().replace(' ', "_"),
+            );
+            let (docs, _) = ts::index(root, &project)?;
+            ("tree-sitter", docs, "resolved", Some(format!("{e:#}")))
+        }
+    };
+    let indexer_ms = started.elapsed().as_millis();
+    let building = db.with_extension("building");
+    let _ = std::fs::remove_file(&building);
+    let counts = write(&building, root, &docs, origin)?;
+    std::fs::rename(&building, db)?;
+    let mut out = json!({"root": root, "db": db, "indexer": name, "origin": origin, "files": counts.0, "symbols": counts.1,
+        "references": counts.2, "indexer_ms": indexer_ms, "total_ms": started.elapsed().as_millis()});
+    if let Some(u) = upgrade {
+        out["upgrade"] = json!(u);
+    }
+    Ok(out)
+}
+
+/// The precise pass: run the project's compiler indexer and read its SCIP output.
+fn precise(root: &Path, scip_file: &Path) -> Result<(&'static str, Vec<scip::Document>)> {
+    let ix = indexer(root, scip_file)?;
     let out = std::process::Command::new(ix.program)
         .args(&ix.args)
         .current_dir(root)
@@ -190,21 +231,16 @@ pub fn index(root: &Path, db: &Path) -> Result<Value> {
         };
         bail!("{} failed: {}", ix.name, msg.trim());
     }
-    let indexer_ms = started.elapsed().as_millis();
-    let bytes = std::fs::read(&scip_file)?;
-    let _ = std::fs::remove_file(&scip_file);
-    let docs = scip::read(&bytes)?;
-    let building = db.with_extension("building");
-    let _ = std::fs::remove_file(&building);
-    let counts = write(&building, root, &docs)?;
-    std::fs::rename(&building, db)?;
-    Ok(
-        json!({"root": root, "db": db, "indexer": ix.name, "files": counts.0, "symbols": counts.1,
-        "references": counts.2, "indexer_ms": indexer_ms, "total_ms": started.elapsed().as_millis()}),
-    )
+    let bytes = std::fs::read(scip_file)?;
+    let _ = std::fs::remove_file(scip_file);
+    Ok((ix.name, scip::read(&bytes)?))
 }
-
-fn write(db: &Path, root: &Path, docs: &[scip::Document]) -> Result<(usize, usize, usize)> {
+fn write(
+    db: &Path,
+    root: &Path,
+    docs: &[scip::Document],
+    origin: &str,
+) -> Result<(usize, usize, usize)> {
     let mut c = Connection::open(db)?;
     c.execute_batch(SCHEMA)?;
     let tx = c.transaction()?;
@@ -212,6 +248,7 @@ fn write(db: &Path, root: &Path, docs: &[scip::Document]) -> Result<(usize, usiz
         "INSERT INTO meta VALUES('root', ?1)",
         [root.to_string_lossy()],
     )?;
+    tx.execute("INSERT INTO meta VALUES('origin', ?1)", [origin])?;
     let mut names: HashMap<&str, (&str, &str)> = HashMap::new();
     for d in docs {
         for s in &d.symbols {
@@ -256,7 +293,7 @@ fn write(db: &Path, root: &Path, docs: &[scip::Document]) -> Result<(usize, usiz
         ids.keys().filter_map(|s| package(s).map(|p| p.0)).collect();
     let mut outside: HashMap<(i64, &str, &str), i64> = HashMap::new();
     {
-        let mut add = tx.prepare("INSERT INTO refs VALUES(?1, ?2, ?3, ?4, 'compiler')")?;
+        let mut add = tx.prepare("INSERT INTO refs VALUES(?1, ?2, ?3, ?4, ?5)")?;
         for (d, &file) in docs.iter().zip(&file_ids) {
             // Items of this file that can hold a reference (not the module itself), innermost found by the smallest span.
             let items: Vec<(&str, [i32; 4])> = d
@@ -288,7 +325,7 @@ fn write(db: &Path, root: &Path, docs: &[scip::Document]) -> Result<(usize, usiz
                     .filter(|(_, e)| contains(*e, o.range))
                     .min_by_key(|(_, e)| (e[2] - e[0], e[3] - e[1]))
                     .and_then(|(s, _)| ids.get(s).copied());
-                add.execute(params![target, file, o.range[0] + 1, caller])?;
+                add.execute(params![target, file, o.range[0] + 1, caller, origin])?;
                 refs += 1;
             }
         }
@@ -384,7 +421,7 @@ pub fn lookup(db: &Path, name: &str, limit: usize) -> Result<Value> {
             stale.push(p);
         }
     }
-    Ok(json!({"root": root, "origin": "compiler", "symbols": found, "stale": stale}))
+    Ok(json!({"root": root, "origin": origin(&c)?, "symbols": found, "stale": stale}))
 }
 
 /// What an outside package is for, from a hand-written list across Rust, JavaScript and Python; `None` when not listed.
@@ -530,7 +567,7 @@ pub fn map(db: &Path, depth: usize) -> Result<Value> {
     let mut outside: Vec<_> = outside.into_iter().collect();
     outside.sort_by(|a, b| b.1.0.cmp(&a.1.0).then(a.0.cmp(&b.0)));
     Ok(json!({
-        "root": root, "origin": "compiler", "depth": depth,
+        "root": root, "origin": origin(&c)?, "depth": depth,
         // An entry block is one no other block references: where a run, a request or a test starts.
         "blocks": blocks.iter().map(|(b, (f, s))| json!({"name": b, "files": f, "symbols": s,
             "entry": !links.iter().any(|((_, to), _)| to == b)})).collect::<Vec<_>>(),

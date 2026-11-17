@@ -162,32 +162,46 @@ fn the_architecture_map_counts_blocks_links_and_outside_packages() {
 
 /// Without rust-analyzer on PATH, indexing says how to install it instead of a raw "program not found".
 #[test]
-fn a_missing_indexer_says_how_to_install_it() {
+fn a_missing_indexer_falls_back_to_the_parser_and_says_how_to_upgrade() {
     let dir = tempfile::tempdir().unwrap();
     let project = dir.path().join("demo");
-    fs::create_dir_all(&project).unwrap();
+    fs::create_dir_all(project.join("src")).unwrap();
+    fs::write(project.join("Cargo.toml"), "[package]\nname = \"demo\"\n").unwrap();
     fs::write(
-        project.join("Cargo.toml"),
-        "[package]
-name = \"demo\"
-",
+        project.join("src/main.rs"),
+        "fn main() {\n    greet();\n}\n\nfn greet() {}\n",
     )
     .unwrap();
-    let out = Command::new(assert_cmd::cargo::cargo_bin!("footnote"))
-        .env("FOOTNOTE_STATE_DIR", dir.path().join("state"))
-        .env("FOOTNOTE_POLICY_FILE", dir.path().join("no-policy.json"))
-        .env("PATH", dir.path().join("empty"))
-        .args(["code-index", project.to_str().unwrap()])
-        .output()
-        .unwrap();
-    assert!(!out.status.success());
-    let text = format!(
-        "{}{}",
-        String::from_utf8_lossy(&out.stdout),
+    let state = dir.path().join("state");
+    let run = |args: &[&str]| {
+        Command::new(assert_cmd::cargo::cargo_bin!("footnote"))
+            .env("FOOTNOTE_STATE_DIR", &state)
+            .env("FOOTNOTE_POLICY_FILE", dir.path().join("no-policy.json"))
+            .env("PATH", dir.path().join("empty"))
+            .args(args)
+            .output()
+            .unwrap()
+    };
+    let out = run(&["code-index", project.to_str().unwrap()]);
+    assert!(
+        out.status.success(),
+        "{}",
         String::from_utf8_lossy(&out.stderr)
     );
-    assert!(
-        text.contains("rustup component add rust-analyzer"),
-        "{text}"
+    let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(
+        (v["indexer"].as_str(), v["origin"].as_str()),
+        (Some("tree-sitter"), Some("resolved"))
     );
+    assert!(
+        v["upgrade"]
+            .as_str()
+            .unwrap()
+            .contains("rustup component add rust-analyzer"),
+        "{v}"
+    );
+    let out = run(&["code", "greet", "--root", project.to_str().unwrap()]);
+    let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(v["origin"], "resolved");
+    assert_eq!(v["symbols"][0]["callers"][0]["name"], "main", "{v}");
 }

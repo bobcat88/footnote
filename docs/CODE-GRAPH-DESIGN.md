@@ -264,6 +264,17 @@ without an indexer. WSL may stay an opt-in extra for people who already have it.
 The 16 November decision (section 9, a precise pass for JavaScript, TypeScript, Java, Rust and Python) still holds, now as the
 upgrade layer rather than the floor.
 
+**Base layer built (17 November 2026).** `crates/code/src/ts.rs`: tree-sitter 0.27.1 with the official grammars for Rust,
+TypeScript/TSX, JavaScript, Python, Java and Go, using each grammar's own tags query for definitions and calls plus small import
+queries. It reads the files git does not ignore. A call links to a same-file definition, through the file's imports (project
+module, or an outside package counted for the map), through `Type::f`, or to a name defined once in the project. It never links a
+method on a value of unknown type, a name the caller binds itself, or a Rust macro. `code-index` uses it whenever the precise
+indexer is missing or fails, and says how to upgrade. Measured on this repository against rust-analyzer (66 Rust files, edges as
+reference file and line to target name and file): **precision 0.79, recall 0.38**, in 0.6 s against about 12 s. Precision is a
+lower bound: some extra links are real calls in feature-gated code the compiler did not index. Recall is low by design, since
+calls only (no type references, no functions passed as values) and no guessing. TypeScript and Python are not measured on a large
+project yet.
+
 **What makes it more than the competition (Johan, 17 November 2026).**
 - **The base layer resolves names through scopes and imports, not by bare name.** `save` in a file that imports it from
   `./store` links to `store.save`, not to every function called `save`. This is the stack-graphs idea. CodeGraph and
