@@ -263,3 +263,21 @@ without an indexer. WSL may stay an opt-in extra for people who already have it.
 
 The 16 November decision (section 9, a precise pass for JavaScript, TypeScript, Java, Rust and Python) still holds, now as the
 upgrade layer rather than the floor.
+
+**What makes it more than the competition (Johan, 17 November 2026).**
+- **The base layer resolves names through scopes and imports, not by bare name.** `save` in a file that imports it from
+  `./store` links to `store.save`, not to every function called `save`. This is the stack-graphs idea. CodeGraph and
+  codebase-memory-mcp match by name. Its precision is published against the compiler-graded graphs.
+- **Every link carries its grade:** `precise` (compiler indexer) or `resolved` (scopes and imports), so an agent knows how far
+  to trust it.
+- **Links across Footnote are the core advantage:** a symbol connects to its documentation in Library and to past fixes and
+  decisions in Memory ("last time this broke, the cause was…"). No code-graph tool has the user's memory or corpora, so this
+  goes first in what we build and show.
+- **Upgrades start on detection and need consent.** When a Java, TypeScript or Python project is found and its precise indexer
+  is missing, Footnote offers to set it up and says what it needs (a Java developer already has the JDK and Maven or Gradle).
+  It installs nothing on its own. Java's precise layer waits for the upstream Windows fixes (to be sent as PRs to scip-java).
+- **The architecture map must be redrawn.** Johan's verdict on the 17 Nov version: far from the reference picture, and it reads
+  as AI slop. The visual makes or breaks the feature, more than the decorative whole-graph view does. Visual reference: LikeC4's
+  diagrams (nested boxes with titles and descriptions, labelled relationships, clean automatic layout, drill-down from one level
+  to the next). Used as a reference only: Footnote draws its own, and takes no code unless it is reviewed and credited. The
+  redraw goes through the design studio and QLoop before it ships.
