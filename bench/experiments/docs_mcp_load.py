@@ -31,6 +31,9 @@ sys.path.insert(0, str(Path(__file__).parent))
 import docs_vs_grounded as g  # noqa: E402
 
 LEVELS = (1, 2) if SMOKE else (1, 5, 10, 20, 40)
+# A/B runs (17 Nov, #152): the binary and the scenarios can be chosen; defaults are the original run's.
+BIN = os.environ.get("FOOTNOTE_LOAD_BIN", g.FOOTNOTE)
+SCENARIOS = tuple(os.environ.get("FOOTNOTE_LOAD_SCENARIOS", "shared,standalone").split(","))
 WARMUPS = 1 if SMOKE else 3
 CALLS = 2 if SMOKE else 30
 NO_WINDOW = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
@@ -43,7 +46,7 @@ def digest(path):
 
 class Client:
     def __init__(self, db, state, shared, logfile):
-        cmd = [g.FOOTNOTE, "--db", str(db), *(["mcp"] if shared else ["serve", "--mcp"])]
+        cmd = [BIN, "--db", str(db), *(["mcp"] if shared else ["serve", "--mcp"])]
         self.log = open(logfile, "w", encoding="utf-8")
         self.p = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=self.log,
                                   text=True, encoding="utf-8", env=dict(os.environ, FOOTNOTE_STATE_DIR=str(state)),
@@ -173,12 +176,12 @@ def run_level(name, n, db, qs):
     clients = []
     try:
         if name == "shared":
-            daemon = subprocess.Popen([g.FOOTNOTE, "--db", str(db), "serve", "--mcp", "--daemon", "--no-audit"],
+            daemon = subprocess.Popen([BIN, "--db", str(db), "serve", "--mcp", "--daemon", "--no-audit"],
                                       stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                                       env=dict(os.environ, FOOTNOTE_STATE_DIR=str(state)), creationflags=NO_WINDOW)
             deadline = time.monotonic() + 20
             while True:
-                check = subprocess.run([g.FOOTNOTE, "--db", str(db), "memory-recall", "--resident", "--", "probe"],
+                check = subprocess.run([BIN, "--db", str(db), "memory-recall", "--resident", "--", "probe"],
                                        env=dict(os.environ, FOOTNOTE_STATE_DIR=str(state)), capture_output=True, timeout=10,
                                        creationflags=NO_WINDOW)
                 if check.returncode == 0:
@@ -275,13 +278,13 @@ def main():
     qs = [e["vars"]["query"] for e in yaml.safe_load(dataset.read_text(encoding="utf-8"))["entries"]
           if e["vars"]["library"] == "react"]
     random.Random(20261115).shuffle(qs)
-    inputs = {"binary_sha256": digest(Path(g.FOOTNOTE)), "database_sha256": digest(target), "dataset_sha256": digest(dataset),
+    inputs = {"binary_sha256": digest(Path(BIN)), "database_sha256": digest(target), "dataset_sha256": digest(dataset),
               "models": {m: digest(Path(m) / "manifest.json") for m in g.MODELS}, "levels": LEVELS, "query_count": len(qs),
               "warmups": WARMUPS, "calls_per_client": CALLS, "idle_confirmed": False, "smoke": SMOKE,
               "resource_note": "sum of Windows working sets includes shared pages and proxy processes; CPU in core-seconds"}
     (OUT / "inputs.json").write_text(json.dumps(inputs, indent=2), encoding="utf-8")
     all_results = []
-    for scenario in ("shared", "standalone"):
+    for scenario in SCENARIOS:
         for n in LEVELS:
             all_results.append(run_level(scenario, n, target, qs))
     (OUT / "summary.json").write_text(json.dumps(all_results, indent=2), encoding="utf-8")
