@@ -519,18 +519,35 @@ pub fn run(embed: bool) {
         // Keep only the outer stage, never the error chain: SQLite/parser errors can quote user text or paths.
         let dir = state.join("memory-hook");
         if crate::state::ensure_private_dir(&dir).is_ok() {
-            let line = format!(
-                "{} hook failed: {e}",
-                time::OffsetDateTime::now_utc().unix_timestamp()
-            );
-            let _ = crate::state::append_line(&dir.join("hook.log"), &line);
+            let _ = crate::state::append_line(&dir.join("hook.log"), &log_line(&e));
         }
     }
+}
+
+/// The hook.log line for a failure: the time and the outer stage only (`{e}`, never `{e:#}`), so nothing the user typed or
+/// remembered reaches this plain-text file (#172).
+fn log_line(e: &anyhow::Error) -> String {
+    format!(
+        "{} hook failed: {e}",
+        time::OffsetDateTime::now_utc().unix_timestamp()
+    )
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_hook_failure_is_logged_without_the_text_that_caused_it() {
+        let inner = anyhow::anyhow!("fts5: syntax error near \"my bank password reminder\"");
+        let e = inner.context("recall").context("event handling");
+        let line = log_line(&e);
+        assert!(line.ends_with("hook failed: event handling"), "{line}");
+        assert!(
+            !line.contains("password") && !line.contains("bank"),
+            "{line}"
+        );
+    }
 
     #[test]
     fn grok_aliases_and_snake_case_precedence() {
