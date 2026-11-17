@@ -560,7 +560,7 @@ fn execute(cli: Cli) -> Result<Value> {
         }
         #[cfg(feature = "code")]
         Action::Code { name, root, limit } => {
-            return footnote_code::lookup(&code_db(root)?, name, *limit);
+            return code_lookup(root, name, *limit);
         }
         #[cfg(feature = "alias")]
         Action::AliasScan {
@@ -887,6 +887,16 @@ fn writes(a: &Action) -> bool {
 #[cfg(feature = "code")]
 fn canonical(root: &Path) -> Result<PathBuf> {
     std::path::absolute(root).map_err(|e| anyhow::anyhow!("project folder {}: {e}", root.display()))
+}
+
+/// A symbol lookup plus what Memory and Library hold about it (three of each), when the symbol exists.
+#[cfg(feature = "code")]
+pub(crate) fn code_lookup(root: &Path, name: &str, limit: usize) -> Result<Value> {
+    let mut v = footnote_code::lookup(&code_db(root)?, name, limit)?;
+    if v["symbols"].as_array().is_some_and(|s| !s.is_empty()) {
+        v["related"] = crate::find::related(name, 3);
+    }
+    Ok(v)
 }
 
 /// One graph per project, in the state folder (never inside the repository), named after the project's canonical path.

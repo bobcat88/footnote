@@ -594,7 +594,7 @@ fn dispatch(db: &Path, name: &str, args: &Value) -> Result<Value> {
                     .filter(|n| (1..=100).contains(n))
                     .context("`limit` must be 1 to 100")? as usize,
             };
-            footnote_code::lookup(&app::code_db(&root)?, name, limit)
+            app::code_lookup(&root, name, limit)
         }
         other => bail!("unknown tool: {other}"),
     }

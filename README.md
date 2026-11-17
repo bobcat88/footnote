@@ -202,7 +202,7 @@ Its `limits` part shows the 5-hour and weekly limits that have not reset yet, wi
 
 ### Code graph
 
-Footnote Code answers "who calls this, and what does it call" from the compiler's own index, not from a guess. It picks the indexer from the project's files and says which one is missing:
+Footnote Code answers "who calls this, and what does it call" from the compiler's own index, not from a guess. Each answer also lists, under `related`, the memories and Library passages that name the symbol as code. It picks the indexer from the project's files and says which one is missing:
 
 | Project | Marker | Indexer to install |
 |---|---|---|

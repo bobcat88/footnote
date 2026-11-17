@@ -100,6 +100,86 @@ pub fn find(query: &str, limit: usize) -> Result<Value> {
     )
 }
 
+/// What Memory and Library hold about a code symbol, added to `footnote code` answers (CODE-GRAPH-DESIGN.md section 12): past
+/// fixes and decisions that name it, and documentation passages about it. Keyword search only: a symbol name is an exact word,
+/// and a lookup must stay fast (no model load).
+#[cfg(feature = "code")]
+pub fn related(name: &str, limit: usize) -> Value {
+    let Ok(state) = crate::state::state_dir() else {
+        return json!(null);
+    };
+    let _ = (name, limit, &state); // used only when Memory or Library is in the build
+    #[cfg(any(feature = "memory", feature = "library"))]
+    let words = |db: &Path| -> Result<Vec<Value>> {
+        let c = crate::app::open(db, false)?;
+        // The word search splits `search_db` into "search" and "db"; keep only passages that name the symbol itself.
+        let hits = crate::app::search(&c, name, limit * 10, &crate::records::Filters::default())?;
+        Ok(hits["results"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter(|h| {
+                names(
+                    h["text"].as_str().or(h["snippet"].as_str()).unwrap_or(""),
+                    name,
+                )
+            })
+            .take(limit)
+            .cloned()
+            .collect())
+    };
+    #[cfg(feature = "memory")]
+    let memory = if on(&state, "memory") {
+        crate::status::memory_db(&state)
+            .ok()
+            .filter(|db| db.exists())
+            .and_then(|db| words(&db).ok())
+            .unwrap_or_default()
+            .into_iter()
+            .map(|h| json!({"id": h["id"], "text": text(&h["text"], 300)}))
+            .collect()
+    } else {
+        Vec::new()
+    };
+    #[cfg(not(feature = "memory"))]
+    let memory: Vec<Value> = Vec::new();
+    #[cfg(feature = "library")]
+    let library: Vec<Value> = if on(&state, "library") {
+        corpora(&state)
+            .iter()
+            .filter(|db| db.exists())
+            .filter_map(|db| words(db).ok())
+            .flatten()
+            .take(limit)
+            .map(|h| json!({"path": h["path"], "line": h["line"], "heading": h["heading"],
+                            "text": text(if h["text"].is_string() { &h["text"] } else { &h["snippet"] }, 300)}))
+            .collect()
+    } else {
+        Vec::new()
+    };
+    #[cfg(not(feature = "library"))]
+    let library: Vec<Value> = Vec::new();
+    json!({"memory": memory, "library": library})
+}
+
+/// Whether `text` names the symbol: written as code (`` `name` `` or `name(`), or as a whole word when the name cannot be an
+/// ordinary word (an underscore, an inner capital or a digit), so `usage` does not match prose about usage.
+#[cfg(all(feature = "code", any(feature = "memory", feature = "library")))]
+fn names(text: &str, name: &str) -> bool {
+    if text.contains(&format!("`{name}`")) || text.contains(&format!("{name}(")) {
+        return true;
+    }
+    let identifier = name.contains('_')
+        || name.chars().skip(1).any(char::is_uppercase)
+        || name.chars().any(|c| c.is_ascii_digit());
+    let word = |c: char| c.is_alphanumeric() || c == '_';
+    identifier
+        && text.match_indices(name).any(|(i, _)| {
+            !text[..i].chars().next_back().is_some_and(word)
+                && !text[i + name.len()..].chars().next().is_some_and(word)
+        })
+}
+
 /// One product's answer: its results, or why there are none (off, not in this build, nothing to search, an error).
 fn answer(product: &str, run: impl FnOnce() -> Result<Value>) -> Value {
     match run() {
@@ -258,6 +338,19 @@ fn code(_: &Path, _: &str, _: usize) -> Value {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(all(feature = "code", any(feature = "memory", feature = "library")))]
+    #[test]
+    fn a_passage_names_a_symbol_only_as_code_or_a_clear_identifier() {
+        use super::names;
+        assert!(names("fixed in `usage` today", "usage"));
+        assert!(names("calls usage(days) twice", "usage"));
+        assert!(!names("token usage per day", "usage"));
+        assert!(names("search_db opens the corpus", "search_db"));
+        assert!(!names("search the db", "search_db"));
+        assert!(!names("my_search_db_old", "search_db"));
+        assert!(names("see Encoder.load and loadModel.", "loadModel"));
+    }
+
     #[test]
     fn the_corpus_list_tolerates_a_missing_or_broken_file() {
         let t = tempfile::tempdir().unwrap();
