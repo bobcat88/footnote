@@ -2,6 +2,7 @@
 mod activity;
 mod app;
 mod daemon;
+mod find;
 mod hardware;
 #[cfg(feature = "memory")]
 mod hook;

@@ -12,7 +12,8 @@ pub fn status() -> Result<Value> {
         "state_dir": state,
         "policy_file": policy.as_ref().filter(|p| p.exists()),
         "products": {
-            "library": {"built": cfg!(feature = "library"), "enabled": enabled(&state, "library")},
+            "library": {"built": cfg!(feature = "library"), "enabled": enabled(&state, "library"),
+                        "corpora": crate::find::corpora(&state).iter().map(|p| json!({"path": p, "exists": p.exists()})).collect::<Vec<_>>()},
             "memory": memory(&state)?,
             "code": code(&state),
         },

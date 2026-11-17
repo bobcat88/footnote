@@ -244,6 +244,9 @@ pub fn run(db: &Option<PathBuf>, dry_run: bool) -> Result<Value> {
         );
     }
     let home = home()?;
+    if !dry_run {
+        crate::find::record_corpus(&db);
+    }
     let entry = command(&db)?;
     let mut report: Vec<Value> = Vec::new();
 
