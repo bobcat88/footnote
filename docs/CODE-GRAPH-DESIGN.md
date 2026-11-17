@@ -302,6 +302,24 @@ script files beside the Rust), each link keeping its own grade.
 By rule, without `tests/`: module path 218 links at 0.99, same file 553 at 0.95, import 6 at 1.00, `Type::f()` 16 at 0.63
 (most misses are feature- or Windows-gated code the compiler did not index).
 
+**Three tools, clean truth (17 November 2026).** Once a repository is graphed with rust-analyzer installed, its graph also holds
+parser links for other files, so every scoring script now takes only `compiler`-graded links, on the files the compiler covered.
+Same Rust files, same scoring:
+
+| | precision | recall | precision | recall |
+|---|---|---|---|---|
+| | without `tests/` | | all files | |
+| **Footnote base layer** | **0.98** | 0.50 | **0.84** | 0.50 |
+| CodeGraph 1.6.3 (colbymchenry, MIT; telemetry off) | 0.88 | **0.55** | 0.78 | **0.55** |
+| codebase-memory-mcp 0.12.1 | 0.61 | 0.41 | 0.52 | 0.39 |
+
+CodeGraph is the real competitor: a little more recall, about six times the wrong links. Not run: GitNexus (PolyForm
+Noncommercial, not usable for a commercial product, so left out by Johan's rule) and Serena (it asks a language server, here
+rust-analyzer itself, one symbol at a time: no exportable graph, and on Rust it would score the compiler against itself). CodeGraph
+review: npm package with SLSA provenance, a bundled `node.exe` and readable JavaScript; no install scripts; telemetry to
+`telemetry.getcodegraph.com`, switched off with `DO_NOT_TRACK=1` and `CODEGRAPH_TELEMETRY=0`; its `install` command writes into
+agent configurations, so only `init` was run, on a `git archive` copy of the repository. Script: `score_codegraph.py`.
+
 **What makes it more than the competition (Johan, 17 November 2026).**
 - **The base layer resolves names through scopes and imports, not by bare name.** `save` in a file that imports it from
   `./store` links to `store.save`, not to every function called `save`. This is the stack-graphs idea. CodeGraph and

@@ -11,13 +11,13 @@ SKIP = sys.argv[3] if len(sys.argv) > 3 else None
 from collections import Counter
 
 c = sqlite3.connect(f"file:{sys.argv[1]}?mode=ro", uri=True)
-comp_files = {p.replace("\\", "/") for (p,) in c.execute("SELECT path FROM files")}
+comp_files = {p.replace("\\", "/") for (p,) in c.execute("SELECT DISTINCT f.path FROM files f JOIN symbols s ON s.file_id = f.id WHERE s.scip NOT LIKE 'treesitter %'")}
 comp_files = {f for f in comp_files if not (SKIP and f.startswith(SKIP))}
 comp = {
     (a.replace("\\", "/"), l, n, b.replace("\\", "/"))
     for a, l, n, b in c.execute(
         """SELECT rf.path, r.line, s.name, sf.path FROM refs r JOIN files rf ON rf.id = r.file_id
-           JOIN symbols s ON s.id = r.symbol_id JOIN files sf ON sf.id = s.file_id WHERE s.kind IN ('function','type')"""
+           JOIN symbols s ON s.id = r.symbol_id JOIN files sf ON sf.id = s.file_id WHERE s.kind IN ('function','type') AND r.origin = 'compiler'"""
     )
 }
 outer = json.load(open(sys.argv[2], encoding="utf-8"))
