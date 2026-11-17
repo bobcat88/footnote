@@ -66,21 +66,33 @@ fn helper_hash() -> Result<String> {
 // ------------------------------------------------------------------ resident encoders
 /// One loaded encoder per model directory, for the life of the process (the MCP server, the daemon): loading costs about a second,
 /// a query a few milliseconds.
-static ENCODERS: OnceLock<Mutex<HashMap<PathBuf, crate::encoder::Encoder>>> = OnceLock::new();
+/// Each encoder has its own lock (#152): the pool's lock is held only to find or load one, so requests using different models
+/// (the default pair is two) run at the same time instead of queueing behind one lock for every inference. One ONNX session runs
+/// one call at a time (`run` takes `&mut self`); more sessions per model would cost its weights in RAM again.
+type Shared = std::sync::Arc<Mutex<crate::encoder::Encoder>>;
+static ENCODERS: OnceLock<Mutex<HashMap<PathBuf, (String, Shared)>>> = OnceLock::new();
 
 fn encode_batch(model: &Path, expected: &str, texts: &[String], kind: &str) -> Result<Encoded> {
-    let pool = ENCODERS.get_or_init(Default::default);
-    let mut guard = pool
+    let one: Shared = {
+        let pool = ENCODERS.get_or_init(Default::default);
+        let mut guard = pool
+            .lock()
+            .map_err(|_| anyhow::anyhow!("encoder pool poisoned"))?;
+        match guard.get(model) {
+            Some((sha, e)) if sha == expected => e.clone(),
+            _ => {
+                // Not loaded yet, or the manifest changed on disk since it was loaded: load the model now.
+                let e =
+                    crate::metrics::timed!("encoder.load", crate::encoder::Encoder::load(model))?;
+                let e: Shared = std::sync::Arc::new(Mutex::new(e));
+                guard.insert(model.to_path_buf(), (expected.to_string(), e.clone()));
+                e
+            }
+        }
+    };
+    let mut encoder = one
         .lock()
-        .map_err(|_| anyhow::anyhow!("encoder pool poisoned"))?;
-    if guard.get(model).is_some_and(|e| e.model_sha256 != expected) {
-        guard.remove(model); // the manifest changed on disk since it was loaded: load the new model
-    }
-    if !guard.contains_key(model) {
-        let e = crate::metrics::timed!("encoder.load", crate::encoder::Encoder::load(model))?;
-        guard.insert(model.to_path_buf(), e);
-    }
-    let encoder = guard.get_mut(model).expect("inserted above");
+        .map_err(|_| anyhow::anyhow!("encoder poisoned"))?;
     let e = crate::metrics::timed!(
         if kind == "query" {
             "encoder.query"
@@ -909,6 +921,41 @@ mod tests {
         assert_eq!(out, vec![2, 1]);
         assert!(fuse(&[], 100, 0.55).is_empty());
     }
+    /// #152: requests on two models at once (one lock per model) give exactly the vectors sequential calls give.
+    #[test]
+    fn concurrent_queries_on_two_models_match_sequential_ones() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../artifacts/models");
+        let models = [root.join("minilm"), root.join("e5-small")];
+        if models.iter().any(|m| !m.join("manifest.json").is_file()) {
+            return; // models are not in a fresh checkout; the root crate's tests cover the CLI path
+        }
+        let texts = vec!["checkpoint latency and concurrent readers".to_string()];
+        let want: Vec<Vec<f64>> = models
+            .iter()
+            .map(|m| encode(m, &texts, "query").unwrap().vectors[0].clone())
+            .collect();
+        let threads: Vec<_> = (0..8)
+            .map(|i| {
+                let (m, t) = (models[i % 2].clone(), texts.clone());
+                std::thread::spawn(move || {
+                    (
+                        i % 2,
+                        (0..5)
+                            .map(|_| encode(&m, &t, "query").unwrap().vectors[0].clone())
+                            .collect::<Vec<_>>(),
+                    )
+                })
+            })
+            .collect();
+        for t in threads {
+            let (which, got) = t.join().unwrap();
+            assert!(
+                got.iter().all(|v| *v == want[which]),
+                "model {which} gave a different vector under concurrency"
+            );
+        }
+    }
+
     #[test]
     fn the_vector_matrix_is_cached_and_follows_rebuilds() {
         let t = tempfile::tempdir().unwrap();

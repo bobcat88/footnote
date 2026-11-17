@@ -41,7 +41,9 @@ struct Open {
     id: Field,
     body: Field,
 }
-static OPEN: OnceLock<Mutex<Option<Open>>> = OnceLock::new();
+/// The open index, shared: the lock only guards finding or refreshing it, searches run outside it (#152; tantivy's reader and
+/// searcher are thread-safe).
+static OPEN: OnceLock<Mutex<Option<std::sync::Arc<Open>>>> = OnceLock::new();
 
 fn analyzer() -> TextAnalyzer {
     TextAnalyzer::builder(SimpleTokenizer::default())
@@ -193,11 +195,12 @@ pub fn top_hits(c: &Connection, query: &str, n: usize) -> Result<Option<Vec<(i64
         .map_err(|_| anyhow::anyhow!("lexical cache poisoned"))?;
     let fresh = matches!(&*guard, Some(o) if o.dir == dir && o.built_seq == seq && o.cipher_salt == cipher_salt);
     if !fresh {
-        *guard = open(c)?;
+        *guard = open(c)?.map(std::sync::Arc::new);
     }
-    let Some(o) = guard.as_ref() else {
+    let Some(o) = guard.clone() else {
         return Ok(None);
     };
+    drop(guard);
     o.reader.reload()?;
     let mut analyzer = o
         .index
