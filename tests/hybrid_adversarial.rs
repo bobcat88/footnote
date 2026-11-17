@@ -139,3 +139,110 @@ fn corrupt_model_rebuild_rolls_back() {
     assert!(String::from_utf8_lossy(&output).contains("hash mismatch"));
     assert_eq!(before, fs::read(&db).unwrap());
 }
+
+/// Goal 18: a new version of a documentation set re-embeds only the text that changed. A vector is reused by the hash of the
+/// text it encodes (any chunk, any id, any file), never across models, and never for text that changed.
+#[test]
+fn a_new_version_reembeds_only_changed_text_and_never_across_models() {
+    let t = tempfile::tempdir().unwrap();
+    let root = t.path().join("docs");
+    fs::create_dir(&root).unwrap();
+    let page = |extra: &str| {
+        format!(
+            "# Install\nRun the installer once.\n\n## Upgrade\nStop the service before upgrading.{extra}\n\n## Remove\nDelete the folder.\n"
+        )
+    };
+    fs::write(root.join("guide.md"), page("")).unwrap();
+    fs::write(root.join("faq.md"), "# FAQ\nPorts are 8080 and 8443.\n").unwrap();
+    let db = t.path().join("k.db");
+    let r = root.to_str().unwrap();
+    let embed = |model: &str| -> (u64, u64) {
+        let v = run(&db, &["rebuild-embeddings", "--model", model]);
+        let m = &v["models"][0];
+        (
+            m["embedded"].as_u64().unwrap(),
+            m["reused"].as_u64().unwrap(),
+        )
+    };
+    run(&db, &["index", "--root", r, "--allow", r]);
+    let (first, _) = embed(MODEL);
+    assert!(first >= 2, "{first}");
+
+    // Version 2: one section changes, the FAQ moves to a new file name (new chunk ids, same text).
+    fs::write(root.join("guide.md"), page(" Back up the database first.")).unwrap();
+    fs::rename(root.join("faq.md"), root.join("questions.md")).unwrap();
+    run(&db, &["index", "--root", r, "--allow", r]);
+    let (embedded, reused) = embed(MODEL);
+    assert!(
+        embedded >= 1 && embedded < first,
+        "only changed text is embedded: {embedded} of {first}"
+    );
+    assert_eq!(embedded + reused, first, "every chunk has a vector");
+    let hit = run(
+        &db,
+        &[
+            "search",
+            "back up the database",
+            "--mode",
+            "hybrid",
+            "--model",
+            MODEL,
+        ],
+    );
+    assert!(
+        hit["results"]
+            .to_string()
+            .contains("Back up the database first"),
+        "{hit}"
+    );
+
+    // Another model shares nothing: everything is embedded for it.
+    let other = concat!(env!("CARGO_MANIFEST_DIR"), "/artifacts/models/e5-small");
+    let (embedded, reused) = embed(other);
+    assert_eq!((embedded, reused), (first, 0));
+}
+
+/// A database embedded before the signature change keeps its vectors: search uses them as they are, and the next rebuild
+/// converts their signatures without embedding anything again.
+#[test]
+fn vectors_signed_the_old_way_stay_in_use_and_convert_without_reembedding() {
+    let t = tempfile::tempdir().unwrap();
+    let root = t.path().join("notes");
+    fs::create_dir(&root).unwrap();
+    fs::write(
+        root.join("a.md"),
+        "# WAL\nCheckpoint frames and concurrent readers.\n",
+    )
+    .unwrap();
+    let db = t.path().join("k.db");
+    let r = root.to_str().unwrap();
+    run(&db, &["index", "--root", r, "--allow", r]);
+    run(&db, &["rebuild-embeddings", "--model", MODEL]);
+    {
+        let c = rusqlite::Connection::open(&db).unwrap();
+        let rows: Vec<(i64, String)> = c
+            .prepare("SELECT c.id, s.sha256 || ':' || s.revision || ':' || c.heading || char(10) || c.text FROM chunks c JOIN sources s ON s.id=c.source_id")
+            .unwrap()
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        for (id, old) in rows {
+            c.execute(
+                "UPDATE embeddings SET signature=?1 WHERE kind='chunk' AND id=?2",
+                rusqlite::params![footnote_core::hash(old.as_bytes()), id],
+            )
+            .unwrap();
+        }
+    }
+    let hit = run(
+        &db,
+        &["search", "readers", "--mode", "hybrid", "--model", MODEL],
+    );
+    assert!(
+        hit["results"][0]["fusion_score"].is_number(),
+        "old vectors still used: {hit}"
+    );
+    let v = run(&db, &["rebuild-embeddings", "--model", MODEL]);
+    assert_eq!(v["models"][0]["embedded"], 0, "{v}");
+}

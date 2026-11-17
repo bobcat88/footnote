@@ -252,7 +252,13 @@ fn matrix(c: &Connection, identity: &str) -> Result<Arc<Matrix>> {
 fn chunk_text(heading: &str, text: &str) -> String {
     format!("{heading}\n{text}")
 }
-fn chunk_signature(sha: &str, revision: i64, text: &str) -> String {
+/// A chunk's vector depends only on the model (the `model` column) and the text embedded, so the signature is the text's hash:
+/// a chunk whose text is unchanged keeps its vector across file edits, re-indexes and documentation versions.
+fn chunk_signature(text: &str) -> String {
+    footnote_core::hash(text.as_bytes())
+}
+/// The signature used before 17 Nov 2026 (file hash and revision included), recognised once so an upgrade re-embeds nothing.
+fn old_chunk_signature(sha: &str, revision: i64, text: &str) -> String {
     footnote_core::hash(format!("{sha}:{revision}:{text}").as_bytes())
 }
 fn record_text(payload: &str) -> Result<String> {
@@ -310,6 +316,19 @@ pub fn rebuild(c: &mut Connection, models: &[PathBuf]) -> Result<Value> {
                 have.insert((kind, id), signature);
             }
         }
+        // Chunk vectors by text signature, to copy one to a chunk with the same text under a new id (a re-indexed or new version).
+        let mut by_text: HashMap<String, Vec<u8>> = HashMap::new();
+        {
+            let mut s = tx.prepare(
+                "SELECT signature,vector FROM embeddings WHERE model=?1 AND kind='chunk'",
+            )?;
+            for row in s.query_map([&identity], |r| {
+                Ok((r.get::<_, String>(0)?, r.get::<_, Vec<u8>>(1)?))
+            })? {
+                let (signature, vector) = row?;
+                by_text.entry(signature).or_insert(vector);
+            }
+        }
         let mut live: HashSet<(String, i64)> = HashSet::new();
         let (mut embedded, mut reused, mut truncated) = (0usize, 0usize, 0usize);
         let mut batch: Vec<(String, i64, String, String)> = Vec::new(); // kind, id, signature, text
@@ -338,9 +357,22 @@ pub fn rebuild(c: &mut Connection, models: &[PathBuf]) -> Result<Value> {
                 let (id, sha, revision, heading, text): (i64, String, i64, String, String) =
                     (r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?);
                 let text = chunk_text(&heading, &text);
-                let signature = chunk_signature(&sha, revision, &text);
+                let signature = chunk_signature(&text);
                 live.insert(("chunk".into(), id));
-                if have.get(&("chunk".to_string(), id)) == Some(&signature) {
+                let current = have.get(&("chunk".to_string(), id));
+                if current == Some(&signature) {
+                    reused += 1;
+                } else if current == Some(&old_chunk_signature(&sha, revision, &text)) {
+                    tx.execute(
+                        "UPDATE embeddings SET signature=?1 WHERE model=?2 AND kind='chunk' AND id=?3",
+                        params![signature, identity, id],
+                    )?;
+                    reused += 1;
+                } else if let Some(vector) = by_text.get(&signature) {
+                    tx.execute(
+                        "INSERT OR REPLACE INTO embeddings VALUES(?1,'chunk',?2,?3,?4)",
+                        params![identity, id, signature, vector],
+                    )?;
                     reused += 1;
                 } else {
                     batch.push(("chunk".into(), id, signature, text));
@@ -729,10 +761,11 @@ pub fn search(
             chunk_row
                 .query_row([id], |r| {
                     let text = chunk_text(&r.get::<_, String>(2)?, &r.get::<_, String>(3)?);
-                    Ok(chunk_signature(
-                        &r.get::<_, String>(0)?,
-                        r.get::<_, i64>(1)?,
-                        &text,
+                    // Both forms: a database not yet rebuilt since the signature change keeps its vectors in use.
+                    Ok(format!(
+                        "{}|{}",
+                        chunk_signature(&text),
+                        old_chunk_signature(&r.get::<_, String>(0)?, r.get::<_, i64>(1)?, &text)
                     ))
                 })
                 .optional()?
@@ -742,7 +775,7 @@ pub fn search(
         };
         let d = dense
             .get(&(kind, id))
-            .filter(|(_, sig)| ***sig == *signature)
+            .filter(|(_, sig)| signature.split('|').any(|s| *s == ***sig))
             .map(|(b, _)| b);
         with_vectors += usize::from(d.is_some());
         cands.push(Cand {
