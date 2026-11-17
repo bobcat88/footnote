@@ -11,6 +11,8 @@ use std::sync::Mutex;
 /// The model download in progress, so `cancel_install` can stop it.
 static INSTALL: Mutex<Option<Child>> = Mutex::new(None);
 use tauri::Manager;
+use tauri::menu::{Menu, MenuItem};
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 
 /// The engine commands the window may run: read-only ones, and one write, a product's on/off switch (reversible; a company
 /// policy still wins, enforced by the engine).
@@ -155,15 +157,59 @@ fn cancel_install() -> bool {
     })
 }
 
+/// Show one of the two windows and hide the other, as the in-app switch does: one Footnote window at a time.
+fn show(app: &tauri::AppHandle, label: &str) {
+    let other = if label == "main" { "mini" } else { "main" };
+    if let Some(w) = app.get_webview_window(other) {
+        let _ = w.hide();
+    }
+    if let Some(w) = app.get_webview_window(label) {
+        let _ = w.unminimize();
+        let _ = w.show();
+        let _ = w.set_focus();
+    }
+}
+
 fn main() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![footnote, cancel_install])
-        // Closing the full window quits, even while the hidden mini window exists.
+        // The tray (decided 15 Nov: a compact tray panel plus the full window): a left click opens the mini panel, the menu
+        // opens either window or quits. Quitting is only ever from this menu, so closing a window never loses the app.
+        .setup(|app| {
+            let open = MenuItem::with_id(app, "open", "Open Footnote", true, None::<&str>)?;
+            let mini = MenuItem::with_id(app, "mini", "Mini mode", true, None::<&str>)?;
+            let quit = MenuItem::with_id(app, "quit", "Quit Footnote", true, None::<&str>)?;
+            let mut tray = TrayIconBuilder::with_id("footnote")
+                .tooltip("Footnote")
+                .menu(&Menu::with_items(app, &[&open, &mini, &quit])?)
+                .show_menu_on_left_click(false)
+                .on_menu_event(|app, event| match event.id.as_ref() {
+                    "open" => show(app, "main"),
+                    "mini" => show(app, "mini"),
+                    "quit" => app.exit(0),
+                    _ => {}
+                })
+                .on_tray_icon_event(|tray, event| {
+                    if let TrayIconEvent::Click {
+                        button: MouseButton::Left,
+                        button_state: MouseButtonState::Up,
+                        ..
+                    } = event
+                    {
+                        show(tray.app_handle(), "mini");
+                    }
+                });
+            if let Some(icon) = app.default_window_icon() {
+                tray = tray.icon(icon.clone());
+            }
+            tray.build(app)?;
+            Ok(())
+        })
+        // Closing a window hides it; the app stays in the tray until "Quit Footnote".
         .on_window_event(|window, event| {
-            if let tauri::WindowEvent::CloseRequested { .. } = event
-                && window.label() == "main"
-            {
-                window.app_handle().exit(0);
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                api.prevent_close();
+                let _ = window.hide();
             }
         })
         .run(tauri::generate_context!())

@@ -204,9 +204,11 @@ Agents get the same answer through `footnote_code`; files changed since indexing
 
 ### Desktop window
 
-`apps/launcher` is Footnote One's window (Tauri 2): an overview of the three products, your projects and connected agents, the
-code map and symbol view, models, memory activity and token usage, plus a small always-on-top mini mode. It only reads: every
-screen runs one of a short list of read-only `footnote` commands. Build steps: [apps/launcher/README.md](apps/launcher/README.md).
+`apps/launcher` is Footnote One's window (Tauri 2): an overview of the three products with their on/off switches, one search
+over Memory, Library and Code, your projects and connected agents, the code map and symbol view, models (installed from the
+window, with size, licence, progress and cancel), memory activity and token usage, plus a small always-on-top mini mode. It runs
+only a short list of `footnote` commands: reads, a product's switch and a model install. It lives in the tray: a left click opens
+the mini panel, the menu opens either window, and closing a window hides it; "Quit Footnote" in the tray menu quits. Build steps: [apps/launcher/README.md](apps/launcher/README.md).
 Windows only so far; no installer yet.
 
 ## Security model
