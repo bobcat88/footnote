@@ -219,6 +219,7 @@ loading. Tested with scip-python 0.6.8 on Windows, including cross-file referenc
 footnote code-index .          # build the graph of the project here (seconds; rebuild after big changes)
 footnote code lookup           # the symbol `lookup`: signature, file and lines, callers with call-site lines, callees
 footnote code-map               # architecture map: folders as blocks, links between them, outside packages used
+footnote code-impact <name>     # before a change: callers up to 3 levels, tests reached, files and memories affected
 ```
 
 Agents get the same answer through `footnote_code`; files changed since indexing come back in `stale`. Design: [docs/CODE-GRAPH-DESIGN.md](docs/CODE-GRAPH-DESIGN.md).

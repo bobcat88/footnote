@@ -387,6 +387,19 @@ enum Action {
         #[arg(long, default_value_t = 30)]
         limit: usize,
     },
+    /// Footnote Code: the impact radius of changing a symbol, its callers up to `depth` levels, the tests that reach it, the
+    /// files and blocks affected, and the memories anchored to them.
+    #[cfg(feature = "code")]
+    CodeImpact {
+        name: String,
+        /// Project folder indexed with `code-index`.
+        #[arg(long, default_value = ".")]
+        root: PathBuf,
+        #[arg(long, default_value_t = 3)]
+        depth: usize,
+        #[arg(long, default_value_t = 50)]
+        limit: usize,
+    },
     /// Verify an append-only audit log (no database needed).
     Audit {
         #[command(subcommand)]
@@ -560,6 +573,13 @@ fn execute(cli: Cli) -> Result<Value> {
             crate::find::add_block_memories(&mut map);
             return Ok(map);
         }
+        #[cfg(feature = "code")]
+        Action::CodeImpact {
+            name,
+            root,
+            depth,
+            limit,
+        } => return code_impact(root, name, *depth, *limit),
         #[cfg(feature = "code")]
         Action::Code { name, root, limit } => {
             return code_lookup(root, name, *limit);
@@ -845,7 +865,10 @@ fn execute(cli: Cli) -> Result<Value> {
         #[cfg(feature = "library")]
         Action::Crawl { .. } => unreachable!("dispatched before the database is opened"),
         #[cfg(feature = "code")]
-        Action::CodeIndex { .. } | Action::Code { .. } | Action::CodeMap { .. } => {
+        Action::CodeIndex { .. }
+        | Action::Code { .. }
+        | Action::CodeMap { .. }
+        | Action::CodeImpact { .. } => {
             unreachable!("dispatched before the database is opened")
         }
         #[cfg(feature = "alias")]
@@ -907,6 +930,27 @@ pub(crate) fn code_lookup(root: &Path, name: &str, limit: usize) -> Result<Value
     Ok(v)
 }
 
+/// The impact radius plus the memories anchored to the files it reaches ("last time this broke...").
+#[cfg(feature = "code")]
+pub(crate) fn code_impact(root: &Path, name: &str, depth: usize, limit: usize) -> Result<Value> {
+    let mut v = footnote_code::impact(&code_db(root)?, name, depth, limit)?;
+    let files: Vec<String> = v["found"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|f| f["path"].as_str().map(String::from))
+        .chain(
+            v["files"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|f| f.as_str().map(String::from)),
+        )
+        .collect();
+    v["memories"] = crate::find::related(name, &files, 5)["memory"].clone();
+    Ok(v)
+}
+
 /// One graph per project, in the state folder (never inside the repository), named after the project's canonical path.
 #[cfg(feature = "code")]
 pub(crate) fn code_db(root: &Path) -> Result<PathBuf> {
@@ -964,6 +1008,8 @@ fn action_name(a: &Action) -> &'static str {
         Action::CodeIndex { .. } => "code-index",
         #[cfg(feature = "code")]
         Action::Code { .. } => "code",
+        #[cfg(feature = "code")]
+        Action::CodeImpact { .. } => "code-impact",
         #[cfg(feature = "code")]
         Action::CodeMap { .. } => "code-map",
         Action::Options => "options",

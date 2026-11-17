@@ -436,6 +436,90 @@ pub fn lookup(db: &Path, name: &str, limit: usize) -> Result<Value> {
     Ok(json!({"root": root, "origin": origin(&c)?, "symbols": found, "stale": stale}))
 }
 
+/// The impact radius of changing `name`: everything that calls it, then what calls those, up to `depth` levels, with the
+/// call's line and how the link was made (`compiler` or `resolved`). Tests on the way (a caller in a test file or named
+/// `test_*`) are listed apart, and the affected files and blocks are counted, so an agent sees what to re-check first.
+pub fn impact(db: &Path, name: &str, depth: usize, limit: usize) -> Result<Value> {
+    let c = Connection::open_with_flags(db, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+        .with_context(|| {
+            format!(
+                "no code graph at {}; run `footnote code-index` first",
+                db.display()
+            )
+        })?;
+    let start: Vec<(i64, String, String)> = c
+        .prepare(
+            "SELECT s.id, s.kind, f.path FROM symbols s JOIN files f ON f.id = s.file_id
+             WHERE s.name = ?1 AND s.kind != 'module' ORDER BY f.path, s.line LIMIT 10",
+        )?
+        .query_map([name], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?
+        .collect::<rusqlite::Result<_>>()?;
+    let mut q = c.prepare(
+        "SELECT r.caller_id, cs.name, cs.kind, cf.path, cs.line, min(r.line), r.origin FROM refs r
+         JOIN symbols cs ON cs.id = r.caller_id JOIN files cf ON cf.id = cs.file_id
+         WHERE r.symbol_id = ?1 AND r.caller_id != ?1 GROUP BY r.caller_id",
+    )?;
+    let mut seen: std::collections::HashSet<i64> = start.iter().map(|s| s.0).collect();
+    let mut frontier: Vec<i64> = seen.iter().copied().collect();
+    let mut callers = Vec::new();
+    let mut graded = (0, 0);
+    for level in 1..=depth.max(1) {
+        let mut next = Vec::new();
+        for id in &frontier {
+            let rows = q.query_map([id], |r| {
+                Ok((
+                    r.get::<_, i64>(0)?,
+                    r.get::<_, String>(1)?,
+                    r.get::<_, String>(2)?,
+                    r.get::<_, String>(3)?,
+                    r.get::<_, i64>(4)?,
+                    r.get::<_, i64>(5)?,
+                    r.get::<_, String>(6)?,
+                ))
+            })?;
+            for row in rows {
+                let (caller, cname, kind, path, line, call_line, origin) = row?;
+                if !seen.insert(caller) {
+                    continue;
+                }
+                if origin == "compiler" {
+                    graded.0 += 1
+                } else {
+                    graded.1 += 1
+                }
+                let file = path.replace('\\', "/");
+                let test = file
+                    .split('/')
+                    .any(|p| p == "tests" || p == "test" || p == "__tests__")
+                    || file.contains(".test.")
+                    || file.contains("_test.")
+                    || cname.starts_with("test_");
+                callers.push((level, cname, kind, file, line, call_line, origin, test));
+                next.push(caller);
+            }
+        }
+        if next.is_empty() || callers.len() >= limit * 4 {
+            break;
+        }
+        frontier = next;
+    }
+    let files: std::collections::BTreeSet<&str> = callers.iter().map(|c| c.3.as_str()).collect();
+    let blocks: std::collections::BTreeSet<String> = files.iter().map(|f| block(f, 2)).collect();
+    let row = |c: &(usize, String, String, String, i64, i64, String, bool)| json!({"level": c.0, "name": c.1, "kind": c.2, "path": c.3, "line": c.4, "call_line": c.5, "origin": c.6});
+    Ok(json!({
+        "symbol": name,
+        "found": start.iter().map(|s| json!({"kind": s.1, "path": s.2.replace('\\', "/")})).collect::<Vec<_>>(),
+        "depth": depth.max(1),
+        "callers": callers.iter().filter(|c| !c.7).take(limit).map(row).collect::<Vec<_>>(),
+        "tests": callers.iter().filter(|c| c.7).take(limit).map(row).collect::<Vec<_>>(),
+        "counts": {"callers": callers.iter().filter(|c| !c.7).count(), "tests": callers.iter().filter(|c| c.7).count(),
+                   "files": files.len(), "compiler_links": graded.0, "resolved_links": graded.1},
+        "files": files,
+        "blocks": blocks,
+        "origin": origin(&c)?,
+    }))
+}
+
 /// What an outside package is for, from a hand-written list across Rust, JavaScript and Python; `None` when not listed.
 /// `server` and `mcp` mean the project is called in (it serves HTTP or MCP); the other kinds are what it calls out to.
 /// shortcut: a fixed list; unknown packages stay unclassed. Grow it when real projects show common misses.

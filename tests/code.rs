@@ -222,4 +222,15 @@ fn a_missing_indexer_falls_back_to_the_parser_and_says_how_to_upgrade() {
     let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
     assert_eq!(v["origin"], "resolved");
     assert_eq!(v["symbols"][0]["callers"][0]["name"], "main", "{v}");
+    let out = run(&["code-impact", "greet", "--root", project.to_str().unwrap()]);
+    let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(
+        (
+            v["callers"][0]["name"].as_str(),
+            v["callers"][0]["level"].as_u64()
+        ),
+        (Some("main"), Some(1)),
+        "{v}"
+    );
+    assert_eq!(v["counts"]["resolved_links"], 1, "{v}");
 }

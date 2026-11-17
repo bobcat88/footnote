@@ -594,7 +594,17 @@ fn dispatch(db: &Path, name: &str, args: &Value) -> Result<Value> {
                     .filter(|n| (1..=100).contains(n))
                     .context("`limit` must be 1 to 100")? as usize,
             };
-            app::code_lookup(&root, name, limit)
+            // `impact`: the callers up to that many levels, the tests reached and the anchored memories, before a change.
+            match args.get("impact").filter(|v| !v.is_null()) {
+                None => app::code_lookup(&root, name, limit),
+                Some(v) => {
+                    let depth = v
+                        .as_u64()
+                        .filter(|n| (1..=6).contains(n))
+                        .context("`impact` must be 1 to 6 levels")?;
+                    app::code_impact(&root, name, depth as usize, limit)
+                }
+            }
         }
         other => bail!("unknown tool: {other}"),
     }
@@ -1113,13 +1123,14 @@ fn tool_definitions() -> Value {
     if let Some(list) = tools.as_array_mut() {
         list.push(json!({
             "name": "footnote_code",
-            "description": "Footnote Code: a symbol's definition (signature, file, lines), who calls it (with call-site lines) and what it calls, from the compiler's own index of the project (rust-analyzer for Rust). `stale` lists answer files changed since indexing; re-run `footnote code-index <root>` then. Read-only.",
+            "description": "Footnote Code: a symbol's definition (signature, file, lines), who calls it (with call-site lines) and what it calls, or with impact what a change to it reaches, from the compiler's own index of the project (rust-analyzer for Rust). `stale` lists answer files changed since indexing; re-run `footnote code-index <root>` then. Read-only.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
                     "name": {"type": "string", "description": "Symbol name, e.g. a function or type: `lookup`, `Store`"},
                     "root": {"type": "string", "description": "Project folder; default: the server's working folder"},
-                    "limit": {"type": "integer", "minimum": 1, "maximum": 100, "default": 30}
+                    "limit": {"type": "integer", "minimum": 1, "maximum": 100, "default": 30},
+                    "impact": {"type": "integer", "minimum": 1, "maximum": 6, "description": "Before changing the symbol: its impact radius instead, callers up to this many levels with each link's grade (compiler or resolved), the tests that reach it, the files and blocks affected, and memories anchored to them. 3 is a good start."}
                 },
                 "required": ["name"],
                 "additionalProperties": false
