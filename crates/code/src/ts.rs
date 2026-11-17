@@ -76,6 +76,7 @@ fn grammar(l: Lang) -> (Language, &'static str, &'static str) {
 const JS_IMPORTS: &str = "(import_statement) @imp";
 const RUST_PATH_CALLS: &str =
     "(call_expression function: (scoped_identifier name: (identifier) @name)) @reference.call";
+const RUST_FIELDS: &str = "(struct_item name: (type_identifier) @s body: (field_declaration_list (field_declaration name: (field_identifier) @f type: (_) @t)))";
 
 /// Folders that hold dependencies, builds or caches, never the project's own code.
 const SKIP: &[&str] = &[
@@ -108,6 +109,24 @@ struct Def {
     range: [i32; 4],
     span: [i32; 4],
     signature: String,
+    /// Rust: the type whose `impl` (or trait) holds this function, and its declared return type with `Self` spelled out.
+    owner: Option<String>,
+    ret: Option<String>,
+}
+
+/// What a Rust method call is called on, as steps the method tables can follow: `self.store.open()?` is the impl's type,
+/// then field `store`, then method `open`, then `?`.
+#[derive(Clone, Debug)]
+enum Base {
+    Type(String),
+    /// `Type::f()`: whatever `f` returns.
+    Static(String, String),
+}
+#[derive(Clone, Debug)]
+enum Step {
+    Field(String),
+    Call(String),
+    Try,
 }
 
 /// One call: the called name, its qualifier (`os` in `os.path.join`, `self`, or empty) and where it is.
@@ -116,6 +135,8 @@ struct Call {
     qualifier: String,
     /// Called on a value (`obj.f()`), not through a path (`a::f()`) or bare: only `self`/`this` or an imported module may resolve it.
     member: bool,
+    /// Rust member calls: the receiver, when it can be traced to a type.
+    recv: Option<(Base, Vec<Step>)>,
     file: usize,
     range: [i32; 4],
 }
@@ -127,6 +148,15 @@ fn range(n: &Node) -> [i32; 4] {
 
 /// Parse every supported file under `root` and resolve its calls. `project` names the project's own package in symbols.
 pub fn index(root: &Path, project: &str) -> anyhow::Result<(Vec<Document>, usize)> {
+    let (docs, resolved, rules) = parse(root, project)?;
+    // Measurement hook: FOOTNOTE_CODE_RULES=<file> writes every link with its rule (file, line, name, target file, rule).
+    if let Some(out) = std::env::var_os("FOOTNOTE_CODE_RULES") {
+        let _ = std::fs::write(out, rules.join("\n"));
+    }
+    Ok((docs, resolved))
+}
+
+fn parse(root: &Path, project: &str) -> anyhow::Result<(Vec<Document>, usize, Vec<String>)> {
     let mut files: Vec<(String, Lang, Vec<u8>)> = Vec::new();
     let all = candidates(root);
     // Rust workspace crates by the name code uses (`footnote_core`) -> their folder (`crates/core/`).
@@ -159,6 +189,9 @@ pub fn index(root: &Path, project: &str) -> anyhow::Result<(Vec<Document>, usize
     let mut calls: Vec<Call> = Vec::new();
     let mut imports: Vec<HashMap<String, String>> = vec![HashMap::new(); files.len()]; // file -> bound name -> module
     let mut compiled: HashMap<Lang, (Language, Query, Query)> = HashMap::new();
+    // Rust struct field types, (struct, field) -> types: one step of a receiver chain (`self.store.save()`).
+    let mut fields: HashMap<(String, String), Vec<(String, usize)>> = HashMap::new();
+    let rust_fields = Query::new(&tree_sitter_rust::LANGUAGE.into(), RUST_FIELDS).ok();
     let mut parser = Parser::new();
     for (i, (_, l, src)) in files.iter().enumerate() {
         if !compiled.contains_key(l) {
@@ -217,6 +250,20 @@ pub fn index(root: &Path, project: &str) -> anyhow::Result<(Vec<Document>, usize
                     .next()
                     .unwrap_or("")
                     .trim();
+                let (owner, ret) = if *l == Lang::Rust && kind == "function" {
+                    let owner = node
+                        .parent()
+                        .filter(|p| p.kind() == "declaration_list")
+                        .and_then(|p| p.parent())
+                        .and_then(|p| owner_name(&p, src));
+                    let ret = node
+                        .child_by_field_name("return_type")
+                        .and_then(|r| r.utf8_text(src).ok())
+                        .map(|r| owner.as_deref().map_or(r.to_string(), |o| swap_self(r, o)));
+                    (owner, ret)
+                } else {
+                    (None, None)
+                };
                 defs.push(Def {
                     name: text.into(),
                     kind,
@@ -224,17 +271,59 @@ pub fn index(root: &Path, project: &str) -> anyhow::Result<(Vec<Document>, usize
                     range: range(&n),
                     span: range(&node),
                     signature: signature.chars().take(200).collect(),
+                    owner,
+                    ret,
                 });
             } else if node.kind() != "macro_invocation" {
                 // A Rust macro (`env!`, `write!`) is not a call to a function of that name.
                 let (qualifier, member) = qualifier(&node, &n, src);
+                let recv = if *l == Lang::Rust && member {
+                    node.child_by_field_name("function")
+                        .and_then(|f| f.child_by_field_name("value"))
+                        .and_then(|v| receiver(v, src, 0))
+                        .and_then(|(b, s)| {
+                            // `Self` and `self` mean the impl the call sits in.
+                            let o = impl_owner(&node, src);
+                            let fix = |t: String| match &o {
+                                Some(o) => Some(swap_self(&t, o)),
+                                None => (!has_word(&t, "Self")).then_some(t),
+                            };
+                            Some((
+                                match b {
+                                    Base::Type(t) => Base::Type(fix(t)?),
+                                    Base::Static(t, f) => Base::Static(fix(t)?, f),
+                                },
+                                s,
+                            ))
+                        })
+                } else {
+                    None
+                };
                 calls.push(Call {
                     name: text.into(),
                     qualifier,
                     member,
+                    recv,
                     file: i,
                     range: range(&n),
                 });
+            }
+        }
+        if let (Lang::Rust, Some(q)) = (l, &rust_fields) {
+            let mut cur = QueryCursor::new();
+            let mut it = cur.matches(q, tree.root_node(), src.as_slice());
+            while let Some(m) = it.next() {
+                let t: Vec<&str> = m
+                    .captures()
+                    .iter()
+                    .map(|c| c.node.utf8_text(src).unwrap_or(""))
+                    .collect();
+                if let [s, f, ty] = t[..] {
+                    fields
+                        .entry((s.into(), f.into()))
+                        .or_default()
+                        .push((swap_self(ty, s), i));
+                }
             }
         }
         let mut cur = QueryCursor::new();
@@ -273,6 +362,68 @@ pub fn index(root: &Path, project: &str) -> anyhow::Result<(Vec<Document>, usize
                 m.entry(d.name.as_str()).or_default().push(i);
                 m
             });
+    // Method tables: (type, method) -> its definitions, from every `impl Type` and `trait Type` block.
+    let methods: HashMap<(&str, &str), Vec<usize>> =
+        defs.iter()
+            .enumerate()
+            .fold(HashMap::new(), |mut m, (i, d)| {
+                if let Some(o) = &d.owner {
+                    m.entry((o.as_str(), d.name.as_str())).or_default().push(i);
+                }
+                m
+            });
+    let owner = |ty: &str, file: usize| {
+        // Qualified types need module resolution; stripping their path could bind a dependency to our own type.
+        if ty.contains("::") {
+            return None;
+        }
+        let owner = head(ty);
+        if imports[file].contains_key(&owner) {
+            return None; // imported type identity is not established by this table
+        }
+        // Equal short names in different modules are distinct types. Never combine their method tables.
+        let types = by_name.get(owner.as_str())?;
+        if types.iter().filter(|&&d| defs[d].kind == "type").count() != 1 {
+            return None;
+        }
+        Some(owner)
+    };
+    let method = |ty: &str, name: &str, file: usize| {
+        let owner = owner(ty, file)?;
+        match methods.get(&(owner.as_str(), name)) {
+            Some(v) if v.len() == 1 => Some(v[0]),
+            _ => None,
+        }
+    };
+    // The type a receiver chain ends on; `None` as soon as one step is unknown (std, a dependency, a generic).
+    let type_of = |b: &Base, steps: &[Step], file: usize| -> Option<(String, usize)> {
+        let (mut t, mut context) = match b {
+            Base::Type(t) => (t.clone(), file),
+            Base::Static(ty, f) => {
+                let d = &defs[method(ty, f, file)?];
+                (d.ret.clone()?, d.file)
+            }
+        };
+        for s in steps {
+            t = match s {
+                Step::Try => unwrap_ty(&t)?,
+                Step::Call(m) if m == "unwrap" || m == "expect" => unwrap_ty(&t)?,
+                Step::Call(m) => {
+                    let d = &defs[method(&t, m, context)?];
+                    context = d.file;
+                    d.ret.clone()?
+                }
+                Step::Field(f) => match fields.get(&(owner(&t, context)?, f.clone()))?.as_slice() {
+                    [(one, file)] => {
+                        context = *file;
+                        one.clone()
+                    }
+                    _ => return None,
+                },
+            };
+        }
+        Some((t, context))
+    };
     let in_module = |cands: &[usize], module: &str| -> Vec<usize> {
         let last = module
             .trim_start_matches(['.', '/'])
@@ -370,7 +521,14 @@ pub fn index(root: &Path, project: &str) -> anyhow::Result<(Vec<Document>, usize
             }
         };
         // Each link names the rule that made it, so its precision can be measured per rule (FOOTNOTE_CODE_RULES below).
-        let target: Option<(usize, &str)> = if !same.is_empty()
+        let typed = c
+            .recv
+            .as_ref()
+            .and_then(|(b, s)| type_of(b, s, c.file))
+            .and_then(|(t, file)| method(&t, &c.name, file));
+        let target: Option<(usize, &str)> = if let Some(d) = typed {
+            Some((d, "receiver_type"))
+        } else if !same.is_empty()
             && (c.qualifier.is_empty() || ["self", "this", "Self"].contains(&c.qualifier.as_str()))
         {
             Some((same[0], "same_file"))
@@ -446,11 +604,7 @@ pub fn index(root: &Path, project: &str) -> anyhow::Result<(Vec<Document>, usize
             resolved += 1;
         }
     }
-    // Measurement hook: FOOTNOTE_CODE_RULES=<file> writes every link with its rule (file, line, name, target file, rule).
-    if let Some(out) = std::env::var_os("FOOTNOTE_CODE_RULES") {
-        let _ = std::fs::write(out, rules.join("\n"));
-    }
-    Ok((docs, resolved))
+    Ok((docs, resolved, rules))
 }
 
 /// Whether the innermost item around a call declares the called name before the call: `let f =`, `const f`, `var f`,
@@ -490,6 +644,214 @@ fn binds_locally(src: &[u8], defs: &[Def], c: &Call) -> bool {
     ]
     .iter()
     .any(|p| before.contains(p.as_str()))
+}
+
+/// The type an `impl` block is for (`impl<T> Trait for Store<T>` -> `Store`), or a trait's name.
+fn owner_name(item: &Node, src: &[u8]) -> Option<String> {
+    let field = match item.kind() {
+        "impl_item" => "type",
+        "trait_item" => "name",
+        _ => return None,
+    };
+    Some(head(item.child_by_field_name(field)?.utf8_text(src).ok()?))
+}
+
+fn impl_owner(n: &Node, src: &[u8]) -> Option<String> {
+    let mut p = n.parent();
+    while let Some(x) = p {
+        if let Some(o) = owner_name(&x, src) {
+            return Some(o);
+        }
+        p = x.parent();
+    }
+    None
+}
+
+fn is_ident(c: char) -> bool {
+    c.is_alphanumeric() || c == '_'
+}
+
+/// Byte offsets where `w` occurs as a whole word in `t`.
+fn word_at(t: &str, w: &str) -> Vec<usize> {
+    t.match_indices(w)
+        .filter(|(i, _)| {
+            !t[..*i].chars().next_back().is_some_and(is_ident)
+                && !t[i + w.len()..].chars().next().is_some_and(is_ident)
+        })
+        .map(|(i, _)| i)
+        .collect()
+}
+
+fn has_word(t: &str, w: &str) -> bool {
+    !word_at(t, w).is_empty()
+}
+
+fn swap_self(t: &str, owner: &str) -> String {
+    let mut out = t.to_string();
+    for i in word_at(t, "Self").into_iter().rev() {
+        out.replace_range(i..i + 4, owner);
+    }
+    out
+}
+
+/// The type's own name: `&'a mut crate::x::Store<T>` -> `Store`; `Box`, `Arc` and `Rc` are looked through.
+fn head(t: &str) -> String {
+    let mut t = t.trim();
+    loop {
+        let mut s = t.trim_start_matches('&').trim_start();
+        if s.starts_with('\'') {
+            s = s.split_once(' ').map_or("", |x| x.1);
+        }
+        for p in ["mut ", "dyn ", "impl "] {
+            s = s.trim_start_matches(p).trim_start();
+        }
+        let name = s
+            .split('<')
+            .next()
+            .unwrap_or("")
+            .rsplit("::")
+            .next()
+            .unwrap_or("")
+            .trim();
+        match (["Box", "Arc", "Rc"].contains(&name), generic_arg(s)) {
+            (true, Some(inner)) => t = inner,
+            _ => return name.to_string(),
+        }
+    }
+}
+
+/// The first type argument: `Result<Store, E>` -> `Store`.
+fn generic_arg(t: &str) -> Option<&str> {
+    let inner = &t[t.find('<')? + 1..t.rfind('>')?];
+    let mut depth = 0;
+    for (i, ch) in inner.char_indices() {
+        match ch {
+            '<' | '(' | '[' => depth += 1,
+            '>' | ')' | ']' => depth -= 1,
+            ',' if depth == 0 => return Some(inner[..i].trim()),
+            _ => {}
+        }
+    }
+    Some(inner.trim())
+}
+
+/// What `?`, `unwrap()` or `expect()` leaves of a `Result` or an `Option`.
+fn unwrap_ty(t: &str) -> Option<String> {
+    let s = t.trim().trim_start_matches('&').trim_start();
+    let name = s.split('<').next()?.rsplit("::").next()?.trim();
+    ["Result", "Option"]
+        .contains(&name)
+        .then(|| generic_arg(s).map(str::to_string))
+        .flatten()
+}
+
+/// Trace a Rust expression to where its type is written: `self`, a typed `let` or parameter, `Type { .. }`, `Type::f()`,
+/// followed by fields, method calls and `?`. Anything else (a closure argument, a pattern, a macro) gives up.
+fn receiver(e: Node, src: &[u8], depth: u8) -> Option<(Base, Vec<Step>)> {
+    if depth > 12 {
+        return None;
+    }
+    let text = |n: Node| n.utf8_text(src).ok().map(str::to_string);
+    let then = |inner: Node, step: Step| {
+        let (b, mut s) = receiver(inner, src, depth + 1)?;
+        s.push(step);
+        Some((b, s))
+    };
+    match e.kind() {
+        "self" => Some((Base::Type("Self".into()), vec![])),
+        "identifier" => declared(e, src, depth),
+        "field_expression" => then(
+            e.child_by_field_name("value")?,
+            Step::Field(text(e.child_by_field_name("field")?)?),
+        ),
+        "call_expression" => {
+            let f = e.child_by_field_name("function")?;
+            match f.kind() {
+                "field_expression" => then(
+                    f.child_by_field_name("value")?,
+                    Step::Call(text(f.child_by_field_name("field")?)?),
+                ),
+                "scoped_identifier" => Some((
+                    Base::Static(
+                        text(f.child_by_field_name("path")?)?,
+                        text(f.child_by_field_name("name")?)?,
+                    ),
+                    vec![],
+                )),
+                _ => None,
+            }
+        }
+        "try_expression" => then(e.named_child(0)?, Step::Try),
+        "reference_expression" => receiver(e.child_by_field_name("value")?, src, depth + 1),
+        "parenthesized_expression" | "await_expression" => {
+            receiver(e.named_child(0)?, src, depth + 1)
+        }
+        "struct_expression" => Some((Base::Type(text(e.child_by_field_name("name")?)?), vec![])),
+        _ => None,
+    }
+}
+
+/// Where a Rust variable is declared before `e`: the nearest `let` in an enclosing block (so shadowing holds) or a
+/// parameter of the enclosing function. A closure argument, a loop, `if let` or match pattern with that name gives up.
+fn declared(e: Node, src: &[u8], depth: u8) -> Option<(Base, Vec<Step>)> {
+    let name = e.utf8_text(src).ok()?;
+    let mut child = e;
+    while let Some(p) = child.parent() {
+        match p.kind() {
+            "block" => {
+                let mut c = p.walk();
+                let lets: Vec<Node> = p
+                    .named_children(&mut c)
+                    .take_while(|k| k.end_byte() <= child.start_byte())
+                    .filter(|k| k.kind() == "let_declaration")
+                    .collect();
+                for l in lets.iter().rev() {
+                    let pat = l.child_by_field_name("pattern")?.utf8_text(src).ok()?;
+                    if pat.trim_start_matches("mut ").trim() == name {
+                        if let Some(t) = l.child_by_field_name("type") {
+                            return Some((Base::Type(t.utf8_text(src).ok()?.into()), vec![]));
+                        }
+                        return receiver(l.child_by_field_name("value")?, src, depth + 1);
+                    }
+                    if has_word(pat, name) {
+                        return None; // bound inside a tuple or struct pattern
+                    }
+                }
+            }
+            "function_item" => {
+                let params = p.child_by_field_name("parameters")?;
+                let mut c = params.walk();
+                let found = params
+                    .named_children(&mut c)
+                    .filter(|k| k.kind() == "parameter")
+                    .find(|k| {
+                        k.child_by_field_name("pattern")
+                            .and_then(|x| x.utf8_text(src).ok())
+                            .is_some_and(|x| x.trim_start_matches("mut ").trim() == name)
+                    })?;
+                return Some((
+                    Base::Type(
+                        found
+                            .child_by_field_name("type")?
+                            .utf8_text(src)
+                            .ok()?
+                            .into(),
+                    ),
+                    vec![],
+                ));
+            }
+            "closure_expression" | "for_expression" | "if_expression" | "while_expression"
+            | "match_arm" => {
+                let head = String::from_utf8_lossy(&src[p.start_byte()..child.start_byte()]);
+                if has_word(&head, name) {
+                    return None;
+                }
+            }
+            _ => {}
+        }
+        child = p;
+    }
+    None
 }
 
 /// The project's files, relative with `/`: what git tracks or would track (so `.gitignore` is honoured), or, outside a git
@@ -789,5 +1151,83 @@ mod tests {
         ); // outside package
         assert!(!refs.iter().any(|s| s.contains("/load:"))); // two `load`, neither imported: no link
         assert_eq!(resolved, 2);
+    }
+
+    #[test]
+    fn rust_method_calls_link_through_the_receiver_type() {
+        let t = tempfile::tempdir().unwrap();
+        let w = |p: &str, s: &str| {
+            let f = t.path().join(p);
+            std::fs::create_dir_all(f.parent().unwrap()).unwrap();
+            std::fs::write(f, s).unwrap();
+        };
+        w(
+            "src/store.rs",
+            "pub struct Db;\nimpl Db {\n    pub fn run(&self) {}\n}\npub struct Store {\n    db: Db,\n}\nimpl Store {\n    pub fn open() -> anyhow::Result<Self> {\n        todo!()\n    }\n    pub fn save(&self) {\n        self.db.run();\n    }\n}\n",
+        );
+        w(
+            "src/other.rs",
+            "pub struct Other;\nimpl Other {\n    pub fn save(&self) {}\n    pub fn run(&self) {}\n}\n",
+        );
+        w(
+            "src/main.rs",
+            "fn main() {\n    let s = Store::open().unwrap();\n    s.save();\n    let s = Store::open()?;\n    s.db.run();\n    let f = |s: Other| s.save();\n    let v = Vec::new();\n    v.save();\n}\n\nfn with(o: &Other) {\n    o.run();\n}\n",
+        );
+        let (_, _, rules) = parse(t.path(), "demo").unwrap();
+        let mut got: Vec<&str> = rules
+            .iter()
+            .map(String::as_str)
+            .filter(|l| l.ends_with("receiver_type"))
+            .collect();
+        got.sort();
+        assert_eq!(
+            got,
+            [
+                "src/main.rs\t12\trun\tsrc/other.rs\treceiver_type", // parameter `o: &Other`
+                "src/main.rs\t3\tsave\tsrc/store.rs\treceiver_type", // `Store::open().unwrap()`
+                "src/main.rs\t5\trun\tsrc/store.rs\treceiver_type", // shadowed `s`, `?`, then field `db: Db`
+                "src/store.rs\t13\trun\tsrc/store.rs\treceiver_type", // `self.db`
+            ],
+            "{rules:?}"
+        );
+    }
+
+    #[test]
+    fn receiver_tables_abstain_on_ambiguous_and_external_types_and_follow_custom_returns() {
+        let t = tempfile::tempdir().unwrap();
+        let w = |p: &str, s: &str| std::fs::write(t.path().join(p), s).unwrap();
+        w("a.rs", "struct Same; impl Same { fn save(&self) {} }");
+        w("b.rs", "struct Same; impl Same { fn other(&self) {} }");
+        w(
+            "store.rs",
+            "struct Store; impl Store { fn save(&self) {} fn clone(&self) -> Other { todo!() } } struct Other; impl Other { fn save(&self) {} }",
+        );
+        w(
+            "caller.rs",
+            "use dependency::Store; fn f(s: &Store, x: &Same) { s.save(); x.save(); } fn g(s: &dependency::Other) { s.save(); }",
+        );
+        w("custom.rs", "fn f(s: &Store) { s.clone().save(); }");
+        w(
+            "unknown.rs",
+            "struct Unknown; impl Unknown { fn save(&self) {} } fn f(s: &Unknown) { s.borrow().save(); }",
+        );
+        let (_, _, rules) = parse(t.path(), "fixture").unwrap();
+        let typed: Vec<_> = rules
+            .iter()
+            .filter(|r| r.ends_with("receiver_type"))
+            .collect();
+        assert_eq!(typed.len(), 2, "{rules:?}");
+        assert!(
+            typed
+                .iter()
+                .any(|r| r.starts_with("custom.rs\t1\tsave\tstore.rs")),
+            "{rules:?}"
+        );
+        assert!(
+            typed
+                .iter()
+                .any(|r| r.starts_with("custom.rs\t1\tclone\tstore.rs")),
+            "{rules:?}"
+        );
     }
 }
