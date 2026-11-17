@@ -12,7 +12,7 @@ use crate::mcp::{Shared, session_loop};
 use anyhow::{Context, Result};
 use interprocess::local_socket::{GenericNamespaced, ListenerOptions, Stream, prelude::*};
 use std::{
-    io::{BufRead, BufReader, Write},
+    io::{BufRead, BufReader, Read, Write},
     path::Path,
     sync::{
         Arc,
@@ -174,7 +174,7 @@ pub fn call(db: &Path, tool: &str, arguments: &serde_json::Value) -> Result<serd
 /// token are invisible to it and to the user.
 pub fn proxy(shared: &Shared) -> Result<()> {
     match connect(&shared.db) {
-        Ok(stream) => proxy_over_stream(stream),
+        Ok(stream) => proxy_over_stream(stream, shared),
         Err(_) => {
             // No resident daemon: stay functional, just not shared.
             eprintln!(
@@ -190,7 +190,7 @@ pub fn proxy(shared: &Shared) -> Result<()> {
     }
 }
 
-fn proxy_over_stream(stream: Stream) -> Result<()> {
+fn proxy_over_stream(stream: Stream, shared: &Shared) -> Result<()> {
     let token = crate::state::load_or_create_token()?;
     {
         // Mutual challenge-response: the token is never sent, and nothing is
@@ -211,7 +211,7 @@ fn proxy_over_stream(stream: Stream) -> Result<()> {
     // Daemon -> agent.
     let reader_stream = Arc::clone(&stream);
     let sent_responses = Arc::clone(&responses);
-    let _pump_out = std::thread::spawn(move || -> Result<()> {
+    let pump_out = std::thread::spawn(move || -> Result<()> {
         let mut reader = BufReader::new(&*reader_stream);
         let stdout = std::io::stdout();
         let mut out = stdout.lock();
@@ -248,8 +248,22 @@ fn proxy_over_stream(stream: Stream) -> Result<()> {
         if String::from_utf8_lossy(&line).contains("\"id\"") {
             sent_requests.fetch_add(1, Ordering::Relaxed);
         }
-        writer.write_all(&line)?;
-        writer.flush()?;
+        if writer
+            .write_all(&line)
+            .and_then(|()| writer.flush())
+            .is_err()
+        {
+            // The daemon went away (stopped, crashed, or replaced by an install): keep this agent's tools working
+            // in-process instead of closing its MCP connection, starting with the request that just failed.
+            // shortcut: a request already forwarded when the daemon died gets no answer (the agent sees a timeout for
+            // that one call); replaying unanswered requests would need per-id tracking, worth it only if this shows up.
+            eprintln!(
+                "footnote: the shared daemon closed; serving in-process for the rest of this session"
+            );
+            let _ = pump_out.join(); // it ends on the closed socket and releases stdout
+            let mut rest = std::io::Cursor::new(std::mem::take(&mut line)).chain(reader);
+            return session_loop(&mut rest, &mut std::io::stdout().lock(), shared, false);
+        }
     }
 
     // Drain the last reply(s) so a closing agent does not lose its answer. The

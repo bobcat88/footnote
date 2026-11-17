@@ -222,3 +222,88 @@ fn the_hook_recalls_through_a_resident_daemon_that_leaves_when_idle() {
         panic!("daemon still running after its idle time");
     }
 }
+
+/// An agent's relay outlives its daemon: once the daemon stops (an install replacing the binary, a crash), the
+/// next call is answered in-process instead of the agent losing its memory tools until it reconnects.
+#[test]
+fn an_agent_keeps_its_tools_when_the_daemon_stops() {
+    use std::io::{BufRead, BufReader, Write};
+    use std::process::{Command as Std, Stdio};
+    let t = tmp();
+    let db = t.path().join("memory.db");
+    let state = t.path().join("state");
+    let memory = serde_json::json!([{"text": "The relay falls back in-process.", "kind": "fact",
+                                     "scope": "global", "observed_at": "2026-11-17"}]);
+    bin()
+        .arg("--db")
+        .arg(&db)
+        .arg("remember")
+        .write_stdin(memory.to_string())
+        .assert()
+        .success();
+    let footnote = || {
+        let mut c = Std::new(assert_cmd::cargo::cargo_bin!("footnote"));
+        c.env("FOOTNOTE_STATE_DIR", &state).arg("--db").arg(&db);
+        c
+    };
+    let mut daemon = footnote()
+        .args([
+            "serve",
+            "--mcp",
+            "--daemon",
+            "--no-audit",
+            "--idle-seconds",
+            "30",
+        ])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    // Wait until the daemon answers, so the relay below really connects to it.
+    let up = || {
+        let o = footnote()
+            .args(["memory-recall", "--resident", "--", "relay"])
+            .output()
+            .unwrap();
+        !String::from_utf8_lossy(&o.stdout).contains("\"error\"")
+    };
+    assert!((0..50).any(|_| up() || {
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        false
+    }));
+
+    let mut relay = footnote()
+        .arg("mcp")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut input = relay.stdin.take().unwrap();
+    let mut output = BufReader::new(relay.stdout.take().unwrap());
+    let mut call = |id: u64| {
+        let req = serde_json::json!({"jsonrpc":"2.0","id":id,"method":"tools/list"});
+        writeln!(input, "{req}").unwrap();
+        input.flush().unwrap();
+        let mut line = String::new();
+        output.read_line(&mut line).unwrap();
+        let v: Value =
+            serde_json::from_str(&line).unwrap_or_else(|_| panic!("reply {id}: {line:?}"));
+        assert_eq!(v["id"], id, "{v}");
+        assert!(v["result"]["tools"].is_array(), "{v}");
+    };
+    call(1);
+    daemon.kill().unwrap();
+    daemon.wait().unwrap();
+    call(2);
+    call(3);
+    drop(call);
+    drop(input);
+    let done = relay.wait_with_output().unwrap();
+    assert!(done.status.success(), "{done:?}");
+    assert!(
+        String::from_utf8_lossy(&done.stderr).contains("serving in-process"),
+        "{done:?}"
+    );
+}
