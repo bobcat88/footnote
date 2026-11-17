@@ -21,6 +21,11 @@ pub fn record_corpus(db: &Path) {
         return;
     };
     let db = std::path::absolute(db).unwrap_or_else(|_| db.to_path_buf());
+    // shortcut: corpora in the system temp folder are not recorded (test runs and scratch indexes vanish there, and the test
+    // suite would otherwise fill the user's list); someone who keeps a real corpus in %TEMP% would not see it in search.
+    if db.starts_with(std::env::temp_dir()) {
+        return;
+    }
     let mut list = corpora(&state);
     if list.contains(&db) {
         return;
@@ -126,17 +131,15 @@ fn library(state: &Path, query: &str, limit: usize) -> Value {
         return v;
     }
     answer("library", || {
-        let list = corpora(state);
+        // A corpus deleted since it was indexed is skipped and counted, not reported as an error.
+        let (list, missing): (Vec<PathBuf>, Vec<PathBuf>) =
+            corpora(state).into_iter().partition(|p| p.exists());
         if list.is_empty() {
-            return Ok(json!({"state": "empty", "results": []}));
+            return Ok(json!({"state": "empty", "results": [], "missing": missing.len()}));
         }
         let (mut results, mut problems) = (Vec::new(), Vec::new());
         for db in &list {
-            let found = if db.exists() {
-                search_db(db, query, limit)
-            } else {
-                Err(anyhow::anyhow!("missing"))
-            };
+            let found = search_db(db, query, limit);
             match found {
                 Ok(hits) => results.extend(hits.into_iter().map(|h| json!({
                     "id": h["id"], "title": text(if h["heading"].is_string() { &h["heading"] } else { &h["path"] }, 200),
@@ -154,7 +157,9 @@ fn library(state: &Path, query: &str, limit: usize) -> Value {
         } else {
             "nothing_found"
         };
-        Ok(json!({"state": state, "results": results, "corpora": list.len(), "problems": problems}))
+        Ok(
+            json!({"state": state, "results": results, "corpora": list.len(), "missing": missing.len(), "problems": problems}),
+        )
     })
 }
 

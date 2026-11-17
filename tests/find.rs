@@ -5,7 +5,8 @@ use std::fs;
 
 #[test]
 fn find_searches_each_switched_on_product_and_says_why_one_has_nothing() {
-    let t = tempfile::tempdir().unwrap();
+    // Outside the system temp folder: corpora there are deliberately not recorded.
+    let t = tempfile::tempdir_in(env!("CARGO_TARGET_TMPDIR")).unwrap();
     let state = t.path().join("state");
     let footnote = || {
         let mut c = Command::new(assert_cmd::cargo::cargo_bin!("footnote"));
@@ -70,6 +71,30 @@ fn find_searches_each_switched_on_product_and_says_why_one_has_nothing() {
     assert_eq!(
         product(&run(&["find", "zebra"]), "library")["state"],
         "nothing_found"
+    );
+
+    // A corpus in the system temp folder (test runs, scratch indexes) is not recorded.
+    let scratch = tempfile::tempdir().unwrap();
+    let sdb = scratch.path().join("scratch.db");
+    footnote()
+        .arg("--db")
+        .arg(&sdb)
+        .args(["index", "--root", r, "--allow", r])
+        .assert()
+        .success();
+    assert!(
+        !run(&["status"])["products"]["library"]["corpora"]
+            .to_string()
+            .contains("scratch.db")
+    );
+
+    // A corpus deleted since it was indexed is skipped and counted, not an error.
+    fs::remove_file(&db).unwrap();
+    let lib = product(&run(&["find", "checkpoint"]), "library");
+    assert_eq!(
+        (lib["state"].as_str(), lib["missing"].as_u64()),
+        (Some("empty"), Some(1)),
+        "{lib}"
     );
 
     // A switched-off product is not searched.
