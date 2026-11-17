@@ -214,6 +214,27 @@ export function Activity() {
           </aside>
         </div>
       )}
+      {data?.recent?.length > 0 && (
+        <>
+          <h2 className="section">Recent recalls</h2>
+          <ul className="hits" aria-label="Recent recalls, newest first">
+            {data.recent.map((r) => (
+              <li key={`${r.t}-${r.event}`}>
+                <span className="dimmed small">
+                  {new Date(r.t).toLocaleString(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+                  {" · "}{r.event === "pack" ? "session start" : "prompt"}{r.project ? ` · ${r.project}` : ""}
+                </span>
+                {r.memories.map((m) => (
+                  <span key={m.id} className="t">
+                    <span className="mono id">#{m.id}</span>{" "}
+                    {m.gone ? <span className="dimmed">no longer in memory</span> : <>{m.text} <span className="dimmed small">{m.kind} · {m.scope} · {m.observed_at}</span></>}
+                  </span>
+                ))}
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
     </div>
   );
 }

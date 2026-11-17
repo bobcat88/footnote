@@ -88,6 +88,20 @@ fn browse_activity_and_jobs_show_what_memory_did_without_prompts() {
     assert_eq!(day["saved"], 3, "{act}"); // four saved, one forgotten
     assert_eq!(day["prompts_given_memories"], 1, "{act}");
     assert!(act["most_used"][0]["memory"]["text"].is_string(), "{act}");
+    // Recent recalls, newest first, name the memories that reached the agent (never the prompt).
+    let recent = act["recent"].as_array().unwrap();
+    assert!(
+        !recent.is_empty() && recent[0]["memories"][0]["id"].is_i64(),
+        "{act}"
+    );
+    assert!(
+        recent[0]["memories"][0]["scope"].is_string() || recent[0]["memories"][0]["gone"] == true,
+        "{act}"
+    );
+    assert!(
+        !act["recent"].to_string().contains("prompt\":"),
+        "no prompt text: {act}"
+    );
 
     // Switched off: nothing more is logged.
     footnote(state, &["config", "set", "memory.activity", "false"], None);

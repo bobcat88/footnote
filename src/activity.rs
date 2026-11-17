@@ -5,6 +5,9 @@ use anyhow::Result;
 use serde_json::{Value, json};
 use std::collections::{BTreeMap, HashMap};
 
+/// Recalls listed in `recent`, newest first.
+const RECENT: usize = 20;
+
 pub fn activity(days: u16) -> Result<Value> {
     let state = crate::state::state_dir()?;
     let settings = footnote_core::config::product_settings(&state, "memory")?;
@@ -44,6 +47,7 @@ pub fn activity(days: u16) -> Result<Value> {
 
     let since_ms = (first.midnight().assume_utc().unix_timestamp() * 1000).max(0) as u64;
     let mut used: HashMap<i64, u64> = HashMap::new();
+    let mut recent: Vec<Value> = Vec::new();
     let log = std::fs::read_to_string(state.join("memory-hook/activity.jsonl")).unwrap_or_default();
     for v in log
         .lines()
@@ -58,6 +62,7 @@ pub fn activity(days: u16) -> Result<Value> {
         let Some(day) = by_day.get_mut(&date) else {
             continue;
         };
+        recent.push(json!({"t": t, "event": v["event"], "project": v["project"], "ids": v["ids"]}));
         let field = if v["event"] == "pack" {
             "sessions"
         } else {
@@ -74,6 +79,30 @@ pub fn activity(days: u16) -> Result<Value> {
         }
     }
 
+    // The newest recalls first, each with what reached the agent (never the prompt, which is not recorded).
+    recent.reverse();
+    recent.truncate(RECENT);
+    let about = |id: i64| {
+        conn.as_ref().and_then(|c| {
+            c.query_row(
+                "SELECT m.kind, m.scope, m.observed_at, c.text FROM chunks c JOIN sources s ON s.id=c.source_id JOIN memories m ON m.source_id=s.id WHERE c.id=?1",
+                [id],
+                |r| Ok(json!({"id": id, "kind": r.get::<_, String>(0)?, "scope": r.get::<_, String>(1)?, "observed_at": r.get::<_, String>(2)?,
+                    "text": r.get::<_, String>(3)?.chars().take(120).collect::<String>()})),
+            )
+            .ok()
+        })
+        .unwrap_or_else(|| json!({"id": id, "gone": true}))
+    };
+    for r in &mut recent {
+        let ids: Vec<i64> = r["ids"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_i64)
+            .collect();
+        r["memories"] = json!(ids.into_iter().map(about).collect::<Vec<_>>());
+    }
     let mut top: Vec<(i64, u64)> = used.into_iter().collect();
     top.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
     top.truncate(10);
@@ -92,6 +121,7 @@ pub fn activity(days: u16) -> Result<Value> {
     Ok(json!({
         "days": by_day.into_values().collect::<Vec<_>>(),
         "most_used": most_used,
+        "recent": recent,
         "activity_log": settings["activity"].as_bool().unwrap_or(true),
         "note": "dates in UTC; saves by the date the agent observed; prompt text is never recorded",
     }))

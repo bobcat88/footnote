@@ -52,6 +52,14 @@ const activity = {
     prompts_given_memories: [0, 22, 41, 0, 63, 70, 80][i],
     sessions: [0, 2, 4, 0, 6, 5, 7][i],
   })),
+  recent: [
+    { t: Date.UTC(2026, 10, 17, 9, 12), event: "recall", project: "atlas-api", memories: [
+      { id: 17, kind: "fact", scope: "atlas-api", observed_at: "2026-11-12", text: "The API keeps cursor pagination; offset pagination was dropped after the slow-count incident." },
+      { id: 42, kind: "preference", scope: "global", observed_at: "2026-11-10", text: "Prefers small pull requests, one per piece of work, with tests run locally before review." }] },
+    { t: Date.UTC(2026, 10, 17, 8, 40), event: "pack", project: "harbor-web", memories: [
+      { id: 88, kind: "fact", scope: "harbor-web", observed_at: "2026-11-09", text: "harbor-web deploys from the release branch only; main is for review builds." },
+      { id: 9, gone: true }] },
+  ],
   most_used: [
     { id: 42, times: 31, memory: { kind: "preference", scope: "global", text: "Prefers small pull requests, one per piece of work, with tests run locally before merging." } },
     { id: 17, times: 24, memory: { kind: "decision", scope: "atlas-api", text: "The API keeps cursor pagination; offset pagination was dropped after the slow-page incident in October." } },
