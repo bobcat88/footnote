@@ -145,3 +145,24 @@ implementation against the threat model; a benchmark or this document alone is n
 Before coding, choose the exact versioned recovery payload and checksum, database identity and key-store naming, locked-store
 UX, supported platform rollout, key rotation and backup interoperability. Bind those decisions to actual tests. No production
 data migration or deletion is included in this design step.
+
+## Derived-data audit (17 November 2026, story #132)
+
+Every place personal-memory content or something derived from it can land, checked against the protection boundary above. "Text"
+means memory text or prompt text; hashes, ids, sizes and timings are metadata.
+
+| Artifact | Holds | Status with an encrypted store |
+|---|---|---|
+| Memory database (rows, vectors) | Text, vectors | **Protected**: SQLCipher pages (#65) |
+| Keyword index (Tantivy) | Text terms | **Protected**: built in RAM for keyed connections, never on disk (#65). An older plaintext `memory.db.tantivy` stays until the migration decides its cleanup (#129) |
+| SQLite temporary tables | Text | **Protected**: `temp_store=MEMORY` forced on keyed connections (#65) |
+| Encrypted backup | Text | **Protected**: same key (#65) |
+| `audit.jsonl` | Tool name, args and result **hashes**, timings, session id | Metadata only. A hash of a short query could be guessed by trying candidates; acceptable, recorded |
+| `memory-hook/activity.jsonl` | Memory ids, project names, times | Metadata only; never prompt text |
+| `metrics.jsonl`, `usage/lean.jsonl`, `jobs/` | Step names, timings, sizes | Metadata only |
+| `memory-hook/hook.log` | Error messages | **Gap**: an error can quote its input; the old Python hook wrote a prompt fragment there on 14 Nov, and some SQLite FTS5 errors quote search terms. Story #172 |
+| Process memory (daemon, MCP server, launcher) | Decrypted text, vectors, index | Outside the boundary (malicious code as the user is excluded); lives until the process exits |
+| Swap, hibernation file | Pages of process memory | Outside the boundary; BitLocker on the system disk covers them |
+| Windows crash dumps | Process memory | No local dumps configured on Johan's machine (`LocalDumps` absent); a dump would hold decrypted pages. Story #173 |
+| Agent transcripts (`~/.claude`, `~/.codex`, `~/.dsh`) | Memories injected into prompts, in plain text | **By design outside Footnote's reach**: the agent receives the text and its vendor stores it. The encrypted store protects the store, not what agents keep; the README must say so |
+| `corpora.json`, `projects/` | Paths and project names | Metadata; not memory content |
