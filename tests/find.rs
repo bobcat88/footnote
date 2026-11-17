@@ -121,3 +121,89 @@ fn find_searches_each_switched_on_product_and_says_why_one_has_nothing() {
             .success()
     );
 }
+
+/// `footnote corpora`: an existing corpus joins Search without re-indexing (even from a temp folder, since the user asked),
+/// the memory database and missing files are refused, and removing keeps the database.
+#[test]
+fn corpora_are_added_and_removed_by_hand() {
+    let t = tempfile::tempdir().unwrap();
+    let state = t.path().join("state");
+    let footnote = || {
+        let mut c = Command::new(assert_cmd::cargo::cargo_bin!("footnote"));
+        c.env("FOOTNOTE_STATE_DIR", &state);
+        c
+    };
+    let root = t.path().join("notes");
+    fs::create_dir(&root).unwrap();
+    fs::write(
+        root.join("wal.md"),
+        "# WAL\nCheckpoint latency is amortized by batching writes.\n",
+    )
+    .unwrap();
+    let db = t.path().join("k.db");
+    let r = root.to_str().unwrap();
+    footnote()
+        .arg("--db")
+        .arg(&db)
+        .args(["index", "--root", r, "--allow", r])
+        .assert()
+        .success();
+    let listed = |v: &[u8]| String::from_utf8_lossy(v).contains("k.db");
+    assert!(
+        !listed(&footnote().arg("corpora").output().unwrap().stdout),
+        "temp corpora are not recorded on index"
+    );
+
+    footnote()
+        .args(["corpora", "add"])
+        .arg(&db)
+        .assert()
+        .success();
+    assert!(listed(&footnote().arg("corpora").output().unwrap().stdout));
+    let found: Value = serde_json::from_slice(
+        &footnote()
+            .args(["find", "checkpoint latency"])
+            .output()
+            .unwrap()
+            .stdout,
+    )
+    .unwrap();
+    assert!(found.to_string().contains("wal.md"), "{found}");
+
+    let memory = state.join("memory.db");
+    let note = serde_json::json!([{"text": "x memory", "kind": "fact", "scope": "global", "observed_at": "2026-11-17"}]);
+    footnote()
+        .arg("--db")
+        .arg(&memory)
+        .arg("remember")
+        .write_stdin(note.to_string())
+        .assert()
+        .success();
+    assert!(
+        !footnote()
+            .args(["corpora", "add"])
+            .arg(&memory)
+            .output()
+            .unwrap()
+            .status
+            .success(),
+        "memory db refused"
+    );
+    assert!(
+        !footnote()
+            .args(["corpora", "add"])
+            .arg(t.path().join("none.db"))
+            .output()
+            .unwrap()
+            .status
+            .success()
+    );
+
+    footnote()
+        .args(["corpora", "remove"])
+        .arg(&db)
+        .assert()
+        .success();
+    assert!(!listed(&footnote().arg("corpora").output().unwrap().stdout));
+    assert!(db.exists(), "removing keeps the database");
+}

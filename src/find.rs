@@ -27,14 +27,56 @@ pub fn record_corpus(db: &Path) {
         return;
     }
     let mut list = corpora(&state);
-    if list.contains(&db) {
-        return;
+    if !list.contains(&db) {
+        list.push(db);
+        let _ = write(&state, &list);
     }
-    list.push(db);
+}
+
+fn write(state: &Path, list: &[PathBuf]) -> Result<()> {
     let tmp = state.join(format!(".{LIST}.{}.tmp", std::process::id()));
-    let _ = crate::state::ensure_private_dir(&state)
-        .and_then(|()| Ok(std::fs::write(&tmp, serde_json::to_vec_pretty(&list)?)?))
-        .and_then(|()| Ok(std::fs::rename(&tmp, state.join(LIST))?));
+    crate::state::ensure_private_dir(state)?;
+    std::fs::write(&tmp, serde_json::to_vec_pretty(list)?)?;
+    std::fs::rename(&tmp, state.join(LIST))?;
+    Ok(())
+}
+
+/// `footnote corpora [add|remove <db>]`: the corpus list Search uses. Adding checks the file is a Footnote corpus (not the
+/// memory database); removing only drops it from the list, the database stays. An explicit add is kept even in a temp folder.
+pub fn corpora_command(action: Option<(&str, &Path)>) -> Result<Value> {
+    let state = crate::state::state_dir()?;
+    let mut list = corpora(&state);
+    if let Some((verb, db)) = action {
+        let db = std::path::absolute(db).unwrap_or_else(|_| db.to_path_buf());
+        if verb == "add" {
+            ensure!(db.is_file(), "{} does not exist", db.display());
+            #[cfg(feature = "memory")]
+            ensure!(
+                db != std::path::absolute(crate::status::memory_db(&state)?)?,
+                "that is the agent memory database, not a corpus"
+            );
+            let c = crate::app::open(&db, false)?;
+            let files: i64 = c.query_row(
+                "SELECT count(*) FROM sources WHERE path NOT LIKE 'memory:%'",
+                [],
+                |r| r.get(0),
+            )?;
+            ensure!(
+                files > 0,
+                "{} holds no indexed files; index a folder into it first",
+                db.display()
+            );
+            if !list.contains(&db) {
+                list.push(db);
+            }
+        } else {
+            list.retain(|p| p != &db);
+        }
+        write(&state, &list)?;
+    }
+    Ok(
+        json!({"corpora": list.iter().map(|p| json!({"path": p, "exists": p.exists()})).collect::<Vec<_>>()}),
+    )
 }
 
 fn on(state: &Path, product: &str) -> bool {

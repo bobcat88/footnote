@@ -263,6 +263,12 @@ enum Action {
         #[arg(long, default_value_t = 7, value_parser = clap::value_parser!(u16).range(1..=90))]
         days: u16,
     },
+    /// The Library corpora Search uses: list them, or add or remove one by its database path (`index` and `install` add
+    /// theirs automatically; removing never deletes the database).
+    Corpora {
+        #[command(subcommand)]
+        action: Option<CorporaAction>,
+    },
     /// Search every product that is in this build and switched on (Memory, each Library corpus, every code graph); each
     /// product answers on its own, with its results or why it has none.
     Find {
@@ -363,6 +369,14 @@ enum ModelsAction {
     /// Recommend models from this machine (CPU, RAM, GPU) and, with --db, the corpus language.
     Recommend,
 }
+#[derive(Subcommand)]
+enum CorporaAction {
+    /// Add a corpus database to the list.
+    Add { db: PathBuf },
+    /// Drop a corpus database from the list (the database itself stays).
+    Remove { db: PathBuf },
+}
+
 #[derive(Subcommand)]
 enum ConfigAction {
     /// One option's value, or every option without a key.
@@ -600,6 +614,13 @@ fn execute(cli: Cli) -> Result<Value> {
         Action::MemoryReview { limit } => return crate::review::review(usize::from(*limit)),
         Action::Usage { days } => return crate::usage::usage(*days),
         Action::Find { query, limit } => return crate::find::find(query, usize::from(*limit)),
+        Action::Corpora { action } => {
+            return crate::find::corpora_command(match action {
+                None => None,
+                Some(CorporaAction::Add { db }) => Some(("add", db.as_path())),
+                Some(CorporaAction::Remove { db }) => Some(("remove", db.as_path())),
+            });
+        }
         Action::Options => return footnote_core::config::options(&crate::state::state_dir()?),
         Action::Models { action } => {
             let state = crate::state::state_dir()?;
@@ -774,7 +795,7 @@ fn execute(cli: Cli) -> Result<Value> {
         Action::Uninstall { .. } | Action::Activity { .. } | Action::MemoryReview { .. } => {
             unreachable!("dispatched before the database is opened")
         }
-        Action::Usage { .. } | Action::Find { .. } => {
+        Action::Usage { .. } | Action::Find { .. } | Action::Corpora { .. } => {
             unreachable!("dispatched before the database is opened")
         }
         #[cfg(feature = "library")]
@@ -896,6 +917,7 @@ fn action_name(a: &Action) -> &'static str {
         Action::Activity { .. } => "activity",
         Action::Usage { .. } => "usage",
         Action::Find { .. } => "find",
+        Action::Corpora { .. } => "corpora",
         #[cfg(feature = "memory")]
         Action::MemoryList { .. } => "memory-list",
         Action::Models { .. } => "models",
