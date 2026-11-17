@@ -5,10 +5,14 @@ python -I score_cbm.py <compiler.db> <cbm_calls.json>
 import json
 import sqlite3
 import sys
+
+# Optional last argument: a path prefix to leave out (e.g. tests/, where the compiler graph misses calls to test helpers).
+SKIP = sys.argv[3] if len(sys.argv) > 3 else None
 from collections import Counter
 
 c = sqlite3.connect(f"file:{sys.argv[1]}?mode=ro", uri=True)
 comp_files = {p.replace("\\", "/") for (p,) in c.execute("SELECT path FROM files")}
+comp_files = {f for f in comp_files if not (SKIP and f.startswith(SKIP))}
 comp = {
     (a.replace("\\", "/"), l, n, b.replace("\\", "/"))
     for a, l, n, b in c.execute(

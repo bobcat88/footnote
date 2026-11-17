@@ -8,6 +8,9 @@ references to items the compiler graph also defines (both sides limited to funct
 import sqlite3
 import sys
 
+# Optional last argument: a path prefix to leave out (e.g. tests/, where the compiler graph misses calls to test helpers).
+SKIP = sys.argv[3] if len(sys.argv) > 3 else None
+
 
 def edges(db, files=None):
     c = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
@@ -22,7 +25,7 @@ def edges(db, files=None):
 
 comp, comp_files = edges(sys.argv[1])
 ts, ts_files = edges(sys.argv[2])
-both = comp_files & ts_files
+both = {f for f in comp_files & ts_files if not (SKIP and f.startswith(SKIP))}
 comp = {e for e in comp if e[0] in both and e[3] in both}
 ts = {e for e in ts if e[0] in both and e[3] in both}
 hit = comp & ts

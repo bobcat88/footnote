@@ -35,10 +35,28 @@ fn callers_and_callees_come_from_the_compiler_index() {
     .unwrap();
     let lib = "pub fn run() -> u32 {\n    helper() + 1\n}\n\nfn helper() -> u32 {\n    41\n}\n";
     fs::write(project.join("src/lib.rs"), lib).unwrap();
+    // A script in another language: the parser adds it beside the compiler's Rust, graded esolved.
+    fs::write(
+        project.join("tool.py"),
+        "def main():
+    step()
+
+def step():
+    pass
+",
+    )
+    .unwrap();
     let root = project.to_str().unwrap();
 
     let built = footnote(&state, &["code-index", root]);
     assert!(built["symbols"].as_u64().unwrap() >= 2, "{built}");
+    assert_eq!(
+        (built["origin"].as_str(), built["also_parsed"].as_u64()),
+        (Some("compiler"), Some(1)),
+        "{built}"
+    );
+    let step = footnote(&state, &["code", "step", "--root", root]);
+    assert_eq!(step["symbols"][0]["callers"][0]["name"], "main", "{step}");
 
     let found = footnote(&state, &["code", "helper", "--root", root]);
     let helper = &found["symbols"][0];

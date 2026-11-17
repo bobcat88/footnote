@@ -282,6 +282,26 @@ errors are the ones the base layer was fixed for: `x.map()` or `x.contains()` li
 its `suffix_match` and `unique_name` strategies. Scripts: `bench/experiments/code-graph/` (`compare_graphs.py` for two
 Footnote graphs, `score_cbm.py` for a codebase-memory export); both keep only files in the compiler graph.
 
+**Second round, rule by rule (17 November 2026).** Each link now names its rule (`FOOTNOTE_CODE_RULES=<file>` writes them;
+`score_rules.py` scores them). On the first round, "a name defined once in the project or folder" was right 0 times in 12:
+dropped. Same-file links scored 0.80 overall but 0.98 outside `tests/`. The gap is on the compiler side: our rust-analyzer graph
+has no calls to helper functions inside integration tests (`fn run`, `fn tmp`), so scores leave `tests/` out until that is fixed.
+The Rust tags query has no pattern for path calls (`footnote_core::hash()`), so the parser now adds one and resolves the
+qualifier to a workspace crate (its `Cargo.toml` name) or a module file. `mod x;` is now a module, not a type, so it no longer
+owns `Type::f()`. Tried and dropped: light type tracking (`let x = Store::open()` then `x.f()`), only 8 links at 0.50. Also added:
+in a mixed repository the compiler graph is completed by the parser for every other file (here 317 Python, JavaScript and
+script files beside the Rust), each link keeping its own grade.
+
+| without `tests/` (37 Rust files) | precision | recall |
+|---|---|---|
+| Footnote base layer, round 1 | 0.79* | 0.38* |
+| Footnote base layer, round 2 | **0.95** | **0.49** |
+| codebase-memory-mcp 0.12.1 (fast and full give the same calls) | 0.58 | 0.39 |
+
+\* round 1 was scored on all 66 files. On all 66 files, round 2 scores 0.82 and 0.50, and codebase-memory 0.50 and 0.37.
+By rule, without `tests/`: module path 218 links at 0.99, same file 553 at 0.95, import 6 at 1.00, `Type::f()` 16 at 0.63
+(most misses are feature- or Windows-gated code the compiler did not index).
+
 **What makes it more than the competition (Johan, 17 November 2026).**
 - **The base layer resolves names through scopes and imports, not by bare name.** `save` in a file that imports it from
   `./store` links to `store.save`, not to every function called `save`. This is the stack-graphs idea. CodeGraph and

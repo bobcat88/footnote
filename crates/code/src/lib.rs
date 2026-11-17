@@ -183,23 +183,33 @@ pub fn index(root: &Path, db: &Path) -> Result<Value> {
     let parent = db.parent().context("database path")?;
     std::fs::create_dir_all(parent)?;
     let scip_file = std::path::absolute(db.with_extension("scip"))?;
-    let (name, docs, origin, upgrade) = match precise(root, &scip_file) {
+    let project = root.file_name().map_or_else(
+        || "project".into(),
+        |n| n.to_string_lossy().replace(' ', "_"),
+    );
+    let (name, mut docs, origin, upgrade) = match precise(root, &scip_file) {
         Ok((name, docs)) => (name, docs, "compiler", None),
         Err(e) => {
-            let project = root.file_name().map_or_else(
-                || "project".into(),
-                |n| n.to_string_lossy().replace(' ', "_"),
-            );
             let (docs, _) = ts::index(root, &project)?;
             ("tree-sitter", docs, "resolved", Some(format!("{e:#}")))
         }
     };
+    // A mixed project: the precise indexer reads one language; the parser adds every other file, its links graded `resolved`.
+    let split = docs.len();
+    if origin == "compiler" {
+        let covered: std::collections::HashSet<String> =
+            docs.iter().map(|d| d.path.replace('\\', "/")).collect();
+        if let Ok((extra, _)) = ts::index(root, &project) {
+            docs.extend(extra.into_iter().filter(|d| !covered.contains(&d.path)));
+        }
+    }
+    let also_parsed = docs.len() - split;
     let indexer_ms = started.elapsed().as_millis();
     let building = db.with_extension("building");
     let _ = std::fs::remove_file(&building);
-    let counts = write(&building, root, &docs, origin)?;
+    let counts = write(&building, root, &docs, origin, split)?;
     std::fs::rename(&building, db)?;
-    let mut out = json!({"root": root, "db": db, "indexer": name, "origin": origin, "files": counts.0, "symbols": counts.1,
+    let mut out = json!({"root": root, "db": db, "indexer": name, "origin": origin, "also_parsed": also_parsed, "files": counts.0, "symbols": counts.1,
         "references": counts.2, "indexer_ms": indexer_ms, "total_ms": started.elapsed().as_millis()});
     if let Some(u) = upgrade {
         out["upgrade"] = json!(u);
@@ -240,6 +250,7 @@ fn write(
     root: &Path,
     docs: &[scip::Document],
     origin: &str,
+    split: usize, // documents from here on come from the parser: their links are esolved`r
 ) -> Result<(usize, usize, usize)> {
     let mut c = Connection::open(db)?;
     c.execute_batch(SCHEMA)?;
@@ -294,7 +305,8 @@ fn write(
     let mut outside: HashMap<(i64, &str, &str), i64> = HashMap::new();
     {
         let mut add = tx.prepare("INSERT INTO refs VALUES(?1, ?2, ?3, ?4, ?5)")?;
-        for (d, &file) in docs.iter().zip(&file_ids) {
+        for (i, (d, &file)) in docs.iter().zip(&file_ids).enumerate() {
+            let origin = if i < split { origin } else { "resolved" };
             // Items of this file that can hold a reference (not the module itself), innermost found by the smallest span.
             let items: Vec<(&str, [i32; 4])> = d
                 .occurrences

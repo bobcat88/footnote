@@ -74,6 +74,8 @@ fn grammar(l: Lang) -> (Language, &'static str, &'static str) {
 }
 
 const JS_IMPORTS: &str = "(import_statement) @imp";
+const RUST_PATH_CALLS: &str =
+    "(call_expression function: (scoped_identifier name: (identifier) @name)) @reference.call";
 
 /// Folders that hold dependencies, builds or caches, never the project's own code.
 const SKIP: &[&str] = &[
@@ -126,7 +128,21 @@ fn range(n: &Node) -> [i32; 4] {
 /// Parse every supported file under `root` and resolve its calls. `project` names the project's own package in symbols.
 pub fn index(root: &Path, project: &str) -> anyhow::Result<(Vec<Document>, usize)> {
     let mut files: Vec<(String, Lang, Vec<u8>)> = Vec::new();
-    for rel in candidates(root) {
+    let all = candidates(root);
+    // Rust workspace crates by the name code uses (`footnote_core`) -> their folder (`crates/core/`).
+    let crates: HashMap<String, String> = all
+        .iter()
+        .filter(|p| p.ends_with("Cargo.toml"))
+        .filter_map(|p| {
+            let text = std::fs::read_to_string(root.join(p)).ok()?;
+            let name = text.split("[package]").nth(1)?.lines().find_map(|l| {
+                let (k, v) = l.split_once('=')?;
+                (k.trim() == "name").then(|| v.trim().trim_matches('"').replace('-', "_"))
+            })?;
+            Some((name, p.trim_end_matches("Cargo.toml").to_string()))
+        })
+        .collect();
+    for rel in all {
         if files.len() >= MAX_FILES {
             break;
         }
@@ -147,7 +163,13 @@ pub fn index(root: &Path, project: &str) -> anyhow::Result<(Vec<Document>, usize
     for (i, (_, l, src)) in files.iter().enumerate() {
         if !compiled.contains_key(l) {
             let (lang, tags, imp) = grammar(*l);
-            let (Ok(t), Ok(q)) = (Query::new(&lang, tags), Query::new(&lang, imp)) else {
+            // The grammar's tags query plus calls it leaves out: Rust path calls (`a::f()`), measured as the biggest gap.
+            let tags = if *l == Lang::Rust {
+                format!("{tags}\n{RUST_PATH_CALLS}")
+            } else {
+                tags.to_string()
+            };
+            let (Ok(t), Ok(q)) = (Query::new(&lang, &tags), Query::new(&lang, imp)) else {
                 continue;
             };
             compiled.insert(*l, (lang, t, q));
@@ -182,10 +204,11 @@ pub fn index(root: &Path, project: &str) -> anyhow::Result<(Vec<Document>, usize
                 if !seen.insert(node.id()) {
                     continue; // Rust methods match both `definition.method` and `definition.function`
                 }
-                let kind = if matches!(cap, "definition.function" | "definition.method") {
-                    "function"
-                } else {
-                    "type"
+                let kind = match cap {
+                    "definition.function" | "definition.method" => "function",
+                    // `mod store;`: a module is a path step, never the owner of `Type::f()`.
+                    "definition.module" => "module",
+                    _ => "type",
                 };
                 let signature = node
                     .utf8_text(src)
@@ -249,7 +272,6 @@ pub fn index(root: &Path, project: &str) -> anyhow::Result<(Vec<Document>, usize
                 m.entry(d.name.as_str()).or_default().push(i);
                 m
             });
-    let dir = |f: usize| files[f].0.rsplit_once('/').map_or("", |x| x.0);
     let in_module = |cands: &[usize], module: &str| -> Vec<usize> {
         let last = module
             .trim_start_matches(['.', '/'])
@@ -274,7 +296,11 @@ pub fn index(root: &Path, project: &str) -> anyhow::Result<(Vec<Document>, usize
             files[d.file].0,
             d.name,
             d.range[0],
-            if d.kind == "function" { "()." } else { "#" }
+            match d.kind {
+                "function" => "().",
+                "module" => "/",
+                _ => "#",
+            }
         )
     };
     let mut docs: Vec<Document> = files
@@ -300,6 +326,7 @@ pub fn index(root: &Path, project: &str) -> anyhow::Result<(Vec<Document>, usize
         });
     }
     let mut resolved = 0;
+    let mut rules: Vec<String> = Vec::new();
     for c in &calls {
         let cands = by_name
             .get(c.name.as_str())
@@ -341,10 +368,11 @@ pub fn index(root: &Path, project: &str) -> anyhow::Result<(Vec<Document>, usize
                 _ => None,
             }
         };
-        let target: Option<usize> = if !same.is_empty()
+        // Each link names the rule that made it, so its precision can be measured per rule (FOOTNOTE_CODE_RULES below).
+        let target: Option<(usize, &str)> = if !same.is_empty()
             && (c.qualifier.is_empty() || ["self", "this", "Self"].contains(&c.qualifier.as_str()))
         {
-            Some(same[0])
+            Some((same[0], "same_file"))
         } else if let Some(module) = via {
             if !local(module) {
                 // A call into an outside package: counted for the architecture map, never linked.
@@ -358,36 +386,52 @@ pub fn index(root: &Path, project: &str) -> anyhow::Result<(Vec<Document>, usize
                 continue;
             }
             match in_module(cands, module).as_slice() {
-                [one] => Some(*one),
+                [one] => Some((*one, "import")),
                 _ => None,
             }
         } else if c.member {
             None // a method on some value: its type is unknown here, and std or a dependency may define it
         } else if let Some(one) = owned_by(&c.qualifier) {
-            Some(one)
-        } else if cands.len() == 1 {
-            Some(cands[0])
-        } else {
-            match cands
-                .iter()
-                .copied()
-                .filter(|&d| dir(defs[d].file) == dir(c.file))
-                .collect::<Vec<_>>()
-                .as_slice()
-            {
-                [one] => Some(*one),
+            Some((one, "type_path"))
+        } else if !c.qualifier.is_empty() {
+            // `footnote_core::hash()`, `store::open()`: the qualifier names a crate (its folder) or a module (its file).
+            let home = crates.get(c.qualifier.as_str());
+            let found: Vec<usize> = match home {
+                Some(d) => cands
+                    .iter()
+                    .copied()
+                    .filter(|&x| files[defs[x].file].0.starts_with(d.as_str()))
+                    .collect(),
+                None => in_module(cands, &c.qualifier),
+            };
+            match found.as_slice() {
+                [one] => Some((*one, "module_path")),
                 _ => None,
             }
+        } else {
+            // A bare name defined in another file, not imported: measured 0 right in 12 (17 Nov 2026), so never linked.
+            None
         };
-        if let Some(t) = target {
+        if let Some((t, rule)) = target {
             docs[c.file].occurrences.push(Occurrence {
                 range: c.range,
                 symbol: sym(&defs[t]),
                 roles: 0,
                 enclosing: None,
             });
+            rules.push(format!(
+                "{}\t{}\t{}\t{}\t{rule}",
+                files[c.file].0,
+                c.range[0] + 1,
+                c.name,
+                files[defs[t].file].0
+            ));
             resolved += 1;
         }
+    }
+    // Measurement hook: FOOTNOTE_CODE_RULES=<file> writes every link with its rule (file, line, name, target file, rule).
+    if let Some(out) = std::env::var_os("FOOTNOTE_CODE_RULES") {
+        let _ = std::fs::write(out, rules.join("\n"));
     }
     Ok((docs, resolved))
 }
