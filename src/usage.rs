@@ -147,11 +147,44 @@ struct FileState {
     recent: VecDeque<String>,
     /// "date|agent|model" -> tokens.
     rows: BTreeMap<String, Tokens>,
+    /// "agent|window" -> the newest limit seen in this file.
+    #[serde(default)]
+    limits: BTreeMap<String, Limit>,
 }
+
+/// A usage limit as the agent wrote it: when it was seen, the share used (Claude Code writes a limit only once hit: 100) and
+/// when the window resets, in Unix seconds.
+#[derive(Clone, Copy, Serialize, Deserialize, PartialEq, Debug)]
+struct Limit {
+    seen: i64,
+    used_percent: f64,
+    resets_at: i64,
+}
+
+impl FileState {
+    fn limit(&mut self, agent: &str, window: &str, l: Limit) {
+        let e = self.limits.entry(format!("{agent}|{window}")).or_insert(l);
+        if l.seen >= e.seen {
+            *e = l;
+        }
+    }
+}
+
+/// Unix seconds of an RFC 3339 timestamp.
+fn unix(ts: &str) -> Option<i64> {
+    time::OffsetDateTime::parse(ts, &time::format_description::well_known::Rfc3339)
+        .ok()
+        .map(|t| t.unix_timestamp())
+}
+
+/// Bumped when FileState gains what old indexes lack, so every file is read again once.
+const FORMAT: u32 = 2;
 
 #[derive(Default, Serialize, Deserialize)]
 struct Index {
     prices: String,
+    #[serde(default)]
+    format: u32,
     files: BTreeMap<String, FileState>,
 }
 
@@ -167,6 +200,23 @@ fn head_hash(f: &mut std::fs::File, upto: u64) -> Result<String> {
 
 /// Claude Code: assistant lines carry `message.usage`; one request is written once per content block, so dedupe on ids.
 fn claude_line(line: &[u8], st: &mut FileState) -> Option<(String, String, Tokens)> {
+    if line.windows(17).any(|w| w == b"\"rate_limit_info\"") {
+        // A refused request: Claude Code writes the limit that was hit and when it resets, never the share used before.
+        let v: Value = serde_json::from_slice(line).ok()?;
+        let r = &v["apiErrorParams"]["rate_limit_info"];
+        let window = match r["rateLimitType"].as_str()? {
+            "five_hour" => "5h",
+            "seven_day" => "weekly",
+            other => other,
+        };
+        let l = Limit {
+            seen: unix(v["timestamp"].as_str()?)?,
+            used_percent: 100.0,
+            resets_at: r["resetsAt"].as_i64()?,
+        };
+        st.limit("claude-code", window, l);
+        return None;
+    }
     if !line.windows(7).any(|w| w == b"\"usage\"") {
         return None;
     }
@@ -243,6 +293,9 @@ fn codex_line(line: &[u8], st: &mut FileState) -> Option<(String, String, Tokens
     let has = |s: &[u8]| line.windows(s.len()).any(|w| w == s);
     let (turn, record) = (has(b"\"turn_context\""), has(b"\"token_usage_record\""));
     if !turn && !record {
+        if has(b"\"rate_limits\"") {
+            codex_limits(line, st);
+        }
         return None;
     }
     let v: Value = serde_json::from_slice(line).ok()?;
@@ -272,6 +325,34 @@ fn codex_line(line: &[u8], st: &mut FileState) -> Option<(String, String, Tokens
         st.model.clone(),
         request(&st.model, t),
     ))
+}
+
+/// Codex writes its limits with every token count: the share used of each window, its length and its reset time.
+fn codex_limits(line: &[u8], st: &mut FileState) -> Option<()> {
+    let v: Value = serde_json::from_slice(line).ok()?;
+    let seen = unix(v["timestamp"].as_str()?)?;
+    let r = &v["payload"]["rate_limits"];
+    for w in [&r["primary"], &r["secondary"]] {
+        let (Some(used), Some(minutes), Some(resets_at)) = (
+            w["used_percent"].as_f64(),
+            w["window_minutes"].as_i64(),
+            w["resets_at"].as_i64(),
+        ) else {
+            continue;
+        };
+        let window = match minutes {
+            300 => "5h".to_string(),
+            10080 => "weekly".to_string(),
+            m => format!("{m}m"),
+        };
+        let l = Limit {
+            seen,
+            used_percent: used,
+            resets_at,
+        };
+        st.limit("codex", &window, l);
+    }
+    Some(())
 }
 
 type Parse = fn(&[u8], &mut FileState) -> Option<(String, String, Tokens)>;
@@ -368,9 +449,10 @@ pub fn usage(days: u16) -> Result<Value> {
         .ok()
         .and_then(|b| serde_json::from_slice(&b).ok())
         .unwrap_or_default();
-    if index.prices != PRICES {
+    if index.prices != PRICES || index.format != FORMAT {
         index = Index {
             prices: PRICES.into(),
+            format: FORMAT,
             ..Default::default()
         };
     }
@@ -452,9 +534,33 @@ pub fn usage(days: u16) -> Result<Value> {
         "by_agent": list(&by[1], "agent"),
         "by_model": list(&by[2], "model"),
         "unpriced_models": unpriced,
+        "limits": limits(&index, time::OffsetDateTime::now_utc().unix_timestamp()),
         "measured_savings": measured_savings(&first),
         "read": {"files": files, "new_bytes": new_bytes, "ms": started.elapsed().as_millis()},
     }))
+}
+
+/// The newest limit per agent and window across all files, for windows that have not reset yet (a past reset means the
+/// share used is no longer known). Read from local session files only; no account endpoint is called.
+fn limits(index: &Index, now: i64) -> Value {
+    let mut newest: BTreeMap<&str, Limit> = BTreeMap::new();
+    for (k, l) in index.files.values().flat_map(|st| &st.limits) {
+        let e = newest.entry(k).or_insert(*l);
+        if l.seen >= e.seen {
+            *e = *l;
+        }
+    }
+    let current: Vec<Value> = newest
+        .into_iter()
+        .filter(|(_, l)| l.resets_at > now)
+        .map(|(k, l)| {
+            let (agent, window) = k.split_once('|').unwrap_or((k, ""));
+            json!({"agent": agent, "window": window, "used_percent": l.used_percent, "resets_at": l.resets_at,
+                   "resets_in_minutes": (l.resets_at - now + 59) / 60, "seen_at": l.seen})
+        })
+        .collect();
+    json!({"current": current,
+           "note": "from the agents' session files only: Codex writes the share used on every turn; Claude Code writes a limit only when one is hit (100 %), so it shows here only until that limit resets; times in Unix seconds"})
 }
 
 /// Savings measured where the output was filtered, shown apart from the token counts and prices above. Today the only
@@ -587,6 +693,39 @@ mod tests {
         let user =
             br#"{"type":"user/message","time":1792964444792,"data":{"usage":{"inputTokens":1}}}"#;
         assert!(dsh_line(user, &mut FileState::default()).is_none());
+    }
+
+    #[test]
+    fn limits_keep_the_newest_per_window_and_drop_reset_ones() {
+        let mut st = FileState::default();
+        let codex = |t: &str, used: f64| {
+            format!(
+                r#"{{"timestamp":"{t}","type":"event_msg","payload":{{"type":"token_count","rate_limits":{{"primary":{{"used_percent":{used},"window_minutes":300,"resets_at":2000}},"secondary":{{"used_percent":85.0,"window_minutes":10080,"resets_at":900}}}}}}}}"#
+            )
+        };
+        // Newer line first: the older one must not overwrite it.
+        assert!(codex_line(codex("1970-01-01T00:10:00Z", 8.0).as_bytes(), &mut st).is_none());
+        assert!(codex_line(codex("1970-01-01T00:05:00Z", 3.0).as_bytes(), &mut st).is_none());
+        let claude = br#"{"type":"assistant","timestamp":"1970-01-01T00:01:40Z","apiError":"usage_limit_reached","apiErrorParams":{"rate_limit_info":{"status":"rejected","resetsAt":1500,"rateLimitType":"five_hour"}}}"#;
+        assert!(claude_line(claude, &mut st).is_none());
+        let index = Index {
+            files: BTreeMap::from([("a".into(), st)]),
+            ..Default::default()
+        };
+        let current = limits(&index, 1000)["current"].as_array().unwrap().clone();
+        // The weekly Codex window reset at 900, before now (1000): dropped.
+        let got: Vec<_> = current
+            .iter()
+            .map(|l| {
+                (
+                    l["agent"].as_str().unwrap(),
+                    l["window"].as_str().unwrap(),
+                    l["used_percent"].as_f64().unwrap(),
+                )
+            })
+            .collect();
+        assert_eq!(got, [("claude-code", "5h", 100.0), ("codex", "5h", 8.0)]);
+        assert_eq!(current[1]["resets_in_minutes"], 17);
     }
 
     #[test]

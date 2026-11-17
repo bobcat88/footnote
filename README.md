@@ -198,6 +198,8 @@ text; encryption protects Footnote's store, not what agents write down.
 
 `footnote usage --days 7` counts the tokens your agents used per day, agent and model, from the session files Claude Code and Codex already keep on your computer, and what they would cost at list API prices (a subscription pays a flat fee instead). Only counts are stored; no prompt or answer text is copied. Prices: a table in [src/usage.rs](src/usage.rs), dated, from the providers' pricing pages.
 
+Its `limits` part shows the 5-hour and weekly limits that have not reset yet, with the share used and the reset time. It reads the same files: Codex writes the share used on every turn, while Claude Code writes a limit only when you hit it. No account endpoint is called.
+
 ### Code graph
 
 Footnote Code answers "who calls this, and what does it call" from the compiler's own index, not from a guess. It picks the indexer from the project's files and says which one is missing:

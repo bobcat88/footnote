@@ -28,7 +28,7 @@ walkdir = "2"
 zstd = { version = "0.14", default-features = false }
 tempfile = "3"
 wait-timeout = "0.2"
-time = { version = "0.3", features = ["local-offset"] }
+time = { version = "0.3", features = ["local-offset", "parsing"] }
 interprocess = "2.4.8"
 getrandom = "0.4.3"
 tantivy = "0.27"
