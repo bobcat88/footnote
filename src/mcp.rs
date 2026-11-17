@@ -12,7 +12,7 @@
 //! (1 MB line, 512-byte query, limit 1..20, 256k response) so a tool call
 //! cannot flood an agent context.
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::{Value, json};
 use std::path::PathBuf;
@@ -376,7 +376,15 @@ fn handle(shared: &Shared, request: &Value, session: &str) -> Option<Value> {
     Some(match method {
         "initialize" => rpc_ok(id, initialize(&params)),
         "ping" => rpc_ok(id, json!({})),
-        "tools/list" => rpc_ok(id, json!({"tools": tool_definitions()})),
+        "tools/list" => {
+            let mut tools = tool_definitions();
+            if let Some(list) = tools.as_array_mut() {
+                list.retain(|t| {
+                    switched_on(product_of(&shared.db, t["name"].as_str().unwrap_or("")))
+                });
+            }
+            rpc_ok(id, json!({"tools": tools}))
+        }
         "tools/call" => {
             let Some(name) = params.get("name").and_then(Value::as_str) else {
                 return Some(rpc_error(
@@ -450,7 +458,46 @@ fn tool_envelope(text: String, is_error: bool) -> Value {
     json!({"content":[{"type":"text","text":text}],"isError":is_error})
 }
 
+/// The product a tool belongs to, for its switch (`footnote config set <product>.enabled`): Code's lookup, Memory's write
+/// tools, and the read tools by the kind of database this server serves (a document corpus is Library).
+#[cfg_attr(not(feature = "memory"), allow(unused_variables))]
+fn product_of(db: &Path, name: &str) -> &'static str {
+    match name {
+        "footnote_code" => "code",
+        "footnote_remember" | "footnote_forget" | "footnote_tag" | "footnote_memory_recall" => {
+            "memory"
+        }
+        #[cfg(feature = "memory")]
+        _ if !(db.exists()
+            && read_db(db)
+                .and_then(|c| crate::memory::has_files(&c))
+                .unwrap_or(false)) =>
+        {
+            "memory"
+        }
+        _ => "library",
+    }
+}
+
+/// A product's switch, read on every call so turning it off needs no agent restart. An unreadable settings file leaves the
+/// product on: the hook and `footnote config` report that file's error themselves.
+fn switched_on(product: &str) -> bool {
+    crate::state::state_dir()
+        .and_then(|state| footnote_core::config::product_settings(&state, product))
+        .map_or(true, |v| v["enabled"].as_bool().unwrap_or(true))
+}
+
 fn dispatch(db: &Path, name: &str, args: &Value) -> Result<Value> {
+    let product = product_of(db, name);
+    ensure!(
+        switched_on(product),
+        "Footnote {} is switched off; `footnote config set {product}.enabled true` turns it back on",
+        match product {
+            "code" => "Code",
+            "library" => "Library",
+            _ => "Memory",
+        }
+    );
     match name {
         "footnote_recall" | "borg_recall" => recall(db, args),
         // Not listed in tools/list: the memory hook's per-prompt recall through the resident daemon (models stay loaded).

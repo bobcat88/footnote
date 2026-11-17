@@ -307,3 +307,129 @@ fn an_agent_keeps_its_tools_when_the_daemon_stops() {
         "{done:?}"
     );
 }
+
+/// Each product's switch (goal 12): off removes its tools from the agent's list and refuses calls at once, on a server
+/// already running; the other products keep working.
+#[test]
+fn a_switched_off_product_leaves_the_agents_tools() {
+    let t = tmp();
+    let corpus = fixture(&t);
+    let memory = t.path().join("memory.db");
+    let state = t.path().join("state");
+    let footnote = || {
+        let mut c = bin();
+        c.env("FOOTNOTE_STATE_DIR", &state);
+        c
+    };
+    let session = |db: &PathBuf, calls: &[Value]| -> Vec<Value> {
+        let input: String = calls.iter().map(|c| format!("{c}\n")).collect();
+        let out = footnote()
+            .arg("--db")
+            .arg(db)
+            .arg("mcp")
+            .write_stdin(input)
+            .output()
+            .unwrap();
+        String::from_utf8_lossy(&out.stdout)
+            .lines()
+            .map(|l| serde_json::from_str(l).unwrap())
+            .collect()
+    };
+    let list = serde_json::json!({"jsonrpc":"2.0","id":1,"method":"tools/list"});
+    let call = |name: &str, args: Value| serde_json::json!({"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":name,"arguments":args}});
+    let names = |r: &Value| -> Vec<String> {
+        r["result"]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|t| t["name"].as_str().unwrap().to_string())
+            .collect()
+    };
+    let refused = |r: &Value| {
+        r["result"]["isError"] == true && r["result"].to_string().contains("switched off")
+    };
+    let set = |key: &str, v: &str| {
+        footnote()
+            .args(["config", "set", key, v])
+            .assert()
+            .success()
+    };
+
+    let note = serde_json::json!([{"text": "Switches are per product.", "kind": "fact", "scope": "global", "observed_at": "2026-11-17"}]);
+    footnote()
+        .arg("--db")
+        .arg(&memory)
+        .arg("remember")
+        .write_stdin(note.to_string())
+        .assert()
+        .success();
+    let on = session(&memory, std::slice::from_ref(&list));
+    assert!(
+        names(&on[0]).contains(&"footnote_remember".to_string()),
+        "{on:?}"
+    );
+
+    if names(&on[0]).iter().any(|n| n == "footnote_code") {
+        set("code.enabled", "false");
+        let r = session(
+            &memory,
+            &[
+                list.clone(),
+                call("footnote_code", serde_json::json!({"name": "main"})),
+            ],
+        );
+        assert!(!names(&r[0]).iter().any(|n| n == "footnote_code"), "{r:?}");
+        assert!(
+            names(&r[0]).iter().any(|n| n == "footnote_remember"),
+            "{r:?}"
+        );
+        assert!(refused(&r[1]), "{r:?}");
+    }
+
+    set("memory.enabled", "false");
+    let r = session(
+        &memory,
+        &[list.clone(), call("footnote_stats", serde_json::json!({}))],
+    );
+    assert!(
+        !names(&r[0])
+            .iter()
+            .any(|n| n == "footnote_remember" || n == "footnote_stats"),
+        "{r:?}"
+    );
+    assert!(refused(&r[1]), "{r:?}");
+    // Library is its own switch: its corpus still answers while Memory is off.
+    let r = session(
+        &corpus,
+        &[call(
+            "footnote_recall",
+            serde_json::json!({"query": "checkpoint"}),
+        )],
+    );
+    assert_eq!(r[0]["result"]["isError"], false, "{r:?}");
+
+    set("library.enabled", "false");
+    let r = session(
+        &corpus,
+        &[
+            list.clone(),
+            call(
+                "footnote_recall",
+                serde_json::json!({"query": "checkpoint"}),
+            ),
+        ],
+    );
+    assert!(
+        !names(&r[0]).iter().any(|n| n == "footnote_recall"),
+        "{r:?}"
+    );
+    assert!(refused(&r[1]), "{r:?}");
+
+    set("memory.enabled", "true");
+    let r = session(&memory, &[call("footnote_stats", serde_json::json!({}))]);
+    assert_eq!(r[0]["result"]["isError"], false, "{r:?}");
+
+    let status: Value =
+        serde_json::from_slice(&footnote().arg("status").output().unwrap().stdout).unwrap();
+    assert_eq!(status["products"]["library"]["enabled"], false, "{status}");
+}

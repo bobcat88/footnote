@@ -26,6 +26,20 @@ pub fn catalogue() -> Vec<OptionSpec> {
             cost: "Off: the hook does nothing at once, no agent restart; `footnote uninstall --memory` removes it for good",
         },
         OptionSpec {
+            key: "library.enabled",
+            default: json!(true),
+            range: None,
+            gain: "Agents can search your indexed document corpora through Footnote's tools",
+            cost: "Off: corpus tools leave agents' tool lists and calls are refused at once; your indexes are kept",
+        },
+        OptionSpec {
+            key: "code.enabled",
+            default: json!(true),
+            range: None,
+            gain: "Agents can look up definitions, callers and callees with footnote_code",
+            cost: "Off: footnote_code leaves agents' tool lists and calls are refused at once; your code graphs are kept",
+        },
+        OptionSpec {
             key: "memory.resident",
             default: json!(true),
             range: None,

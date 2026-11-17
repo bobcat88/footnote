@@ -12,7 +12,7 @@ pub fn status() -> Result<Value> {
         "state_dir": state,
         "policy_file": policy.as_ref().filter(|p| p.exists()),
         "products": {
-            "library": {"built": cfg!(feature = "library")},
+            "library": {"built": cfg!(feature = "library"), "enabled": enabled(&state, "library")},
             "memory": memory(&state)?,
             "code": code(&state),
         },
@@ -25,6 +25,7 @@ fn code(state: &Path) -> Value {
     if !cfg!(feature = "code") {
         return json!({"built": false});
     }
+    let enabled = enabled(state, "code");
     let graphs = std::fs::read_dir(state.join("code")).map_or(0, |d| {
         d.flatten()
             .filter(|e| e.path().extension().is_some_and(|x| x == "db"))
@@ -36,7 +37,13 @@ fn code(state: &Path) -> Value {
         .stderr(std::process::Stdio::null())
         .status()
         .is_ok_and(|s| s.success());
-    json!({"built": true, "graphs": graphs, "rust_indexer": indexer})
+    json!({"built": true, "enabled": enabled, "graphs": graphs, "rust_indexer": indexer})
+}
+
+/// A product's on/off switch as the user or company policy set it (on by default).
+fn enabled(state: &Path, product: &str) -> bool {
+    footnote_core::config::product_settings(state, product)
+        .map_or(true, |v| v["enabled"].as_bool().unwrap_or(true))
 }
 
 #[cfg(not(feature = "memory"))]
