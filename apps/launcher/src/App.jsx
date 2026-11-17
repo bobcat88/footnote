@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import Code from "./Code.jsx";
 import { switchTo } from "./Mini.jsx";
 import { Activity as ActivityScreen, Models, Projects as ProjectsScreen, Usage } from "./Screens.jsx";
-import { AGENTS, load, mb, num, seen, shortDate } from "./data.js";
+import { AGENTS, footnote, load, mb, num, seen, shortDate } from "./data.js";
 
 const SCREENS = {
   overview: { title: "Overview", note: "this week" },
@@ -74,7 +74,7 @@ export default function App() {
         ) : screen === "code" ? (
           <Code projects={projects} view={view === "symbol" ? "symbol" : "map"} go={(v) => go(`code/${v}`)} />
         ) : (
-          <Overview status={status} projects={projects} />
+          <Overview status={status} projects={projects} refresh={refresh} />
         )}
       </main>
       {screen === "overview" && !state.error && <Activity activity={activity} />}
@@ -104,14 +104,14 @@ function Sidebar({ status, projects, screen, go }) {
       <nav className="nav" aria-label="Products">
         {item("overview", "Overview")}
         <span className="item">
-          <span className={memory?.enabled ? "dot" : "dot off"} />
+          <span className={live(memory) ? "dot" : "dot off"} />
           Memory<span className="n">{memory ? num(memory.memories) : ""}</span>
         </span>
         <span className="item">
-          <span className={status?.products?.library?.built ? "dot" : "dot off"} />
+          <span className={live(status?.products?.library) ? "dot" : "dot off"} />
           Library
         </span>
-        {item("code", <><span className={status?.products?.code?.graphs ? "dot" : "dot off"} />Code</>,
+        {item("code", <><span className={live(status?.products?.code) ? "dot" : "dot off"} />Code</>,
           <span className="n">{graphs(status?.products?.code?.graphs)}</span>)}
       </nav>
       <h2 className="grp">Workspace</h2>
@@ -147,21 +147,25 @@ function Sidebar({ status, projects, screen, go }) {
   );
 }
 
+/** A product is live when it is in this build and switched on (the dot beside its name). */
+const live = (p) => p !== undefined && p.built !== false && p.enabled !== false;
+
 const graphs = (n) => (n === undefined ? "" : n === 1 ? "1 graph" : `${num(n)} graphs`);
 
-function Overview({ status, projects }) {
+function Overview({ status, projects, refresh }) {
   const p = status?.products;
   const memory = p?.memory;
   const code = p?.code;
+  const sw = (key, title) => ({ product: key, title, built: p?.[key]?.built, enabled: p?.[key]?.enabled !== false, refresh });
   return (
     <div className="body">
       <div className="row">
-        <Card on={memory?.enabled} title="Memory" big={memory && num(memory.memories)}
-          sub={memory && `${num(memory.saved_last_7_days)} saved · ${num(memory.recalls_last_7_days)} recalls in 7 days`} />
-        <Card on={p?.library?.built} title="Library" big={p && (p.library?.built ? "On" : "Off")}
-          sub={p && "Your folders and docs, searched by any agent"} />
-        <Card on={code?.graphs > 0} title="Code" big={code && num(code.graphs)}
-          sub={code && (code.rust_indexer ? `project ${code.graphs === 1 ? "graph" : "graphs"} · rust-analyzer found`
+        <Card {...sw("memory", "Memory")} big={memory && (memory.built === false ? "–" : num(memory.memories))}
+          sub={memory && (memory.built === false ? "" : `${num(memory.saved_last_7_days)} saved · ${num(memory.recalls_last_7_days)} recalls in 7 days`)} />
+        <Card {...sw("library", "Library")} big={p && (p.library?.built ? (p.library.enabled === false ? "Off" : "On") : "–")}
+          sub={p && (p.library?.built ? "Your folders and docs, searched by any agent" : "")} />
+        <Card {...sw("code", "Code")} big={code && (code.built ? num(code.graphs) : "–")}
+          sub={code && (!code.built ? "" : code.rust_indexer ? `project ${code.graphs === 1 ? "graph" : "graphs"} · rust-analyzer found`
             : <span className="warn">Install rust-analyzer to build graphs</span>)} />
       </div>
       <h2 className="section">Projects agents worked in</h2>
@@ -172,15 +176,43 @@ function Overview({ status, projects }) {
   );
 }
 
-function Card({ on, title, big, sub }) {
+/** A product card. Its switch is the product's on/off setting (`footnote config set <product>.enabled`): off, agents lose its
+ * tools at once and Memory's hook goes quiet; nothing is deleted. A company policy can refuse the change; its reason is shown. */
+function Card({ product, title, built, enabled, refresh, big, sub }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const known = built !== undefined;
+  const flip = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await footnote("config", "set", `${product}.enabled`, String(!enabled));
+      await refresh();
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
   return (
-    <section className="card">
+    <section className={known && (!built || !enabled) ? "card muted" : "card"}>
       <h2>
-        <span className={on ? "dot" : "dot off"} />
+        <span className={known && built && enabled ? "dot" : "dot off"} />
         {title}
+        {known && (built ? (
+          <button type="button" role="switch" aria-checked={enabled} aria-label={`${title} on`} className="switch"
+            onClick={flip} disabled={busy}>
+            <span aria-hidden="true" />
+          </button>
+        ) : (
+          <span className="state">Not in this build</span>
+        ))}
       </h2>
       {big === undefined ? <span className="skel big" /> : <div className="big">{big}</div>}
-      {sub === undefined ? <span className="skel" /> : <div className="sub">{sub}</div>}
+      {sub === undefined ? <span className="skel" /> : (
+        <div className="sub">{known && built && !enabled ? "Off: agents don't get its tools. Nothing is deleted." : sub}</div>
+      )}
+      {error && <div className="sub warn" role="alert">{error}</div>}
     </section>
   );
 }

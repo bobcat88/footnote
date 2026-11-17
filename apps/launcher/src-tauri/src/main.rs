@@ -1,5 +1,5 @@
 //! Footnote One's window. It draws from the `footnote` engine, run as a child process for each read: the window holds no
-//! data of its own and can only run the read-only commands in `allowed`.
+//! data of its own and can only run the commands in `allowed`: reads, plus turning a product on or off.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use serde_json::Value;
@@ -7,7 +7,8 @@ use std::path::PathBuf;
 use std::process::Command;
 use tauri::Manager;
 
-/// The engine commands the window may run, all read-only.
+/// The engine commands the window may run: read-only ones, and one write, a product's on/off switch (reversible; a company
+/// policy still wins, enforced by the engine).
 fn allowed(args: &[String]) -> bool {
     let a: Vec<&str> = args.iter().map(String::as_str).collect();
     match a.as_slice() {
@@ -15,6 +16,12 @@ fn allowed(args: &[String]) -> bool {
         ["code", name, "--root", _] => !name.starts_with('-'),
         ["activity" | "usage", "--days", d] => d.parse::<u16>().is_ok(),
         ["code-map", "--root", _] => true,
+        [
+            "config",
+            "set",
+            "memory.enabled" | "library.enabled" | "code.enabled",
+            "true" | "false",
+        ] => true,
         ["code-map", "--root", _, "--depth", d] => d.parse::<u8>().is_ok(),
         _ => false,
     }
@@ -107,5 +114,11 @@ mod tests {
         assert!(!ok("forget 12") && !ok("install --memory") && !ok("models install jina-v5-nano"));
         assert!(!ok("code --root . --root") && !ok("code-map --root . --depth 2;rm"));
         assert!(ok("usage --days 30") && ok("activity --days 7") && !ok("usage --days x"));
+        assert!(ok("config set code.enabled false") && ok("config set memory.enabled true"));
+        assert!(
+            !ok("config set memory.resident false")
+                && !ok("config set code.enabled maybe")
+                && !ok("config set code.enabled")
+        );
     }
 }

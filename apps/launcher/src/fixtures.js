@@ -14,8 +14,8 @@ const status = {
   version: "0.1.0-alpha.1",
   models,
   products: {
-    code: { built: true, graphs: 2, rust_indexer: true },
-    library: { built: true },
+    code: { built: true, enabled: true, graphs: 2, rust_indexer: true },
+    library: { built: true, enabled: true },
     memory: {
       built: true, enabled: true, memories: 318, saved_last_7_days: 41, recalls_last_7_days: 276, daemon_running: true,
       agents: [
@@ -125,7 +125,12 @@ const usage = {
 };
 
 export const fixtures = {
-  ok: { status, projects, activity, "models list": models, "code-map": codeMap, code, usage },
+  ok: { status, projects, activity, "models list": models, "code-map": codeMap, code, usage, "config set": {} },
+  // One product switched off and one left out of the build: the switch's two other states.
+  off: {
+    status: { ...status, products: { ...status.products, code: { built: false }, library: { built: true, enabled: false } } },
+    projects, activity, "config set": {},
+  },
   empty: {
     status: {
       ...status,
