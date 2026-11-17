@@ -49,3 +49,28 @@ as an option, with Johan's go on the reported latency. If any fails, injection s
 
 Which memory text an agent writes (MEMORY-WRITTEN), answer quality of the agent, int8 or other model variants (a later, separate
 measure if this passes), and Library search.
+
+## Result (17 November 2026): fails on dev; held-out not used; injection unchanged
+
+Dev split, 244 question families, 488 rows (231 answerable, 257 no-answer: `_abs` and cross negatives); installed engine build of
+`main`, default model pair; reranker pinned as above (hashes checked at load). Runner: [memory_abstention.py](memory_abstention.py);
+rows in the git-ignored `bench/work/abstention/` (public LongMemEval text only).
+
+| Dev measure | Ungated hybrid | Gate at the rule's threshold (`t = -10.078`) |
+|---|---:|---:|
+| any@3, answerable | 0.524 | 0.476 (-4.8 points; paired 95 % interval of the difference [-7.7, -2.2]) |
+| No-answer injection | 100 % | **93.4 %** (`_abs` 100 %, cross 93.0 %) |
+
+The bar is at most 50 % injection. Reaching it on dev needs `t = -8.08`, which cuts any@3 to 0.273 (half the recall). The cause is
+visible in the scores: the median logit of the memories that answer a question is -8.17, and the median top logit on no-answer
+questions is -8.08. On this fixture the reranker does not separate them, although it separates obvious pairs (+2 against -9, and
++5 points across French and English in the smoke check). LongMemEval memories are sentences cut from chat by the historical
+extractor; the questions mostly ask for counts or details spread over several sessions, which no single sentence answers word for
+word.
+
+Decision, as fixed above: no gate; the hook keeps injecting the hybrid top 3. Following the plan of 16 November ("screen on the
+dev split before any held-out use"), the held-out split was not collected, so it stays fresh for a later candidate. The
+cross-language check (step 3) was not run, since step 1 already fails.
+
+Not tried, for a later decision: the larger `BAAI/bge-reranker-v2-m3` (Apache-2.0, 568 M parameters), and a fixture of
+agent-written memories with written no-answer prompts, closer to what the hook sees than LongMemEval's extracted sentences.
