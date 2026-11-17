@@ -1,7 +1,7 @@
 """Score CodeGraph's call edges against the compiler graph, the same way as Footnote's base layer (17 Nov 2026).
 
 DO_NOT_TRACK=1 CODEGRAPH_TELEMETRY=0 codegraph init <copy of the repository>
-python -I score_codegraph.py <compiler.db> <copy>/.codegraph/codegraph.db [path prefix to leave out]
+python -I score_codegraph.py <compiler.db> <copy>/.codegraph/codegraph.db [folder to leave out, e.g. tests/]
 """
 import sqlite3
 import sys
@@ -9,7 +9,7 @@ import sys
 SKIP = sys.argv[3] if len(sys.argv) > 3 else None
 c = sqlite3.connect(f"file:{sys.argv[1]}?mode=ro", uri=True)
 files = {p.replace("\\", "/") for (p,) in c.execute("SELECT DISTINCT f.path FROM files f JOIN symbols s ON s.file_id = f.id WHERE s.scip NOT LIKE 'treesitter %'")}
-files = {f for f in files if not (SKIP and f.startswith(SKIP))}
+files = {f for f in files if not (SKIP and SKIP in "/" + f)}
 comp = {
     (a.replace("\\", "/"), l, n, b.replace("\\", "/"))
     for a, l, n, b in c.execute(

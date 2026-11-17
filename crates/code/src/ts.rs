@@ -264,6 +264,7 @@ pub fn index(root: &Path, project: &str) -> anyhow::Result<(Vec<Document>, usize
             || m.starts_with('/')
             || ["crate", "self", "super"].contains(&first(m))
             || stems.contains(&first(m).replace('-', "_"))
+            || crates.contains_key(first(m)) // a workspace crate (`use deep::helper`)
     };
     let by_name: HashMap<&str, Vec<usize>> =
         defs.iter()
@@ -385,7 +386,23 @@ pub fn index(root: &Path, project: &str) -> anyhow::Result<(Vec<Document>, usize
                 });
                 continue;
             }
-            match in_module(cands, module).as_slice() {
+            // From a workspace crate: its definitions, narrowed by the module path inside it when one is given.
+            let found = match crates.get(first(module)) {
+                Some(home) => {
+                    let inside: Vec<usize> = cands
+                        .iter()
+                        .copied()
+                        .filter(|&x| files[defs[x].file].0.starts_with(home.as_str()))
+                        .collect();
+                    if module.contains("::") && in_module(&inside, module).len() == 1 {
+                        in_module(&inside, module)
+                    } else {
+                        inside
+                    }
+                }
+                None => in_module(cands, module),
+            };
+            match found.as_slice() {
                 [one] => Some((*one, "import")),
                 _ => None,
             }

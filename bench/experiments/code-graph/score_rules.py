@@ -6,13 +6,13 @@ python -I score_rules.py <compiler.db> rules.tsv
 import sqlite3
 import sys
 
-# Optional last argument: a path prefix to leave out (e.g. tests/, where the compiler graph misses calls to test helpers).
+# Optional last argument: a folder to leave out wherever it sits (e.g. tests/, where the compiler graph misses calls to test helpers).
 SKIP = sys.argv[3] if len(sys.argv) > 3 else None
 from collections import Counter
 
 c = sqlite3.connect(f"file:{sys.argv[1]}?mode=ro", uri=True)
 files = {p.replace("\\", "/") for (p,) in c.execute("SELECT DISTINCT f.path FROM files f JOIN symbols s ON s.file_id = f.id WHERE s.scip NOT LIKE 'treesitter %'")}
-files = {f for f in files if not (SKIP and f.startswith(SKIP))}
+files = {f for f in files if not (SKIP and SKIP in "/" + f)}
 comp = {
     (a.replace("\\", "/"), l, n, b.replace("\\", "/"))
     for a, l, n, b in c.execute(

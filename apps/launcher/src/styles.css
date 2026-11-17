@@ -278,3 +278,15 @@ code.cmd { font-family: var(--f-mono); font-size: var(--t-s); color: var(--text)
 .stratum .down .heavy, .stratum .down .heavy b { color: var(--acc); }
 .stratum .down .heavy i { background: var(--acc); }
 .layers > .dimmed { padding-top: 12px; font-size: var(--t-s); }
+
+/* Impact radius on the map (17 Nov 2026): what a change to one symbol reaches. */
+.impact-ask { display: flex; gap: 6px; }
+.impact-ask input { flex: 1; width: 0; min-width: 0; font: var(--t-m) var(--f-mono); }
+.flows { min-width: 0; overflow-wrap: anywhere; }
+.btn.ghost { background: transparent; border-style: dashed; color: var(--mute); text-align: left; }
+.block.hit rect, .block.on.hit rect { stroke: var(--warn); stroke-width: 2; stroke-dasharray: 6 4; }
+.plain.impact li { align-items: baseline; gap: 8px; }
+.plain.impact .lvl { display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 9px; background: var(--raise);
+  font: 600 var(--t-xs) var(--f-mono); color: var(--text); }
+.grade { font: var(--t-xs) var(--f-mono); color: var(--ok); white-space: nowrap; }
+.grade.guess { color: var(--warn); }

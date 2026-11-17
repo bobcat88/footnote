@@ -23,6 +23,8 @@ fn allowed(args: &[String]) -> bool {
         ["code", name, "--root", _] => !name.starts_with('-'),
         ["activity" | "usage", "--days", d] => d.parse::<u16>().is_ok(),
         ["code-map", "--root", _] => true,
+        // The impact radius before a change: a read, like `code`.
+        ["code-impact", name, "--root", _] => !name.starts_with('-'),
         // The query follows `--`, so text starting with a dash is never read as an option.
         ["find", "--", q] => !q.trim().is_empty() && q.chars().count() <= 500,
         // One model by its catalogue name; the engine refuses names it does not know.

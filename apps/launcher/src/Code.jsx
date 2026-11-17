@@ -97,6 +97,17 @@ function Map({ root }) {
   const { data, error, loading } = useRead(["code-map", "--root", root]);
   const [picked, setPicked] = useState(null);
   const [flow, setFlow] = useState(0);
+  // Impact radius of one symbol (`code-impact`): the blocks its change reaches light up, the panel lists who and what.
+  const [ask, setAsk] = useState("");
+  const [impact, setImpact] = useState(null);
+  const runImpact = (name) => {
+    setPicked(null);
+    setImpact({ name, loading: true });
+    footnote("code-impact", name, "--root", root).then(
+      (data) => setImpact({ name, data }),
+      (err) => setImpact({ name, error: String(err) }),
+    );
+  };
   if (error) return <Failed error={error} />;
   if (loading || !data) return <span className="skel" />;
   const blocks = data.blocks.filter((b) => b.symbols > 0);
@@ -105,7 +116,12 @@ function Map({ root }) {
   const max = Math.max(1, ...links.map((l) => l.references));
   const sel = picked && blocks.find((b) => b.name === picked);
   const all = flows(blocks, links, data.outside);
-  const lit = picked ? null : all[flow];
+  const lit = picked || impact ? null : all[flow];
+  // Blocks the change reaches, and the block that defines the symbol itself.
+  const hit = new Set([
+    ...(impact?.data?.blocks ?? []),
+    ...(impact?.data?.found ?? []).map((f) => f.path.split("/").slice(0, -1).slice(0, data.depth || 2).join("/") || "."),
+  ]);
   const onPath = (l) => lit && lit.path.some((n, i) => n === l.from && lit.path[i + 1] === l.to);
   const touches = (l) => (sel ? l.from === sel.name || l.to === sel.name : onPath(l));
   const inbound = data.outside.filter((o) => INBOUND[o.class]);
@@ -131,11 +147,22 @@ function Map({ root }) {
   return (
     <div className="split blueprint-split">
       <nav className="panel flows" aria-label="Flows">
+        <h3 className="section">Before you change…</h3>
+        <form className="impact-ask" onSubmit={(e) => { e.preventDefault(); const n = ask.trim(); if (n) runImpact(n); }}>
+          <label className="sr-only" htmlFor="impact-name">Symbol to change</label>
+          <input id="impact-name" className="btn" placeholder="a function or type" value={ask} onChange={(e) => setAsk(e.target.value)} />
+          <button type="submit" className="btn">Impact</button>
+        </form>
+        {impact && (
+          <button type="button" className="btn ghost" onClick={() => { setImpact(null); setAsk(""); }}>
+            Clear the impact of {impact.name}
+          </button>
+        )}
         <h3 className="section">Flows</h3>
         {all.length === 0 && <p className="dimmed">No entry block calls into the others yet.</p>}
         {all.map((f, i) => (
-          <button key={f.name} type="button" className={!picked && i === flow ? "flow on" : "flow"}
-            aria-pressed={!picked && i === flow} onClick={() => { setPicked(null); setFlow(i); }}>
+          <button key={f.name} type="button" className={!picked && !impact && i === flow ? "flow on" : "flow"}
+            aria-pressed={!picked && !impact && i === flow} onClick={() => { setPicked(null); setImpact(null); setFlow(i); }}>
             <b>{f.name}</b>
             <span className="mono">{[...f.path.map(short), f.pkg].filter(Boolean).join(" → ")}</span>
           </button>
@@ -196,10 +223,11 @@ function Map({ root }) {
           {blocks.map((b) => {
             const p = pos[b.name];
             const n = b.memories?.count ?? 0;
-            const on = picked === b.name || (!picked && lit?.path.includes(b.name));
+            const reached = !picked && hit.has(b.name);
+            const on = picked === b.name || (!picked && lit?.path.includes(b.name)) || reached;
             return (
-              <g key={b.name} className={on ? "block on" : "block"} tabIndex={0} role="button" aria-pressed={picked === b.name}
-                aria-label={`${b.name}, ${num(b.symbols)} symbols${n ? `, ${n} memories` : ""}`}
+              <g key={b.name} className={`block${on ? " on" : ""}${reached ? " hit" : ""}`} tabIndex={0} role="button" aria-pressed={picked === b.name}
+                aria-label={`${b.name}, ${num(b.symbols)} symbols${n ? `, ${n} memories` : ""}${reached ? ", reached by the change" : ""}`}
                 onClick={() => setPicked(picked === b.name ? null : b.name)}
                 onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), setPicked(picked === b.name ? null : b.name))}>
                 <rect x={p.x} y={p.y} width={p.w} height={p.h} rx="12" />
@@ -236,7 +264,7 @@ function Map({ root }) {
         </figcaption>
       </figure>
       <aside className="panel">
-        {sel ? <BlockDetail block={sel} links={links} outside={data.outside} /> : lit ? <FlowDetail flow={lit} links={links} blocks={blocks} /> : <Outside list={data.outside} />}
+        {sel ? <BlockDetail block={sel} links={links} outside={data.outside} /> : impact ? <ImpactDetail impact={impact} /> : lit ? <FlowDetail flow={lit} links={links} blocks={blocks} /> : <Outside list={data.outside} />}
       </aside>
     </div>
   );
@@ -315,10 +343,43 @@ function Memories({ list }) {
       <h3 className="section">Memories about it</h3>
       {list.map((m) => (
         <div key={m.id} className="mem">
-          <span className="mono">{m.kind} · {m.observed_at}</span>
+          {m.kind && <span className="mono">{m.kind} · {m.observed_at}</span>}
           <p>{m.text}</p>
         </div>
       ))}
+    </>
+  );
+}
+
+function ImpactDetail({ impact }) {
+  if (impact.loading) return <span className="skel" />;
+  if (impact.error) return <p className="dimmed">{impact.error}</p>;
+  const v = impact.data;
+  if (!v.found?.length) return <p className="dimmed">No symbol named <code>{impact.name}</code> in this graph.</p>;
+  const row = (c) => (
+    <li key={`${c.path}:${c.line}`}>
+      <span>
+        <span className="lvl">{c.level}</span> {c.name} <span className="dimmed mono">{c.path}:{c.call_line}</span>
+      </span>
+      <span className={c.origin === "compiler" ? "grade" : "grade guess"}>{c.origin === "compiler" ? "compiler" : "parsed"}</span>
+    </li>
+  );
+  return (
+    <>
+      <h2 className="title mono">{v.symbol}</h2>
+      <p className="dimmed">
+        A change reaches {num(v.counts.callers)} callers and {num(v.counts.tests)} tests in {num(v.counts.files)} files, up to {v.depth} levels.
+        Lit on the map.
+      </p>
+      <Memories list={v.memories} />
+      {v.tests.length > 0 && (
+        <>
+          <h3 className="section">Tests to run</h3>
+          <ul className="plain impact">{v.tests.map(row)}</ul>
+        </>
+      )}
+      <h3 className="section">Callers, by level</h3>
+      {v.callers.length ? <ul className="plain impact">{v.callers.map(row)}</ul> : <p className="dimmed">Nothing in the project calls it.</p>}
     </>
   );
 }

@@ -1,6 +1,6 @@
 """Precision and recall of a tree-sitter code graph against a compiler graph (Footnote Code, 17 Nov 2026).
 
-python -I compare_graphs.py <compiler.db> <treesitter.db> [path prefix to leave out]
+python -I compare_graphs.py <compiler.db> <treesitter.db> [folder to leave out, e.g. tests/]
 
 An edge is (file of the reference, its line, target name, target's file). The truth is the compiler-graded links only (a
 graph built with rust-analyzer installed also holds parser links for other files), on the files the compiler covered. Both
@@ -9,7 +9,7 @@ sides are limited to functions and types.
 import sqlite3
 import sys
 
-# Optional last argument: a path prefix to leave out (e.g. tests/, where the compiler graph misses calls to test helpers).
+# Optional last argument: a folder to leave out wherever it sits (e.g. tests/, where the compiler graph misses calls to test helpers).
 SKIP = sys.argv[3] if len(sys.argv) > 3 else None
 
 
@@ -31,7 +31,7 @@ covered = {
         "SELECT DISTINCT f.path FROM files f JOIN symbols s ON s.file_id = f.id WHERE s.scip NOT LIKE 'treesitter %'"
     )
 }
-both = {f for f in covered if not (SKIP and f.startswith(SKIP))}
+both = {f for f in covered if not (SKIP and SKIP in "/" + f)}
 comp = {e for e in edges(sys.argv[1], "compiler") if e[0] in both and e[3] in both}
 ts = {e for e in edges(sys.argv[2], "resolved") if e[0] in both and e[3] in both}
 hit = comp & ts

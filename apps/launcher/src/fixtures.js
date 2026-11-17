@@ -67,6 +67,23 @@ const activity = {
   ],
 };
 
+// The impact radius of `save_order` in the fictional atlas-api project.
+const codeImpact = {
+  symbol: "save_order", depth: 3, origin: "compiler",
+  found: [{ kind: "function", path: "crates/store/src/orders.rs" }],
+  callers: [
+    { level: 1, name: "create_order", kind: "function", path: "crates/http/src/orders.rs", line: 40, call_line: 52, origin: "compiler" },
+    { level: 1, name: "retry_failed", kind: "function", path: "crates/jobs/src/retry.rs", line: 12, call_line: 30, origin: "resolved" },
+    { level: 2, name: "routes", kind: "function", path: "crates/http/src/lib.rs", line: 8, call_line: 21, origin: "compiler" },
+    { level: 3, name: "main", kind: "function", path: "src/main.rs", line: 3, call_line: 9, origin: "compiler" },
+  ],
+  tests: [{ level: 2, name: "creates_an_order", kind: "function", path: "tests/orders.rs", line: 5, call_line: 11, origin: "compiler" }],
+  counts: { callers: 4, tests: 1, files: 5, compiler_links: 4, resolved_links: 1 },
+  files: ["crates/http/src/lib.rs", "crates/http/src/orders.rs", "crates/jobs/src/retry.rs", "src/main.rs", "tests/orders.rs"],
+  blocks: ["crates/http", "crates/jobs", "src", "tests"],
+  memories: [{ id: 63, text: "Migrations ran twice under two replicas; an advisory lock now guards them." }],
+};
+
 const codeMap = {
   root: "D:/work/atlas-api", origin: "compiler", depth: 2,
   blocks: [
@@ -144,7 +161,7 @@ const usage = {
 };
 
 export const fixtures = {
-  ok: { status, projects, activity, "models list": models, "code-map": codeMap, code, usage, "config set": {},
+  ok: { status, projects, activity, "models list": models, "code-map": codeMap, "code-impact": codeImpact, code, usage, "config set": {},
     "find --": { query: "pagination", products: [
       { product: "memory", state: "ok", results: [
         { id: 17, title: "The API keeps cursor pagination; offset pagination was dropped after the slow-count incident.", detail: "fact · atlas-api · 2026-11-12" },

@@ -234,3 +234,58 @@ fn a_missing_indexer_falls_back_to_the_parser_and_says_how_to_upgrade() {
     );
     assert_eq!(v["counts"]["resolved_links"], 1, "{v}");
 }
+
+#[test]
+fn impact_walks_callers_level_by_level_and_lists_tests_apart() {
+    let dir = tempfile::tempdir().unwrap();
+    let project = dir.path().join("deep");
+    fs::create_dir_all(project.join("src")).unwrap();
+    fs::create_dir_all(project.join("tests")).unwrap();
+    fs::write(
+        project.join("src/main.rs"),
+        "fn main() {\n    greet();\n}\n\nfn greet() {\n    helper();\n}\n\nfn helper() {}\n",
+    )
+    .unwrap();
+    fs::write(project.join("Cargo.toml"), "[package]\nname = \"deep\"\n").unwrap();
+    // An integration test reaches the crate by its name, as real Rust tests do.
+    fs::write(
+        project.join("tests/it.rs"),
+        "use deep::helper;\n\nfn test_helper() {\n    helper();\n}\n",
+    )
+    .unwrap();
+    let state = dir.path().join("state");
+    let run = |args: &[&str]| -> serde_json::Value {
+        let out = Command::new(assert_cmd::cargo::cargo_bin!("footnote"))
+            .env("FOOTNOTE_STATE_DIR", &state)
+            .env("FOOTNOTE_POLICY_FILE", dir.path().join("no-policy.json"))
+            .env("PATH", dir.path().join("empty"))
+            .args(args)
+            .output()
+            .unwrap();
+        serde_json::from_slice(&out.stdout).unwrap()
+    };
+    let root = project.to_str().unwrap();
+    run(&["code-index", root]);
+    let names = |v: &serde_json::Value, k: &str| -> Vec<(String, u64)> {
+        v[k].as_array()
+            .unwrap()
+            .iter()
+            .map(|c| {
+                (
+                    c["name"].as_str().unwrap().to_string(),
+                    c["level"].as_u64().unwrap(),
+                )
+            })
+            .collect()
+    };
+    let v = run(&["code-impact", "helper", "--root", root]);
+    assert_eq!(
+        names(&v, "callers"),
+        [("greet".to_string(), 1), ("main".to_string(), 2)],
+        "{v}"
+    );
+    assert_eq!(names(&v, "tests"), [("test_helper".to_string(), 1)], "{v}");
+    assert_eq!(v["counts"]["files"], 2, "{v}");
+    let one = run(&["code-impact", "helper", "--root", root, "--depth", "1"]);
+    assert_eq!(names(&one, "callers"), [("greet".to_string(), 1)], "{one}");
+}
