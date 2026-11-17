@@ -19,11 +19,28 @@ pub(crate) fn personal_dir(path: &Path) -> Option<&Path> {
     .then_some(dir)
 }
 
+/// A process that opens an encrypted store holds decrypted memory in its heap: Windows Error Reporting must leave the heap out of
+/// any crash report it writes for this process (#173). Set once, for the life of the process; other processes are not affected.
+#[cfg(all(feature = "encryption", windows))]
+pub(crate) fn keep_heap_out_of_crash_reports() {
+    static ONCE: std::sync::Once = std::sync::Once::new();
+    ONCE.call_once(|| {
+        use windows_sys::Win32::System::ErrorReporting::{
+            WER_FAULT_REPORTING_FLAG_NOHEAP, WerSetFlags,
+        };
+        // SAFETY: plain Win32 call with a constant flag; it affects only this process's future crash reports.
+        unsafe { WerSetFlags(WER_FAULT_REPORTING_FLAG_NOHEAP) };
+    });
+}
+
 /// Open a database: an encrypted personal store through its key, anything else as before.
 pub fn open(path: &Path, write: bool) -> Result<rusqlite::Connection> {
     if let Some(dir) = personal_dir(path) {
         #[cfg(all(feature = "encryption", windows))]
-        return footnote_memory::personal_store::open_existing(dir, write);
+        {
+            keep_heap_out_of_crash_reports();
+            return footnote_memory::personal_store::open_existing(dir, write);
+        }
         #[cfg(not(all(feature = "encryption", windows)))]
         bail!(
             "{} is an encrypted personal store; this build of Footnote cannot open it (needs the encryption feature, Windows for now)",
@@ -1049,5 +1066,22 @@ pub fn run() {
             println!("{}", json!({"error":e.to_string()}));
             std::process::exit(1);
         }
+    }
+}
+
+#[cfg(all(test, feature = "encryption", windows))]
+mod crash_report_tests {
+    #[test]
+    fn opening_an_encrypted_store_keeps_the_heap_out_of_crash_reports() {
+        use windows_sys::Win32::System::ErrorReporting::{
+            WER_FAULT_REPORTING_FLAG_NOHEAP, WerGetFlags,
+        };
+        use windows_sys::Win32::System::Threading::GetCurrentProcess;
+        super::keep_heap_out_of_crash_reports();
+        let mut flags = 0;
+        // SAFETY: reads this process's own WER flags into a local.
+        let hr = unsafe { WerGetFlags(GetCurrentProcess(), &mut flags) };
+        assert_eq!(hr, 0);
+        assert_ne!(flags & WER_FAULT_REPORTING_FLAG_NOHEAP, 0);
     }
 }

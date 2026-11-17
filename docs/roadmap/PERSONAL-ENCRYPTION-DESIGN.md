@@ -163,6 +163,6 @@ means memory text or prompt text; hashes, ids, sizes and timings are metadata.
 | `memory-hook/hook.log` | Error messages | **Gap**: an error can quote its input; the old Python hook wrote a prompt fragment there on 14 Nov, and some SQLite FTS5 errors quote search terms. Story #172 |
 | Process memory (daemon, MCP server, launcher) | Decrypted text, vectors, index | Outside the boundary (malicious code as the user is excluded); lives until the process exits |
 | Swap, hibernation file | Pages of process memory | Outside the boundary; BitLocker on the system disk covers them |
-| Windows crash dumps | Process memory | No local dumps configured on Johan's machine (`LocalDumps` absent); a dump would hold decrypted pages. Story #173 |
+| Windows crash dumps | Process memory | **Reduced** (#173): a process that opens an encrypted store sets `WerSetFlags(WER_FAULT_REPORTING_FLAG_NOHEAP)`, so Windows Error Reporting leaves its heap (where decrypted text lives) out of crash reports. An administrator's machine-wide full `LocalDumps` policy, or a debugger, can still capture full memory; outside the boundary |
 | Agent transcripts (`~/.claude`, `~/.codex`, `~/.dsh`) | Memories injected into prompts, in plain text | **By design outside Footnote's reach**: the agent receives the text and its vendor stores it. The encrypted store protects the store, not what agents keep; the README must say so |
 | `corpora.json`, `projects/` | Paths and project names | Metadata; not memory content |
