@@ -172,6 +172,9 @@ g.block[role="button"]:focus-visible rect { stroke: var(--acc); stroke-width: 2;
 .hits .d { font-size: var(--t-xs); overflow-wrap: anywhere; }
 .hits .s { color: var(--mute); font-size: var(--t-s); overflow-wrap: anywhere; }
 .small { font-size: var(--t-s); }
+/* A model download: bar, bytes, cancel */
+.dl { display: inline-flex; align-items: center; gap: 8px; }
+.dl progress { width: 140px; height: 6px; accent-color: var(--ok); }
 .chip { display: inline-block; padding: 0 6px; border: 1px solid var(--line2); border-radius: 4px; font-size: var(--t-xs);
   color: var(--mute); }
 

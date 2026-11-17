@@ -5,8 +5,8 @@ const models = {
   models: [
     { name: "bekko-a8m", installed: true, bytes: 164462521, license: "MIT", role: "default pair, multilingual half", used_by_memory: true },
     { name: "gte-small", installed: true, bytes: 34726087, license: "MIT", role: "default pair, English half", used_by_memory: true },
-    { name: "e5-small", installed: false, license: "MIT", role: "earlier model, tests and comparison", used_by_memory: false },
-    { name: "jina-v5-nano", installed: false, license: "CC-BY-NC-4.0 (no commercial use)", role: "French or mixed corpora, opt-in (llama build)", used_by_memory: false },
+    { name: "e5-small", installed: false, download_bytes: 135390915, license: "MIT", role: "earlier model, tests and comparison", used_by_memory: false },
+    { name: "jina-v5-nano", installed: false, download_bytes: 232883776, license: "CC-BY-NC-4.0 (no commercial use)", role: "French or mixed corpora, opt-in (llama build)", used_by_memory: false },
   ],
 };
 
@@ -133,6 +133,11 @@ export const fixtures = {
       { product: "library", state: "ok", corpora: 1, problems: [], results: [
         { id: 311, title: "Pagination", detail: "docs/api/guide.md:84", snippet: "Pass the cursor from the previous page; pages hold 50 items by default.", source: "D:/docs/atlas.db" }] },
       { product: "code", state: "not_a_symbol", results: [] }] } },
+  // A download in progress: the install never answers and `jobs` reports its bytes.
+  installing: {
+    status, projects, activity, "models list": models,
+    jobs: { jobs: [{ kind: "models.install", label: "jina-v5-nano model.gguf", state: "running", unit: "bytes", done: 97_000_000, total: 232_883_776 }], total: 1, hidden: 0 },
+  },
   // One product switched off and one left out of the build: the switch's two other states.
   off: {
     status: { ...status, products: { ...status.products, code: { built: false }, library: { built: true, enabled: false } } },

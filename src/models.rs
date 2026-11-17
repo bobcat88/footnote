@@ -17,6 +17,8 @@ struct Recipe {
     revision: &'static str,
     /// The model file in the repository: `.onnx` (with `tokenizer.json`), or `.gguf` (llama.cpp, tokenizer inside).
     file: &'static str,
+    /// What `install` downloads, in bytes (model file plus tokenizer at the pinned revision, from the Hugging Face API).
+    download_bytes: u64,
     query_prefix: &'static str,
     passage_prefix: &'static str,
     max_length: u32,
@@ -38,6 +40,7 @@ impl Recipe {
 const RECIPES: &[Recipe] = &[
     Recipe {
         name: "bekko-a8m",
+        download_bytes: 164462521,
         repo: "hotchpotch/bekko-embedding-v1-a8m",
         revision: "c721113d59a1d91b447450324f51c4b3332c924a",
         file: "onnx/model.onnx",
@@ -61,6 +64,7 @@ const RECIPES: &[Recipe] = &[
     },
     Recipe {
         name: "gte-small",
+        download_bytes: 34726087,
         repo: "Xenova/gte-small",
         revision: "5927d1727bb12db490052a1b33265ad78058de08",
         file: "onnx/model_quantized.onnx",
@@ -84,6 +88,7 @@ const RECIPES: &[Recipe] = &[
     },
     Recipe {
         name: "e5-small",
+        download_bytes: 135390915,
         repo: "Xenova/multilingual-e5-small",
         revision: "761b726dd34fb83930e26aab4e9ac3899aa1fa78",
         file: "onnx/model_quantized.onnx",
@@ -98,6 +103,7 @@ const RECIPES: &[Recipe] = &[
     },
     Recipe {
         name: "minilm",
+        download_bytes: 135391039,
         repo: "Xenova/paraphrase-multilingual-MiniLM-L12-v2",
         revision: "2c4055b12046f11709e9df2c122e59ffbdc2f900",
         file: "onnx/model_quantized.onnx",
@@ -112,6 +118,7 @@ const RECIPES: &[Recipe] = &[
     },
     Recipe {
         name: "jina-v5-nano",
+        download_bytes: 232883776,
         repo: "jinaai/jina-embeddings-v5-text-nano-retrieval-GGUF",
         revision: "59cfaceeeb7d738c404659435af4c0da74d06c96",
         file: "v5-nano-retrieval-Q8_0.gguf",
@@ -137,6 +144,8 @@ const ALIAS_SOURCE: (&str, &str) = (
     "openai/privacy-filter",
     "7ffa9a043d54d1be65afb281eddf0ffbe629385b",
 );
+/// The three Alias files at the pinned revision, from the Hugging Face API (17 Nov 2026).
+const ALIAS_DOWNLOAD_BYTES: u64 = 945_148_537;
 const ALIAS_FILES: [(&str, &str); 3] = [
     (
         "tokenizer.json",
@@ -195,7 +204,7 @@ pub fn list(state: &Path) -> Result<Value> {
                 .map(|m| m.len())
                 .sum();
             json!({"name": r.name, "role": r.role, "installed": installed, "path": installed.then(|| dir.clone()),
-                "bytes": installed.then_some(bytes), "used_by_memory": used.iter().any(|u| same_model(u, &dir)),
+                "bytes": installed.then_some(bytes), "download_bytes": r.download_bytes, "used_by_memory": used.iter().any(|u| same_model(u, &dir)),
                 "source": format!("{}@{}", r.repo, &r.revision[..12]),
                 "license": (!r.license.is_empty()).then_some(r.license)})
         })
@@ -204,7 +213,7 @@ pub fn list(state: &Path) -> Result<Value> {
     let alias_installed = ALIAS_FILES.iter().all(|(f, _)| alias_dir.join(f).exists());
     let mut rows = rows;
     rows.push(json!({"name": ALIAS_MODEL, "role": "Footnote Alias: names, addresses and dates", "installed": alias_installed,
-        "path": alias_installed.then(|| alias_dir.clone()), "used_by_memory": false,
+        "path": alias_installed.then(|| alias_dir.clone()), "used_by_memory": false, "download_bytes": ALIAS_DOWNLOAD_BYTES,
         "source": format!("{}@{}", ALIAS_SOURCE.0, &ALIAS_SOURCE.1[..12]), "license": "Apache-2.0"}));
     // Models the hook uses from elsewhere (for example a development checkout) are reported too.
     let elsewhere: Vec<&String> = used

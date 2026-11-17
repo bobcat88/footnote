@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
-import { footnote, mb, num, seen, shortDate } from "./data.js";
+import { cancelInstall, footnote, mb, num, seen, shortDate } from "./data.js";
 
 // The workspace screens: Projects, Models, Activity and Usage. Each reads its own engine command; nothing is written.
 
-function useRead(args) {
+function useRead(args, round = 0) {
   const [state, setState] = useState({ loading: true });
   const key = args.join(" ");
   useEffect(() => {
@@ -15,7 +15,7 @@ function useRead(args) {
     );
     return () => { live = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key]);
+  }, [key, round]);
   return state;
 }
 
@@ -80,14 +80,38 @@ export function Projects({ projects }) {
 }
 
 export function Models() {
-  const { data, error } = useRead(["models", "list"]);
+  const [round, setRound] = useState(0);
+  const { data, error } = useRead(["models", "list"], round);
+  const [busy, setBusy] = useState(null); // { name, progress: {done, total}, error, cancelled }
+  // While a download runs, read its progress from the engine's job list (the install itself answers only at the end).
+  useEffect(() => {
+    if (!busy?.name || busy.error || busy.cancelled) return;
+    const timer = setInterval(() => {
+      footnote("jobs").then((j) => {
+        const job = j.jobs.find((x) => x.kind === "models.install" && x.state === "running" && x.label.startsWith(busy.name + " "));
+        if (job) setBusy((b) => b && b.name === busy.name && { ...b, progress: { done: job.done, total: job.total, file: job.label } });
+      }, () => {});
+    }, 500);
+    return () => clearInterval(timer);
+  }, [busy?.name, busy?.error, busy?.cancelled]);
+  const install = (name) => {
+    setBusy({ name });
+    footnote("models", "install", name).then(
+      () => { setBusy(null); setRound((r) => r + 1); },
+      (e) => setBusy((b) => (b?.cancelled ? b : { name, error: String(e) })),
+    );
+  };
+  const cancel = () => {
+    setBusy((b) => b && { ...b, cancelled: true });
+    cancelInstall();
+  };
   if (error) return <div className="body"><Failed error={error} /></div>;
   if (!data) return <div className="body"><span className="skel" /></div>;
   return (
     <div className="body">
       <p className="dimmed">
-        Embedding models run on this computer. Installing one is the only step that uses the network: run the command shown,
-        from a terminal.
+        Embedding models run on this computer. Installing one is the only step that uses the network: it downloads the pinned
+        files from Hugging Face and checks their hashes.
       </p>
       <table className="tbl">
         <thead>
@@ -108,17 +132,38 @@ export function Models() {
               <td>
                 {m.installed ? (
                   <span className="ok">{m.used_by_memory ? "installed · used by Memory" : "installed"}</span>
+                ) : busy?.name === m.name ? (
+                  <Download busy={busy} total={m.download_bytes} cancel={cancel} retry={() => install(m.name)} />
                 ) : (
-                  <code className="cmd">footnote models install {m.name}</code>
+                  <button className="btn" type="button" disabled={!!busy && !busy.error && !busy.cancelled}
+                    onClick={() => install(m.name)} aria-label={`Install ${m.name}, ${m.download_bytes ? mb(m.download_bytes) : "size unknown"}`}>
+                    Install{m.download_bytes ? ` · ${mb(m.download_bytes)}` : ""}
+                  </button>
                 )}
               </td>
-              <td className="num">{m.installed && m.bytes ? mb(m.bytes) : "–"}</td>
+              <td className="num">{m.installed && m.bytes ? mb(m.bytes) : m.download_bytes ? <span className="dimmed">{mb(m.download_bytes)}</span> : "–"}</td>
             </tr>
           ))}
         </tbody>
       </table>
       <p className="dimmed mono">{data.folder}</p>
     </div>
+  );
+}
+
+/** One model's download: progress of the file being fetched, then the outcome. A cancelled or failed install leaves no model
+ * behind (the engine renames each file only once it is complete and its hash checked). */
+function Download({ busy, total, cancel, retry }) {
+  if (busy.cancelled) return <span className="dimmed">Cancelled. Nothing was installed. <button className="btn" type="button" onClick={retry}>Install again</button></span>;
+  if (busy.error) return <span className="warn" role="alert">{busy.error} <button className="btn" type="button" onClick={retry}>Try again</button></span>;
+  const p = busy.progress;
+  const pct = p?.total ? Math.min(100, Math.round((100 * p.done) / p.total)) : null;
+  return (
+    <span className="dl">
+      <progress max={100} value={pct ?? undefined} aria-label={`Downloading ${busy.name}`} />
+      <span className="mono dimmed">{p ? `${mb(p.done)}${p.total ? ` of ${mb(p.total)}` : ""}` : total ? `starting · ${mb(total)}` : "starting"}</span>
+      <button className="btn" type="button" onClick={cancel}>Cancel</button>
+    </span>
   );
 }
 

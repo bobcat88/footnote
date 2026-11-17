@@ -11,6 +11,7 @@ export function footnote(...args) {
   if (inApp) return invoke("footnote", { args });
   if (mockState === "loading") return new Promise(() => {});
   if (mockState === "missing") return Promise.reject("ENGINE_MISSING");
+  if (mockState === "installing" && args[0] === "models" && args[1] === "install") return new Promise(() => {});
   if (mockState) {
     const key = args.join(" ");
     const set = fixtures[mockState] ?? fixtures.ok;
@@ -18,6 +19,11 @@ export function footnote(...args) {
     return hit ? Promise.resolve(structuredClone(hit[1])) : Promise.reject(`no sample for: footnote ${key}`);
   }
   return Promise.reject("ENGINE_MISSING");
+}
+
+/** Stop the model download in progress (the window keeps at most one). */
+export function cancelInstall() {
+  return inApp ? invoke("cancel_install") : Promise.resolve(true);
 }
 
 /** Run several engine reads at once; resolves to { data } or { error }. */
