@@ -234,3 +234,32 @@ class from a short hand-written list (database, network, model, standard library
 tantivy as the most used outside packages. The standard library does not appear: rust-analyzer emits no `std` symbols here.
 Graphs built before this need `footnote code-index` again (the map says so). Not built: clustering by links instead of folders
 (Emerge's Louvain idea), names for blocks, the launcher view (overnight item 6), the benchmark against the projects above.
+
+## 12. Second pass: a parser for every language, compiler indexers only as an upgrade (Johan, 17 November 2026)
+
+**Why.** Two of the four SCIP indexers broke on Windows: scip-python on one bad regex (worked around in #181), and scip-java on at
+least five open upstream bugs (scip-code/scip-java #991, #992, #1012, #1066, #1067, #1068; #179). The SCIP indexers are built for
+Sourcegraph's Linux servers. Each language adds an outside tool, a toolchain (Node, JDK and Maven) and often the project's own
+build. Most smaller languages have no SCIP indexer at all (PHP, Swift, Dart, Lua, COBOL), and the ones that exist are Linux and
+macOS first (scip-clang, scip-ruby). Betting the graph on them means a new dependency, a new security review and a new chance to
+break with every language.
+
+**Rejected: running the indexers in a Linux VM** (WSL, Docker, microVMs). It would need admin rights or a paid licence, a second
+copy of the toolchain inside the VM, and hundreds of MB to call a tool smaller than the VM. It still does nothing for languages
+without an indexer. WSL may stay an opt-in extra for people who already have it.
+
+**Decided.**
+1. **Base layer, every language: tree-sitter inside the Footnote binary** (#111, moved up from "later"). Definitions,
+   references, calls and imports come from the parse tree, resolved by scope and name. The same code runs on Windows, Linux and
+   macOS, with no outside tool and no build run. A project always gets a graph.
+2. **Upgrade layer: precise indexers where they run natively.** rust-analyzer, scip-typescript and scip-python (with the #181
+   fix) replace the base layer's links when they are installed and succeed. When one is missing or fails, Footnote keeps the
+   base graph and says which upgrade is missing, instead of returning an error.
+3. **Precision is measured, not assumed.** The base layer's references and callers are scored against the compiler-graded
+   graphs from the upgrade layer on Rust, TypeScript and Python (#111's acceptance test), on this repository and on public
+   sample projects. That number decides whether Java and the smaller languages need anything more.
+4. **Later, if the number calls for it:** language servers that editors use on Windows (jdtls, pyright, gopls) as a middle
+   tier; WSL as an opt-in route for scip-java.
+
+The 16 November decision (section 9, a precise pass for JavaScript, TypeScript, Java, Rust and Python) still holds, now as the
+upgrade layer rather than the floor.
