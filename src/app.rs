@@ -6,7 +6,32 @@ use std::path::{Path, PathBuf};
 pub(crate) use footnote_core::hash;
 #[cfg(feature = "library")]
 use footnote_library::index;
-pub(crate) use footnote_search::store::{HIT, backup, hit, open, search, stats};
+pub(crate) use footnote_search::store::{HIT, backup, hit, search, stats};
+
+/// The personal store a database belongs to: a `memory.db` inside a folder that `footnote personal init` completed (its `ready`
+/// marker and key id beside it). Every command opens through `open`, so the hook, MCP, daemon, status, review and find all read
+/// an encrypted store the same way, with the key from the operating system's store (#128).
+pub(crate) fn personal_dir(path: &Path) -> Option<&Path> {
+    let dir = path.parent()?;
+    (path.file_name().is_some_and(|n| n == "memory.db")
+        && dir.join("ready").is_file()
+        && dir.join("key.id").is_file())
+    .then_some(dir)
+}
+
+/// Open a database: an encrypted personal store through its key, anything else as before.
+pub fn open(path: &Path, write: bool) -> Result<rusqlite::Connection> {
+    if let Some(dir) = personal_dir(path) {
+        #[cfg(all(feature = "encryption", windows))]
+        return footnote_memory::personal_store::open_existing(dir, write);
+        #[cfg(not(all(feature = "encryption", windows)))]
+        bail!(
+            "{} is an encrypted personal store; this build of Footnote cannot open it (needs the encryption feature, Windows for now)",
+            dir.display()
+        );
+    }
+    footnote_search::store::open(path, write)
+}
 
 /// Scan bounds per `index` run: a mistake such as pointing at a whole disk aborts and rolls back instead of filling the database.
 #[cfg(feature = "library")]

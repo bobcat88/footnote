@@ -70,6 +70,7 @@ fn memory(state: &Path) -> Result<Value> {
         "built": true,
         "enabled": settings["enabled"].as_bool().unwrap_or(true),
         "db": db,
+        "encrypted": crate::app::personal_dir(&db).is_some(),
         "agents": crate::install::memory_registrations()?,
         "daemon_running": db.exists() && crate::daemon::connect(&db).is_ok(),
     });

@@ -226,3 +226,95 @@ fn explicit_personal_workflow_keeps_secrets_out_of_ordinary_output() {
     ]);
     assert!(!duplicate.status.success());
 }
+
+/// #128: once Memory uses an encrypted store, every ordinary path reads and writes it (CLI, MCP, status), nothing in the file is
+/// plain text, and stopping goes back to the plain database without touching either.
+#[test]
+fn memory_works_end_to_end_on_an_encrypted_store() {
+    let temp = tempfile::tempdir().unwrap();
+    let state = temp.path().join("state");
+    let store = temp.path().join("store");
+    let db = store.join("memory.db");
+    let footnote = || {
+        let mut c = Command::new(assert_cmd::cargo::cargo_bin!("footnote"));
+        c.env("FOOTNOTE_STATE_DIR", &state);
+        c
+    };
+    let json = |o: std::process::Output| -> serde_json::Value {
+        assert!(o.status.success(), "{o:?}");
+        serde_json::from_slice(&o.stdout).unwrap()
+    };
+    footnote()
+        .args(["personal", "init", "--store"])
+        .arg(&store)
+        .assert()
+        .success();
+    let _cleanup = Cleanup::for_store(&store);
+    let used = json(
+        footnote()
+            .args(["personal", "use", "--store"])
+            .arg(&store)
+            .output()
+            .unwrap(),
+    );
+    assert_eq!(used["encrypted"], true);
+
+    // The ordinary commands, on the store's path, go through the key.
+    let note = serde_json::json!([{"text": "Synthetic heron nests by the old mill", "kind": "fact", "scope": "global", "observed_at": "2026-11-17"}]);
+    footnote()
+        .arg("--db")
+        .arg(&db)
+        .arg("remember")
+        .write_stdin(note.to_string())
+        .assert()
+        .success();
+    let found = json(
+        footnote()
+            .arg("--db")
+            .arg(&db)
+            .args(["memory-recall", "--", "heron mill"])
+            .output()
+            .unwrap(),
+    );
+    assert!(found.to_string().contains("Synthetic heron"), "{found}");
+    let status = json(footnote().arg("status").output().unwrap());
+    assert_eq!(status["products"]["memory"]["encrypted"], true, "{status}");
+
+    // An agent through MCP (in-process: no daemon in this state folder).
+    let call = serde_json::json!({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"footnote_recall","arguments":{"query":"heron"}}});
+    let mcp = footnote()
+        .arg("--db")
+        .arg(&db)
+        .arg("mcp")
+        .write_stdin(format!("{call}\n"))
+        .output()
+        .unwrap();
+    assert!(
+        String::from_utf8_lossy(&mcp.stdout).contains("Synthetic heron"),
+        "{mcp:?}"
+    );
+
+    // Nothing readable on disk.
+    let raw = std::fs::read(&db).unwrap();
+    assert!(
+        !raw.windows(6).any(|w| w == b"heron "),
+        "memory text found in plain text"
+    );
+    assert!(
+        !store.join("memory.db.tantivy").exists(),
+        "no keyword index on disk for an encrypted store"
+    );
+
+    let back = json(
+        footnote()
+            .args(["personal", "stop-using"])
+            .output()
+            .unwrap(),
+    );
+    assert_eq!(back["encrypted"], false);
+    assert_eq!(
+        json(footnote().arg("status").output().unwrap())["products"]["memory"]["encrypted"],
+        false
+    );
+    assert!(db.exists(), "the encrypted store stays");
+}

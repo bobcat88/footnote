@@ -186,6 +186,14 @@ Besides your documents, Footnote can remember what an assistant learns while wor
 
 Nothing leaves the agent you already use: the memories are written by that agent, in its own session, into a local file. Settings (`memory.json` in the state folder) are documented in [src/hook.rs](src/hook.rs), the design in [docs/AGENT-MEMORY-DESIGN.md](docs/AGENT-MEMORY-DESIGN.md).
 
+**Encrypted memory (experimental, Windows, builds with `--features encryption`).** `footnote personal init --store <folder>` creates
+an encrypted store (SQLCipher; the key in Windows Credential Manager, a recovery key shown once as text or QR for your password
+manager). `footnote personal use --store <folder>`, then `footnote install --memory`, makes the hook, agents and launcher use it;
+`footnote personal stop-using` goes back to the plain database, leaving both in place. What it protects and what it does not is in
+[docs/roadmap/PERSONAL-ENCRYPTION-DESIGN.md](docs/roadmap/PERSONAL-ENCRYPTION-DESIGN.md). One limit matters in daily use: the
+memories an agent receives are in its prompt, so the agent's own transcripts (for example under `~/.claude`) keep them in plain
+text; encryption protects Footnote's store, not what agents write down.
+
 ### Usage
 
 `footnote usage --days 7` counts the tokens your agents used per day, agent and model, from the session files Claude Code and Codex already keep on your computer, and what they would cost at list API prices (a subscription pays a flat fee instead). Only counts are stored; no prompt or answer text is copied. Prices: a table in [src/usage.rs](src/usage.rs), dated, from the providers' pricing pages.

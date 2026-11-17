@@ -15,6 +15,14 @@ pub enum PersonalAction {
         #[arg(long)]
         store: PathBuf,
     },
+    /// Make Footnote Memory use this encrypted store (hook, agents, launcher). Re-run `footnote install --memory` afterwards so
+    /// agents' MCP entries point at it. The plain memory database is left as it was.
+    Use {
+        #[arg(long)]
+        store: PathBuf,
+    },
+    /// Go back to the plain memory database. The encrypted store is left as it was.
+    StopUsing,
     /// Display the recovery key as a QR code in an interactive terminal.
     RecoveryQr {
         #[arg(long)]
@@ -92,6 +100,24 @@ fn render_qr(output: &mut impl Write, width: usize, modules: &[u8]) -> Result<()
 
 pub fn run(action: &PersonalAction) -> Result<()> {
     match action {
+        PersonalAction::Use { store } => {
+            drop(personal_store::open_existing(store, false)?); // unlocks now, or fails before anything changes
+            let db = std::path::absolute(store.join("memory.db"))?;
+            let state = crate::state::state_dir()?;
+            footnote_core::config::set_value(&state, "memory", "db", serde_json::json!(db))?;
+            println!(
+                "{}",
+                serde_json::json!({"memory_db": db, "encrypted": true, "next": "run `footnote install --memory` so agents use it"})
+            );
+        }
+        PersonalAction::StopUsing => {
+            let state = crate::state::state_dir()?;
+            footnote_core::config::set_value(&state, "memory", "db", serde_json::Value::Null)?;
+            println!(
+                "{}",
+                serde_json::json!({"memory_db": state.join("memory.db"), "encrypted": false, "next": "run `footnote install --memory` so agents use it"})
+            );
+        }
         PersonalAction::Init { store } => {
             drop(personal_store::create_new(store)?);
             println!(
