@@ -74,3 +74,17 @@ cross-language check (step 3) was not run, since step 1 already fails.
 
 Not tried, for a later decision: the larger `BAAI/bge-reranker-v2-m3` (Apache-2.0, 568 M parameters), and a fixture of
 agent-written memories with written no-answer prompts, closer to what the hook sees than LongMemEval's extracted sentences.
+
+## Second candidate: bge-reranker-v2-m3 (written 17 November 2026, before scoring it)
+
+Johan asked to try the larger model after the first one failed, knowing it is slower. Same rule, same steps, same bars; only the
+model changes:
+
+- `BAAI/bge-reranker-v2-m3` (Apache-2.0, 568 M parameters, XLM-R large), as the fp32 ONNX export of Hugging Face's own conversion
+  organization, `onnx-community/bge-reranker-v2-m3-ONNX` at commit `6f5ff65298512715a1e669753bc754d2bc8f367b` (`onnx/model.onnx`
+  and `onnx/model.onnx_data`, `tokenizer.json`; hashes checked against the published ones at load). The export is a conversion,
+  not BAAI's own file: it is checked against the original only through obvious pairs, since no PyTorch environment exists here.
+- Step 1 reuses the dev rows already collected (`bench/work/abstention/dev-v1.jsonl`): the rows do not depend on the reranker, and
+  the threshold is still the single parameter chosen by the rule.
+- Step 4 matters more here: added time per prompt is reported on an idle machine (Johan confirms idle first), and adoption also
+  needs his go on that cost.
