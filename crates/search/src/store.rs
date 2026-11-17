@@ -22,7 +22,7 @@ pub fn is_memory_db(c: &Connection) -> Result<bool> {
 
 pub fn open(path: &Path, write: bool) -> Result<Connection> {
     no_links(path)?;
-    let mut c = Connection::open_with_flags(
+    let c = Connection::open_with_flags(
         path,
         if write {
             OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_CREATE
@@ -30,6 +30,183 @@ pub fn open(path: &Path, write: bool) -> Result<Connection> {
             OpenFlags::SQLITE_OPEN_READ_ONLY
         },
     )?;
+    finish_open(c, write)
+}
+
+/// Experimental building block: the caller must supply a securely managed key and protect derived data.
+#[cfg(feature = "encryption")]
+pub fn open_encrypted(path: &Path, write: bool, key: &[u8; 32]) -> Result<Connection> {
+    let c = keyed_connection(
+        path,
+        if write {
+            OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_CREATE
+        } else {
+            OpenFlags::SQLITE_OPEN_READ_ONLY
+        },
+        key,
+    )?;
+    finish_open(c, write)
+}
+
+/// Open an existing encrypted database without creation or schema migration.
+#[cfg(feature = "encryption")]
+pub fn open_encrypted_existing(path: &Path, write: bool, key: &[u8; 32]) -> Result<Connection> {
+    let flags = if write {
+        OpenFlags::SQLITE_OPEN_READ_WRITE
+    } else {
+        OpenFlags::SQLITE_OPEN_READ_ONLY
+    };
+    let c = keyed_connection(path, flags, key)?;
+    finish_open(c, false)
+}
+
+#[cfg(feature = "encryption")]
+fn keyed_connection(path: &Path, flags: OpenFlags, key: &[u8; 32]) -> Result<Connection> {
+    no_links(path)?;
+    let c = Connection::open_with_flags(path, flags)?;
+    let cipher: String = c.pragma_query_value(None, "cipher_version", |r| r.get(0))?;
+    if cipher.is_empty() {
+        bail!("SQLCipher is unavailable");
+    }
+    let raw_key = sqlcipher_raw_key(key);
+    c.key(Some(rusqlite::MAIN_DB), raw_key.as_bytes(), false)?;
+    protect_temporary_storage(&c)?;
+    let cipher_active: String = c.pragma_query_value(None, "cipher_status", |r| r.get(0))?;
+    if cipher_active != "1" {
+        bail!("SQLCipher encryption is not active");
+    }
+    // Force SQLCipher to validate the key before any schema or migration operation.
+    c.query_row("SELECT count(*) FROM sqlite_master", [], |r| {
+        r.get::<_, i64>(0)
+    })?;
+    Ok(c)
+}
+
+#[cfg(feature = "encryption")]
+fn protect_temporary_storage(c: &Connection) -> Result<()> {
+    let compile_options: Option<String> =
+        c.query_row("SELECT sqlite_compileoption_get(0)", [], |r| r.get(0))?;
+    if compile_options.is_none() {
+        bail!("cannot verify SQLite temporary-storage configuration");
+    }
+    let forced_disk: bool = c.query_row(
+        "SELECT sqlite_compileoption_used('TEMP_STORE=0')",
+        [],
+        |r| r.get(0),
+    )?;
+    if forced_disk {
+        bail!("SQLite is configured to force temporary files to disk");
+    }
+    c.pragma_update(None, "temp_store", "MEMORY")?;
+    Ok(())
+}
+
+#[cfg(feature = "encryption")]
+fn sqlcipher_raw_key(key: &[u8; 32]) -> zeroize::Zeroizing<String> {
+    use std::fmt::Write;
+    let mut raw = zeroize::Zeroizing::new(String::with_capacity(67));
+    raw.push_str("x'");
+    for byte in key {
+        write!(&mut raw, "{byte:02x}").expect("writing to a String cannot fail");
+    }
+    raw.push('\'');
+    raw
+}
+
+/// Make an encrypted, verified snapshot at a new path. Also used to restore a backup to a new path.
+/// This experimental primitive does not register keys or protect derived indexes.
+#[cfg(feature = "encryption")]
+pub fn copy_encrypted(source: &Path, output: &Path, key: &[u8; 32]) -> Result<()> {
+    use anyhow::Context;
+    no_links(output)?;
+    let parent = output
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or(Path::new("."));
+    let temp = tempfile::Builder::new()
+        .prefix(".footnote-encrypted-")
+        .tempfile_in(parent)?;
+    let temp_path = temp
+        .path()
+        .to_str()
+        .context("backup path is not valid UTF-8")?;
+    no_links(source)?;
+    let source_path = std::path::absolute(source)?;
+    let mut source_uri = url::Url::from_file_path(&source_path)
+        .map_err(|_| anyhow::anyhow!("cannot represent source path as a file URI"))?;
+    source_uri.query_pairs_mut().append_pair("mode", "ro");
+    // A writable in-memory main permits a read-only source and a writable encrypted destination.
+    let c = Connection::open_in_memory_with_flags(
+        OpenFlags::SQLITE_OPEN_READ_WRITE
+            | OpenFlags::SQLITE_OPEN_CREATE
+            | OpenFlags::SQLITE_OPEN_URI,
+    )?;
+    protect_temporary_storage(&c)?;
+    c.busy_timeout(Duration::from_secs(5))?;
+    let raw_key = sqlcipher_raw_key(key);
+    c.execute(
+        "ATTACH DATABASE ?1 AS footnote_source KEY ?2",
+        params![source_uri.as_str(), raw_key.as_str()],
+    )?;
+    if !c.is_readonly("footnote_source")? {
+        bail!("encrypted copy source is not read-only");
+    }
+    let source_active: String =
+        c.pragma_query_value(Some("footnote_source"), "cipher_status", |r| r.get(0))?;
+    if source_active != "1" {
+        bail!("source encryption is not active");
+    }
+    c.query_row(
+        "SELECT count(*) FROM footnote_source.sqlite_master",
+        [],
+        |r| r.get::<_, i64>(0),
+    )?;
+    c.execute(
+        "ATTACH DATABASE ?1 AS footnote_backup KEY ?2",
+        params![temp_path, raw_key.as_str()],
+    )?;
+    if c.is_readonly("footnote_backup")? {
+        bail!("encrypted copy destination is read-only");
+    }
+    let active: String =
+        c.pragma_query_value(Some("footnote_backup"), "cipher_status", |r| r.get(0))?;
+    if active != "1" {
+        bail!("backup destination encryption is not active");
+    }
+    c.execute_batch("BEGIN")?;
+    let version: i64 =
+        c.pragma_query_value(Some("footnote_source"), "user_version", |r| r.get(0))?;
+    if version != SCHEMA {
+        bail!("source schema is not supported for encrypted copy");
+    }
+    let app_id: i64 =
+        c.pragma_query_value(Some("footnote_source"), "application_id", |r| r.get(0))?;
+    let auto_vacuum: i64 =
+        c.pragma_query_value(Some("footnote_source"), "auto_vacuum", |r| r.get(0))?;
+    c.pragma_update(Some("footnote_backup"), "auto_vacuum", auto_vacuum)?;
+    c.execute_batch("SELECT sqlcipher_export('footnote_backup', 'footnote_source')")?;
+    c.pragma_update(Some("footnote_backup"), "user_version", version)?;
+    c.pragma_update(Some("footnote_backup"), "application_id", app_id)?;
+    c.execute_batch("COMMIT; DETACH DATABASE footnote_backup")?;
+    drop(c);
+    let verify = open_encrypted(temp.path(), false, key)?;
+    let integrity: String = verify.pragma_query_value(None, "integrity_check", |r| r.get(0))?;
+    if integrity != "ok" {
+        bail!("encrypted copy failed integrity check");
+    }
+    let fk_errors: i64 =
+        verify.query_row("SELECT count(*) FROM pragma_foreign_key_check", [], |r| {
+            r.get(0)
+        })?;
+    if fk_errors != 0 {
+        bail!("encrypted copy failed foreign key check");
+    }
+    drop(verify);
+    temp.persist_noclobber(output).map_err(|e| e.error)?;
+    Ok(())
+}
+
+fn finish_open(mut c: Connection, write: bool) -> Result<Connection> {
     c.busy_timeout(Duration::from_secs(5))?;
     c.pragma_update(None, "foreign_keys", true)?;
     let version: i64 = c.pragma_query_value(None, "user_version", |r| r.get(0))?;
@@ -368,7 +545,11 @@ pub fn backup(c: &Connection, output: &Path) -> Result<Value> {
         .open(output)?;
     drop(f);
     // SQLite online backup yields a coherent authoritative + derived snapshot.
-    if let Err(e) = c.backup(rusqlite::MAIN_DB, output, None) {
+    if let Err(e) = c.backup(
+        rusqlite::MAIN_DB,
+        output,
+        None::<fn(rusqlite::backup::Progress)>,
+    ) {
         let _ = fs::remove_file(output);
         return Err(e.into());
     }

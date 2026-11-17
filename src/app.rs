@@ -28,6 +28,12 @@ struct Cli {
 }
 #[derive(Subcommand)]
 enum Action {
+    /// Experimental encrypted personal-store setup and recovery; not yet used by the agent hooks.
+    #[cfg(all(feature = "encryption", windows))]
+    Personal {
+        #[command(subcommand)]
+        action: crate::personal::PersonalAction,
+    },
     #[cfg(feature = "library")]
     Index {
         #[arg(long)]
@@ -425,6 +431,8 @@ fn execute(cli: Cli) -> Result<Value> {
     // aborting the server before the client can call tools/list. Audit-log
     // verification is a pure file operation and also needs no database.
     match &cli.command {
+        #[cfg(all(feature = "encryption", windows))]
+        Action::Personal { .. } => unreachable!("personal actions are handled before JSON output"),
         Action::Serve {
             mcp,
             daemon,
@@ -607,6 +615,8 @@ fn execute(cli: Cli) -> Result<Value> {
     let db = require_db(&cli.db)?;
     let mut c = open(db, writes(&cli.command))?;
     match cli.command {
+        #[cfg(all(feature = "encryption", windows))]
+        Action::Personal { .. } => unreachable!("dispatched before the database is opened"),
         #[cfg(feature = "library")]
         Action::Index {
             root,
@@ -802,6 +812,8 @@ pub(crate) fn code_db(root: &Path) -> Result<PathBuf> {
 #[cfg(feature = "metrics")]
 fn action_name(a: &Action) -> &'static str {
     match a {
+        #[cfg(all(feature = "encryption", windows))]
+        Action::Personal { .. } => "personal",
         #[cfg(feature = "library")]
         Action::Index { .. } => "index",
         Action::RebuildEmbeddings { .. } => "rebuild-embeddings",
@@ -916,6 +928,14 @@ pub fn run() {
             std::process::exit(2);
         }
     };
+    #[cfg(all(feature = "encryption", windows))]
+    if let Action::Personal { action } = &cli.command {
+        if let Err(e) = crate::personal::run(action) {
+            eprintln!("{e:#}");
+            std::process::exit(1);
+        }
+        return;
+    }
     // Hook stdout belongs to the agent's event protocol. Failures must never block a session.
     #[cfg(feature = "memory")]
     if let Action::Hook { step } = &cli.command {

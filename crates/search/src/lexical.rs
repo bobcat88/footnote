@@ -35,6 +35,7 @@ const WRITER_HEAP: usize = 256_000_000;
 struct Open {
     dir: PathBuf,
     built_seq: i64,
+    cipher_salt: Option<String>,
     index: Index,
     reader: IndexReader,
     id: Field,
@@ -67,6 +68,25 @@ fn schema() -> (Schema, Field, Field) {
 fn dir_of(c: &Connection) -> Option<PathBuf> {
     let p = c.path().filter(|p| !p.is_empty())?;
     Some(PathBuf::from(format!("{p}.tantivy")))
+}
+// Fail closed if SQLCipher cannot report its state: never select an on-disk index by guessing.
+fn cipher_salt(c: &Connection) -> Result<Option<String>> {
+    #[cfg(feature = "encryption")]
+    {
+        let active: String = c.pragma_query_value(None, "cipher_status", |r| r.get(0))?;
+        match active.as_str() {
+            "0" => Ok(None),
+            "1" => Ok(Some(
+                c.pragma_query_value(None, "cipher_salt", |r| r.get(0))?,
+            )),
+            _ => anyhow::bail!("cannot determine database encryption state"),
+        }
+    }
+    #[cfg(not(feature = "encryption"))]
+    {
+        let _ = c;
+        Ok(None)
+    }
 }
 fn sequence(c: &Connection) -> Result<i64> {
     Ok(c.query_row(
@@ -106,19 +126,30 @@ fn open(c: &Connection) -> Result<Option<Open>> {
     let Some(dir) = dir_of(c) else {
         return Ok(None);
     };
-    footnote_core::no_links(&dir)?;
+    let cipher_salt = cipher_salt(c)?;
+    if cipher_salt.is_none() {
+        footnote_core::no_links(&dir)?;
+    }
     let seq = sequence(c)?;
     let (schema, id, body) = schema();
-    let built = read_built(&dir);
-    let index = match built {
-        Some(_) => Index::open_in_dir(&dir).context("open lexical index")?,
-        None => {
-            // Missing or half-written: start over from SQLite.
-            if dir.exists() {
-                fs::remove_dir_all(&dir).context("reset lexical index")?;
+    let built = if cipher_salt.is_some() {
+        None
+    } else {
+        read_built(&dir)
+    };
+    let index = if cipher_salt.is_some() {
+        Index::create_in_ram(schema)
+    } else {
+        match built {
+            Some(_) => Index::open_in_dir(&dir).context("open lexical index")?,
+            None => {
+                // Missing or half-written: start over from SQLite.
+                if dir.exists() {
+                    fs::remove_dir_all(&dir).context("reset lexical index")?;
+                }
+                crate::state::ensure_private_dir(&dir)?;
+                Index::create_in_dir(&dir, schema).context("create lexical index")?
             }
-            crate::state::ensure_private_dir(&dir)?;
-            Index::create_in_dir(&dir, schema).context("create lexical index")?
         }
     };
     index.tokenizers().register(ANALYZER, analyzer());
@@ -129,12 +160,15 @@ fn open(c: &Connection) -> Result<Option<Open>> {
             .context("lexical index is locked")?;
         add_chunks(c, &mut writer, id, body, built_seq)?;
         writer.commit()?;
-        write_built(&dir, seq)?;
+        if cipher_salt.is_none() {
+            write_built(&dir, seq)?;
+        }
     }
     let reader = index.reader()?;
     Ok(Some(Open {
         dir,
         built_seq: seq.max(built_seq),
+        cipher_salt,
         index,
         reader,
         id,
@@ -152,11 +186,12 @@ pub fn top_hits(c: &Connection, query: &str, n: usize) -> Result<Option<Vec<(i64
     let Some(dir) = dir_of(c) else {
         return Ok(None);
     };
+    let cipher_salt = cipher_salt(c)?;
     let cell = OPEN.get_or_init(|| Mutex::new(None));
     let mut guard = cell
         .lock()
         .map_err(|_| anyhow::anyhow!("lexical cache poisoned"))?;
-    let fresh = matches!(&*guard, Some(o) if o.dir == dir && o.built_seq == seq);
+    let fresh = matches!(&*guard, Some(o) if o.dir == dir && o.built_seq == seq && o.cipher_salt == cipher_salt);
     if !fresh {
         *guard = open(c)?;
     }

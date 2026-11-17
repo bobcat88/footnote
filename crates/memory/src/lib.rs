@@ -5,6 +5,12 @@
 //! uses the same chunks, lexical index and embeddings as a corpus. Corpus databases stay
 //! read-only for agents: `remember` refuses a database holding indexed files, and `index`
 //! refuses a memory database.
+#[cfg(all(feature = "encryption", windows))]
+pub mod personal_store;
+#[cfg(feature = "encryption")]
+pub mod recovery;
+#[cfg(all(feature = "encryption", windows))]
+pub mod windows_keystore;
 use footnote_core::hash;
 // The memory table and its marker belong to the one schema history (ADR 0001); re-exported under their old names.
 use anyhow::{Context, Result, bail};

@@ -8,6 +8,8 @@ mod hook;
 mod install;
 mod mcp;
 mod models;
+#[cfg(all(feature = "encryption", windows))]
+mod personal;
 #[cfg(feature = "memory")]
 mod projects;
 mod status;

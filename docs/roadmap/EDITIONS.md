@@ -122,6 +122,14 @@ Cost: the engine's interface to that crate must stay stable, so changing it some
 - **Encryption rule (written before any measure):** personal memory is always encrypted in Footnote One. Project memory and Library
   corpora are encrypted too only if encrypted search keeps at least 90 % of today's speed (Johan: 90 to 95 %); otherwise they stay
   as they are, protected by the operating system's per-user folder permissions.
+- **Personal data decision, 16 November:** Johan validated the SQLCipher and in-memory keyword-index approach for personal data
+  after its warm recall benchmark exceeded the 90% speed gate. This is a feasibility decision, not a claim that encryption has
+  shipped or passed security review. See [the benchmark](../../bench/experiments/SQLCIPHER-FEASIBILITY.md) for its scope and
+  remaining work; the project memory and Library decisions require their own evidence.
+- **Personal recovery requirement:** present the recovery key as a QR code so it can be saved in a password manager; the QR code
+  contains the key itself and must be protected as a secret. Also provide the key as copyable text for password managers or
+  devices that cannot save the QR code. Test restoration of an encrypted backup on another computer using the saved key before
+  treating recovery as complete. No personal key has been created yet.
 - **Licence of Footnote One: Apache-2.0 (decided by Johan, 16 Nov).** Footnote One is the useful bare-bones edition, free for
   everyone including companies; company features (sign-on, rights, Alias...) need Footnote Enterprise. Jina stays an optional model
   for personal, non-commercial use, with its licence shown at install; the default model for companies must allow commercial use.

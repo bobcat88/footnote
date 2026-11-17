@@ -10,6 +10,7 @@ rust-version.workspace = true
 [features]
 metrics = ["footnote-core/metrics"]
 llama = ["dep:llama-cpp-2"]
+encryption = ["rusqlite/bundled-sqlcipher-vendored-openssl", "rusqlite/codec", "dep:zeroize", "dep:url"]
 
 [dependencies]
 footnote-core.workspace = true
@@ -24,3 +25,5 @@ tantivy.workspace = true
 ort.workspace = true
 tokenizers.workspace = true
 llama-cpp-2 = { workspace = true, optional = true }
+zeroize = { version = "1", optional = true }
+url = { workspace = true, optional = true }

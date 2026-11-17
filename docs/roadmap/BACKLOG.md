@@ -6,6 +6,9 @@ of work. "Johan" marks items waiting for his go.
 Every item belongs to the free or the commercial edition ([EDITIONS.md](EDITIONS.md), decided 16 Nov): company-only features
 (sign-on, rights, hierarchy, many team indexes, compliance) go into a separate commercial crate, never into the free engine.
 
+Next prioritized wave: [20 feature goals](NEXT-20-FEATURES.md), including the personal-encryption and recovery decisions. Beads
+remains the authority for tracked task status.
+
 ## Recently done
 
 - Test 5 (llama.cpp models, [rule and results](../../bench/experiments/LLAMACPP-MODELS.md)): no model adopted through an HTTP server.

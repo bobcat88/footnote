@@ -19,7 +19,7 @@ footnote-alias = { path = "crates/alias" }
 footnote-code = { path = "crates/code" }
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }
-rusqlite = { version = "0.38", features = ["bundled", "backup"] }
+rusqlite = { version = "0.43", features = ["bundled", "backup"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.10"
@@ -59,6 +59,8 @@ rust-version.workspace = true
 default = ["library", "memory", "code"]
 library = ["dep:footnote-library"]
 memory = ["dep:footnote-memory"]
+# Experimental database primitive only; no automatic migration or key management.
+encryption = ["memory", "footnote-memory/encryption", "dep:zeroize"]
 # Footnote Alias, not released yet (docs/research/ALIAS-DESK-STUDY.md): opt-in until it passes bench/experiments/ALIAS-EVAL.md.
 alias = ["dep:footnote-alias"]
 # Footnote Code (docs/CODE-GRAPH-DESIGN.md): the precise pass from compiler indexes (rust-analyzer SCIP). In the free build.
@@ -90,6 +92,7 @@ ureq.workspace = true
 regex.workspace = true
 url.workspace = true
 walkdir.workspace = true
+zeroize = { version = "1", optional = true }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys.workspace = true

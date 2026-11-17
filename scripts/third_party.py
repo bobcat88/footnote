@@ -19,7 +19,7 @@ OUT = ROOT / "THIRD-PARTY-NOTICES.md"
 ALLOWED = {
     "MIT", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause", "ISC", "Zlib", "zlib-acknowledgement", "0BSD", "Unlicense",
     "CC0-1.0", "BSL-1.0", "Unicode-3.0", "Unicode-DFS-2016", "MPL-2.0", "CDLA-Permissive-2.0", "OFL-1.1",
-    "Apache-2.0 WITH LLVM-exception",
+    "Apache-2.0 WITH LLVM-exception", "blessing", "WTFPL",
 }
 
 
@@ -107,4 +107,5 @@ if __name__ == "__main__":
     assert allowed("MIT OR Apache-2.0") and allowed("(MIT OR Apache-2.0) AND Unicode-3.0")
     assert allowed("MIT OR Apache-2.0 OR LGPL-2.1-or-later") and not allowed("LGPL-2.1-or-later")
     assert not allowed("GPL-3.0 AND MIT") and allowed("Apache-2.0 WITH LLVM-exception") and not allowed("")
+    assert allowed("MIT AND BSD-3-Clause AND blessing AND WTFPL")
     main()
