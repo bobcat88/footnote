@@ -147,6 +147,24 @@ fn install(mut cmd: Command) -> std::io::Result<std::process::Output> {
 }
 
 /// Stop the model download in progress, if any. Returns whether one was running.
+/// The support link: only these two fixed addresses can be opened, in the system browser or mail app (decided 17 Nov).
+#[tauri::command]
+fn open_support(to: String) -> Result<(), String> {
+    let url = match to.as_str() {
+        "issues" => "https://github.com/bobcat88/footnote/issues/new",
+        "email" => "mailto:johan.velocity.lab@pm.me?subject=Footnote",
+        _ => return Err("unknown support address".into()),
+    };
+    #[cfg(windows)]
+    let mut cmd = std::process::Command::new("explorer.exe");
+    #[cfg(target_os = "macos")]
+    let mut cmd = std::process::Command::new("open");
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let mut cmd = std::process::Command::new("xdg-open");
+    // explorer.exe returns 1 even when it opened the address, so only a failed start counts.
+    cmd.arg(url).spawn().map(drop).map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 fn cancel_install() -> bool {
     let child = INSTALL.lock().unwrap_or_else(|p| p.into_inner()).take();
@@ -172,7 +190,11 @@ fn show(app: &tauri::AppHandle, label: &str) {
 
 fn main() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![footnote, cancel_install])
+        .invoke_handler(tauri::generate_handler![
+            footnote,
+            cancel_install,
+            open_support
+        ])
         // The tray (decided 15 Nov: a compact tray panel plus the full window): a left click opens the mini panel, the menu
         // opens either window or quits. Quitting is only ever from this menu, so closing a window never loses the app.
         .setup(|app| {

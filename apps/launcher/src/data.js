@@ -21,6 +21,11 @@ export function footnote(...args) {
   return Promise.reject("ENGINE_MISSING");
 }
 
+/** Open the support page ("issues") or mail ("email") outside the window. */
+export function openSupport(to) {
+  return inApp ? invoke("open_support", { to }) : Promise.resolve();
+}
+
 /** Stop the model download in progress (the window keeps at most one). */
 export function cancelInstall() {
   return inApp ? invoke("cancel_install") : Promise.resolve(true);

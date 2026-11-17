@@ -68,7 +68,12 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--ok); flex: none; }
 .dot.off { background: var(--dim); }
 .foot { margin-top: auto; padding: 12px 14px; border-top: 1px solid var(--line); color: var(--dim); font-size: var(--t-xs);
-  display: flex; justify-content: space-between; gap: 8px; white-space: nowrap; }
+  display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 8px; white-space: nowrap; }
+.foot .help { flex-basis: 100%; }
+.help-link { font: inherit; color: var(--dim); background: none; border: 0; padding: 0; cursor: pointer;
+  text-decoration: underline; text-underline-offset: 2px; }
+.help-link:hover { color: var(--acc); }
+.help-link:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; border-radius: 2px; }
 
 /* Main */
 main { display: flex; flex-direction: column; min-width: 0; min-height: 0; }

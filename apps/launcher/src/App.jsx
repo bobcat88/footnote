@@ -3,7 +3,7 @@ import Code from "./Code.jsx";
 import Search from "./Search.jsx";
 import { switchTo } from "./Mini.jsx";
 import { Activity as ActivityScreen, Models, Projects as ProjectsScreen, Usage } from "./Screens.jsx";
-import { AGENTS, footnote, load, mb, num, seen, shortDate } from "./data.js";
+import { AGENTS, footnote, load, mb, num, openSupport, seen, shortDate } from "./data.js";
 
 const SCREENS = {
   overview: { title: "Overview", note: "this week" },
@@ -147,6 +147,11 @@ function Sidebar({ status, projects, screen, go }) {
       <div className="foot">
         <span>Free and open source</span>
         {onDisk > 0 && <span className="mono">{mb(onDisk)} models</span>}
+        <span className="help">
+          Help: <button type="button" className="help-link" onClick={() => openSupport("issues")}>report an issue</button>
+          {" · "}
+          <button type="button" className="help-link" onClick={() => openSupport("email")}>email</button>
+        </span>
       </div>
     </aside>
   );
