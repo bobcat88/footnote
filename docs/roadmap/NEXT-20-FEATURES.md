@@ -2,8 +2,10 @@
 
 Prepared 16 November 2026 from [BACKLOG](BACKLOG.md), [P1 plan](P1-PLAN.md), [editions](EDITIONS.md), and the
 [encryption experiment](../../bench/experiments/SQLCIPHER-FEASIBILITY.md). This is a prioritized planning wave, not a claim that
-the items have shipped or a commitment to finish all of them overnight. Carry unfinished items forward. Beads remains the
-authority for tracked task status; reconcile with it before creating work rather than silently duplicating issues.
+the items have shipped or a commitment to finish all of them overnight. Carry unfinished items forward. Since 17 Nov 2026
+the open goals are stories on GitHub Issues ([EPICS.md](EPICS.md)), which hold their status. Done by 17 Nov: 1-5 (#65), 9 (tried,
+failed on dev, #69 #71), 10 (#161), 11 (#81), 12 (#68 #72), 13 (#73 #74 #143), 14 (#78), 15 (#79), 17 (measured 16 Nov, opt-in
+`per_source`), 18 (#80), 19 (#70). Open: 6-8 (E6), 16 catalogue details (E4), 20 installer (E5).
 
 ## Order and acceptance
 

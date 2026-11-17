@@ -1,13 +1,14 @@
 # Footnote backlog
 
-Last updated 16 November 2026. One prioritised list; Beads stays the authority for tracked tasks. Order inside a tier is the order
-of work. "Johan" marks items waiting for his go.
+Last updated 17 November 2026. Since 17 Nov the authority for tracked work is GitHub Issues: 12 epics and their stories, built from
+[EPICS.md](EPICS.md), done per the [Definition of done](../DEFINITION-OF-DONE.md); Beads is retired (every item moved or closed with
+a reason). This page keeps the context and the reasons. Order inside a tier is the order of work. "Johan" marks items waiting for his go.
 
 Every item belongs to the free or the commercial edition ([EDITIONS.md](EDITIONS.md), decided 16 Nov): company-only features
 (sign-on, rights, hierarchy, many team indexes, compliance) go into a separate commercial crate, never into the free engine.
 
-Next prioritized wave: [20 feature goals](NEXT-20-FEATURES.md), including the personal-encryption and recovery decisions. Beads
-remains the authority for tracked task status.
+Next prioritized wave: [20 feature goals](NEXT-20-FEATURES.md), including the personal-encryption and recovery decisions. Its open goals are
+now stories on GitHub Issues.
 
 ## Recently done
 
