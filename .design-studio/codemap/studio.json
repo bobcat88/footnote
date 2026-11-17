@@ -1,0 +1,179 @@
+{
+  "project": "Footnote Code · Architecture map",
+  "kind": "app",
+  "subtitle": "Four directions for the redrawn architecture map in the Footnote launcher, all on this repository's real graph (8 blocks, 12 links, outside packages, memories anchored to code). Pick a base, tune it, write notes, lock it.",
+  "preview": {
+    "nav": [
+      "Map",
+      "Symbols",
+      "Inputs and outputs"
+    ],
+    "cta": "Open block",
+    "cta2": "Show memories",
+    "headline": "How BorgKnowledge is built",
+    "lede": "Blocks from the compiler graph, links counted in references, outside packages by kind, and the memories your agents anchored to each block.",
+    "badge": "src → crates/core · 86 references",
+    "caption": "compiler graph · rust-analyzer · 1,052 symbols",
+    "kpis": [
+      [
+        "Blocks",
+        "8"
+      ],
+      [
+        "Links",
+        "12"
+      ],
+      [
+        "Outside packages",
+        "10"
+      ],
+      [
+        "Anchored memories",
+        "6"
+      ]
+    ],
+    "rows": [
+      [
+        "src",
+        "14 files · 453 symbols · 2 memories"
+      ],
+      [
+        "crates/search",
+        "7 files · 181 symbols"
+      ],
+      [
+        "crates/core",
+        "6 files · 79 symbols"
+      ],
+      [
+        "crates/code",
+        "2 files · 49 symbols · 3 memories"
+      ],
+      [
+        "crates/memory",
+        "2 files · 27 symbols · 1 memory"
+      ]
+    ],
+    "series": [
+      86,
+      55,
+      41,
+      20,
+      14,
+      12,
+      8,
+      4,
+      4,
+      2,
+      1,
+      1
+    ],
+    "features": [
+      [
+        "Model view",
+        "Boxes inside the system box, labelled links, open a block to go one level down."
+      ],
+      [
+        "Memories on the map",
+        "Each block shows what your agents remembered about it, from anchored memories."
+      ],
+      [
+        "Outside packages",
+        "Databases, network and model packages each block depends on."
+      ]
+    ]
+  },
+  "directions": [
+    {
+      "id": "D5",
+      "name": "Blueprint (your mix)",
+      "line": "D2 living canvas and Flows panel, D3 memory pills and soft tiles on a blueprint grid; the code in its own zone, calls in on the left, calls out on the right by kind: databases, model runtimes, network APIs, files and system. D4 Strata becomes the Layers tab.",
+      "refs": [
+        "D2",
+        "D3",
+        "LikeC4"
+      ],
+      "image": "D:/Projets/BorgKnowledge/.design-studio/codemap/directions/D5/shot-top.png",
+      "tokens": {
+        "theme": "dark",
+        "accent": "#2dd4bf",
+        "warmth": -0.2,
+        "tint": 4,
+        "radius": 18,
+        "density": 1.05,
+        "scale": 1.25,
+        "display": "Plus Jakarta Sans",
+        "dweight": 700,
+        "body": "Plus Jakarta Sans",
+        "motion": "lively"
+      }
+    },
+    {
+      "id": "D2",
+      "name": "Living canvas",
+      "line": "IcePanel-like: dense small cards in group frames, every link says what it does, a Flows panel lights a path.",
+      "refs": [
+        "IcePanel"
+      ],
+      "image": "D:/Projets/BorgKnowledge/.design-studio/codemap/directions/D2/shot-top.png",
+      "tokens": {
+        "theme": "dark",
+        "accent": "#f59e0b",
+        "warmth": 0,
+        "tint": 0,
+        "radius": 6,
+        "density": 1.25,
+        "scale": 1.125,
+        "display": "Geist",
+        "dweight": 600,
+        "body": "Geist",
+        "motion": "subtle"
+      }
+    },
+    {
+      "id": "D3",
+      "name": "Flow and memory",
+      "line": "Footnote's own: references flow as dots, memories pinned to blocks, an inspector with the block's memories, links and docs. Keeps the locked launcher brand.",
+      "refs": [
+        "repowise",
+        "LangChain flowing dots"
+      ],
+      "image": "D:/Projets/BorgKnowledge/.design-studio/codemap/directions/D3/shot-top.png",
+      "tokens": {
+        "theme": "dark",
+        "accent": "#2dd4bf",
+        "warmth": -0.2,
+        "tint": 4,
+        "radius": 20,
+        "density": 1,
+        "scale": 1.25,
+        "display": "Plus Jakarta Sans",
+        "dweight": 700,
+        "body": "Plus Jakarta Sans",
+        "motion": "lively"
+      }
+    },
+    {
+      "id": "D4",
+      "name": "Strata",
+      "line": "No graph: layers from entry to base to outside, links as weighted lines between strata, editorial serif.",
+      "refs": [
+        "category opposite"
+      ],
+      "image": "D:/Projets/BorgKnowledge/.design-studio/codemap/directions/D4/shot-top.png",
+      "tokens": {
+        "theme": "dark",
+        "accent": "#ff5a36",
+        "warmth": 0.6,
+        "tint": 2,
+        "radius": 4,
+        "density": 1.1,
+        "scale": 1.333,
+        "display": "Newsreader",
+        "dweight": 600,
+        "body": "Instrument Sans",
+        "motion": "none"
+      }
+    }
+  ]
+}
