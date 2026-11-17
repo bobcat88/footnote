@@ -16,6 +16,8 @@ fn allowed(args: &[String]) -> bool {
         ["code", name, "--root", _] => !name.starts_with('-'),
         ["activity" | "usage", "--days", d] => d.parse::<u16>().is_ok(),
         ["code-map", "--root", _] => true,
+        // The query follows `--`, so text starting with a dash is never read as an option.
+        ["find", "--", q] => !q.trim().is_empty() && q.chars().count() <= 500,
         [
             "config",
             "set",
@@ -115,6 +117,9 @@ mod tests {
         assert!(!ok("code --root . --root") && !ok("code-map --root . --depth 2;rm"));
         assert!(ok("usage --days 30") && ok("activity --days 7") && !ok("usage --days x"));
         assert!(ok("config set code.enabled false") && ok("config set memory.enabled true"));
+        assert!(
+            ok("find -- daemon") && ok("find -- --db") && !ok("find daemon") && !ok("find -- ")
+        );
         assert!(
             !ok("config set memory.resident false")
                 && !ok("config set code.enabled maybe")

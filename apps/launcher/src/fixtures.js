@@ -125,11 +125,22 @@ const usage = {
 };
 
 export const fixtures = {
-  ok: { status, projects, activity, "models list": models, "code-map": codeMap, code, usage, "config set": {} },
+  ok: { status, projects, activity, "models list": models, "code-map": codeMap, code, usage, "config set": {},
+    "find --": { query: "pagination", products: [
+      { product: "memory", state: "ok", results: [
+        { id: 17, title: "The API keeps cursor pagination; offset pagination was dropped after the slow-count incident.", detail: "fact · atlas-api · 2026-11-12" },
+        { id: 42, title: "Prefers small pull requests, one per piece of work, with tests run locally before review.", detail: "preference · global · 2026-11-10" }] },
+      { product: "library", state: "ok", corpora: 1, problems: [], results: [
+        { id: 311, title: "Pagination", detail: "docs/api/guide.md:84", snippet: "Pass the cursor from the previous page; pages hold 50 items by default.", source: "D:/docs/atlas.db" }] },
+      { product: "code", state: "not_a_symbol", results: [] }] } },
   // One product switched off and one left out of the build: the switch's two other states.
   off: {
     status: { ...status, products: { ...status.products, code: { built: false }, library: { built: true, enabled: false } } },
     projects, activity, "config set": {},
+    "find --": { query: "zebra", products: [
+      { product: "memory", state: "nothing_found", results: [] },
+      { product: "library", state: "off", results: [] },
+      { product: "code", state: "not_built", results: [] }] },
   },
   empty: {
     status: {

@@ -164,6 +164,14 @@ g.block[role="button"]:focus-visible rect { stroke: var(--acc); stroke-width: 2;
 .input { flex: 1; background: var(--bg); color: var(--text); border: 1px solid var(--line2); border-radius: var(--r-ctl);
   padding: 6px 10px; }
 .input::placeholder { color: var(--dim); }
+/* Search results, one section per product */
+.found { margin-top: 14px; display: flex; flex-direction: column; gap: 6px; }
+.hits { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.hits li { display: grid; gap: 2px; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+.hits .t { color: var(--text); overflow-wrap: anywhere; }
+.hits .d { font-size: var(--t-xs); overflow-wrap: anywhere; }
+.hits .s { color: var(--mute); font-size: var(--t-s); overflow-wrap: anywhere; }
+.small { font-size: var(--t-s); }
 .chip { display: inline-block; padding: 0 6px; border: 1px solid var(--line2); border-radius: 4px; font-size: var(--t-xs);
   color: var(--mute); }
 

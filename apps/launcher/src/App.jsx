@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
 import Code from "./Code.jsx";
+import Search from "./Search.jsx";
 import { switchTo } from "./Mini.jsx";
 import { Activity as ActivityScreen, Models, Projects as ProjectsScreen, Usage } from "./Screens.jsx";
 import { AGENTS, footnote, load, mb, num, seen, shortDate } from "./data.js";
 
 const SCREENS = {
   overview: { title: "Overview", note: "this week" },
+  search: { title: "Search", note: "Memory, Library and Code" },
   code: { title: "Code" },
   projects: { title: "Projects" },
   models: { title: "Models" },
@@ -69,6 +71,8 @@ export default function App() {
           <Models />
         ) : screen === "activity" ? (
           <ActivityScreen />
+        ) : screen === "search" ? (
+          <Search />
         ) : screen === "usage" ? (
           <Usage />
         ) : screen === "code" ? (
@@ -103,6 +107,7 @@ function Sidebar({ status, projects, screen, go }) {
       <h2 className="grp">Products</h2>
       <nav className="nav" aria-label="Products">
         {item("overview", "Overview")}
+        {item("search", "Search")}
         <span className="item">
           <span className={live(memory) ? "dot" : "dot off"} />
           Memory<span className="n">{memory ? num(memory.memories) : ""}</span>
