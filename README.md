@@ -206,7 +206,12 @@ Footnote Code answers "who calls this, and what does it call" from the compiler'
 |---|---|---|
 | Rust | `Cargo.toml` | `rustup component add rust-analyzer` |
 | TypeScript, JavaScript | `tsconfig.json` (Footnote never writes one into your project) | `npm install -g @sourcegraph/scip-typescript` |
-| Python | `pyproject.toml`, `setup.py`, `setup.cfg` or `requirements.txt` | `npm install -g @sourcegraph/scip-python` (not on Windows yet: [upstream issue #210](https://github.com/sourcegraph/scip-python/issues/210)) |
+| Python | `pyproject.toml`, `setup.py`, `setup.cfg` or `requirements.txt` | `npm install -g @sourcegraph/scip-python` |
+
+On Windows, keep Node.js and npm's global launcher folder on `PATH`. Footnote loads the global Python indexer through Node
+with a temporary compatibility fix for its invalid path-separator regex ([upstream PR #224](https://github.com/sourcegraph/scip-python/pull/224)).
+The installed package is never edited. A fixed upstream regex is left unchanged; the native constructor is restored after
+loading. Tested with scip-python 0.6.8 on Windows, including cross-file references and project paths with spaces.
 
 ```sh
 footnote code-index .          # build the graph of the project here (seconds; rebuild after big changes)

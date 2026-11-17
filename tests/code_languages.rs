@@ -102,18 +102,98 @@ fn what_code_cannot_read_is_said_plainly() {
         text.contains("Rust, TypeScript/JavaScript and Python"),
         "{text}"
     );
+}
 
-    if cfg!(windows) {
-        let py = t.path().join("py");
-        fs::create_dir(&py).unwrap();
-        fs::write(py.join("pyproject.toml"), "[project]\nname = \"x\"\n").unwrap();
-        let out = footnote(&state)
-            .arg("code-index")
-            .arg(&py)
-            .output()
-            .unwrap();
-        let text = String::from_utf8_lossy(&out.stdout).to_string()
-            + &String::from_utf8_lossy(&out.stderr);
-        assert!(text.contains("scip-python/issues/210"), "{text}");
+#[test]
+fn python_windows_loader_corrects_only_the_broken_constructor_and_restores_it() {
+    if std::process::Command::new("node")
+        .arg("--version")
+        .output()
+        .is_err()
+    {
+        eprintln!("Node not installed: Python compatibility test skipped");
+        return;
     }
+    let t = tempfile::tempdir_in(env!("CARGO_TARGET_TMPDIR")).unwrap();
+    let entry = t.path().join("entry.cjs");
+    fs::write(
+        &entry,
+        r#"
+const assert = require('node:assert/strict');
+assert.equal('pkg\\math.py/path'.replace(new RegExp('\\', 'g'), '/'), 'pkg/math.py/path');
+assert.equal('pkg\\math.py/path'.replace(/[\\/]/g, '/'), 'pkg/math.py/path');
+assert.equal('abc'.replace(new RegExp('b', 'g'), 'x'), 'axc');
+assert.throws(() => new RegExp('[', 'g'), SyntaxError);
+process.nextTick(() => {
+  assert.equal(global.RegExp, /x/.constructor);
+  assert.throws(() => new RegExp('\\', 'g'), SyntaxError);
+});
+"#,
+    )
+    .unwrap();
+    let out = std::process::Command::new("node")
+        .args([
+            "-e",
+            include_str!("../crates/code/src/scip_python_windows.cjs"),
+        ])
+        .arg(entry)
+        .output()
+        .expect("Node is required to test the Python compatibility loader");
+    assert!(out.status.success(), "{out:?}");
+}
+
+#[test]
+fn a_python_project_gets_normalized_paths_and_cross_file_references() {
+    let probe = if cfg!(windows) {
+        "scip-python.cmd"
+    } else {
+        "scip-python"
+    };
+    if std::process::Command::new(probe)
+        .arg("--version")
+        .output()
+        .is_err()
+    {
+        eprintln!("scip-python not installed: skipped");
+        return;
+    }
+    let t = tempfile::tempdir_in(env!("CARGO_TARGET_TMPDIR")).unwrap();
+    let root = t.path().join("python project with spaces");
+    fs::create_dir_all(root.join("pkg")).unwrap();
+    fs::write(
+        root.join("pyproject.toml"),
+        "[project]\nname = \"pyfix\"\nversion = \"0.1.0\"\n",
+    )
+    .unwrap();
+    fs::write(root.join("pkg/__init__.py"), "").unwrap();
+    fs::write(
+        root.join("pkg/math.py"),
+        "def total(xs: list[int]) -> int:\n    return sum(xs)\n",
+    )
+    .unwrap();
+    fs::write(
+        root.join("pkg/report.py"),
+        "from pkg.math import total\n\ndef report() -> int:\n    return total([1, 2, 3])\n",
+    )
+    .unwrap();
+    let state = t.path().join("state");
+    let out = footnote(&state)
+        .arg("code-index")
+        .arg(&root)
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "{out:?}");
+    let v: Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(v["indexer"], "scip-python");
+    let out = footnote(&state)
+        .args(["code", "total", "--root"])
+        .arg(&root)
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "{out:?}");
+    let v: Value = serde_json::from_slice(&out.stdout).unwrap();
+    let s = &v["symbols"][0];
+    assert_eq!(s["path"], "pkg/math.py", "{v}");
+    assert!(s["callers"].to_string().contains("pkg/report.py"), "{v}");
+    assert!(!root.join("index.scip").exists());
 }

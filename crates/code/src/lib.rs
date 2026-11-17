@@ -116,25 +116,37 @@ fn indexer(root: &Path, out: &Path) -> Result<Indexer> {
     .iter()
     .any(|f| has(f))
     {
-        if cfg!(windows) {
-            bail!(
-                "scip-python cannot run on Windows yet (it crashes at start: github.com/sourcegraph/scip-python/issues/210); index Python projects from WSL, Linux or macOS"
-            );
-        }
         let name = root
             .file_name()
             .map_or_else(|| "project".into(), |n| n.to_string_lossy().into_owned());
+        let mut args = Vec::new();
+        if cfg!(windows) {
+            // Resolve the global npm package beside its PATH shim, never from the project being indexed.
+            let entry = std::env::var_os("PATH")
+                .into_iter()
+                .flat_map(|p| std::env::split_paths(&p).collect::<Vec<_>>())
+                .filter(|p| p.join("scip-python.cmd").is_file())
+                .map(|p| p.join("node_modules/@sourcegraph/scip-python/index.js"))
+                .find(|p| p.is_file())
+                .with_context(|| INSTALL_PY)?;
+            args.extend([
+                "-e".into(),
+                include_str!("scip_python_windows.cjs").into(),
+                entry.into_os_string(),
+            ]);
+        }
+        args.extend([
+            "index".into(),
+            ".".into(),
+            "--project-name".into(),
+            name.into(),
+            "--output".into(),
+            out.into(),
+        ]);
         return Ok(Indexer {
             name: "scip-python",
-            program: "scip-python",
-            args: vec![
-                "index".into(),
-                ".".into(),
-                "--project-name".into(),
-                name.into(),
-                "--output".into(),
-                out.into(),
-            ],
+            program: if cfg!(windows) { "node" } else { "scip-python" },
+            args,
             install: INSTALL_PY,
         });
     }
