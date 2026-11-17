@@ -9,6 +9,8 @@ use std::{
 };
 
 const KEEP_FINISHED: u64 = 7 * 24 * 3600 * 1000;
+/// Finished jobs shown by `footnote jobs` (all running ones are always shown).
+const SHOW_FINISHED: usize = 50;
 
 fn now_ms() -> u64 {
     SystemTime::now()
@@ -101,7 +103,16 @@ pub fn list(state: &Path) -> Result<Value> {
         jobs.push(v);
     }
     jobs.sort_by_key(|v| std::cmp::Reverse(v["started"].as_u64().unwrap_or(0)));
-    Ok(json!({"jobs": jobs}))
+    // Every running job, then the newest finished ones: a busy week must not make the answer too large to read.
+    let total = jobs.len();
+    let mut finished = 0;
+    jobs.retain(|v| {
+        v["state"] == "running" || {
+            finished += 1;
+            finished <= SHOW_FINISHED
+        }
+    });
+    Ok(json!({"jobs": jobs, "total": total, "hidden": total - jobs.len()}))
 }
 
 #[cfg(windows)]
@@ -130,4 +141,33 @@ fn alive(pid: u32) -> bool {
         .stderr(std::process::Stdio::null())
         .status()
         .is_ok_and(|s| s.success())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn running_jobs_always_show_and_finished_ones_are_capped() {
+        let t = tempfile::tempdir().unwrap();
+        let dir = t.path().join("jobs");
+        std::fs::create_dir(&dir).unwrap();
+        let now = now_ms();
+        for i in 0..60u64 {
+            let v = json!({"state": "done", "started": now - 1000 - i, "updated": now});
+            std::fs::write(dir.join(format!("{i}.json")), v.to_string()).unwrap();
+        }
+        let running = json!({"state": "running", "pid": std::process::id(), "started": now - 9_999_999, "updated": now});
+        std::fs::write(dir.join("run.json"), running.to_string()).unwrap();
+        let v = list(t.path()).unwrap();
+        let jobs = v["jobs"].as_array().unwrap();
+        assert_eq!(
+            (jobs.len(), v["total"].as_u64(), v["hidden"].as_u64()),
+            (51, Some(61), Some(10))
+        );
+        assert!(
+            jobs.iter().any(|j| j["state"] == "running"),
+            "the oldest job still shows while it runs"
+        );
+    }
 }

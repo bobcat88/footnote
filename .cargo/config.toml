@@ -1,0 +1,5 @@
+# Tests run the engine without always naming a state folder. This keeps them out of the user's real one (%LOCALAPPDATA%\footnote,
+# ~/.local/state/footnote): on 17 Nov 2026 test runs had left 2,084 job files and 31 corpora there. A test that sets its own
+# folder still wins (force = false). It also applies to `cargo run`; run the installed binary to use the real state.
+[env]
+FOOTNOTE_STATE_DIR = { value = "target/test-state", relative = true, force = false }
