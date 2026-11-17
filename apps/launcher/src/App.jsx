@@ -76,7 +76,7 @@ export default function App() {
         ) : screen === "usage" ? (
           <Usage />
         ) : screen === "code" ? (
-          <Code projects={projects} view={view === "symbol" ? "symbol" : "map"} go={(v) => go(`code/${v}`)} />
+          <Code projects={projects} view={["symbol", "layers"].includes(view) ? view : "map"} go={(v) => go(`code/${v}`)} />
         ) : (
           <Overview status={status} projects={projects} refresh={refresh} />
         )}

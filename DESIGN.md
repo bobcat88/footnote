@@ -111,7 +111,7 @@ and asked for these settings to be applied for him. Composition reference: `.des
   listed as "Calls in". Blocks carry yellow (`--warn`) memory pills from anchored memories. A flow starts at an entry block and
   follows the heaviest references; the lit path animates with dots, but not under reduced motion. The detail panel shows the
   selected flow or block: its memories first, then its steps or links. All colours, type and radii are this section's tokens; the
-  directions' own styles were for choosing structure only. Still to come: a Layers tab (the Strata direction).
+  directions' own styles were for choosing structure only. The Layers tab (the Strata direction) reads the same map top to bottom: entry, features, base, outside, each with its links down.
 
 ## 10. Decision log
 | Date | Decision | Reason | Rejected alternative |

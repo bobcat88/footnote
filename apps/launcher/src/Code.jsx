@@ -32,14 +32,14 @@ export default function Code({ projects, view, go }) {
           <b>{project.name}</b>
         )}
         <div className="tabs" role="tablist" aria-label="Code view">
-          {[["map", "Architecture"], ["symbol", "Symbol"]].map(([k, label]) => (
+          {[["map", "Architecture"], ["layers", "Layers"], ["symbol", "Symbol"]].map(([k, label]) => (
             <button key={k} role="tab" aria-selected={view === k} className="tab" onClick={() => go(k)}>
               {label}
             </button>
           ))}
         </div>
       </div>
-      {view === "symbol" ? <Symbol root={project.path} key={project.path} /> : <Map root={project.path} key={project.path} />}
+      {view === "symbol" ? <Symbol root={project.path} key={project.path} /> : view === "layers" ? <Layers root={project.path} key={project.path} /> : <Map root={project.path} key={project.path} />}
     </div>
   );
 }
@@ -243,6 +243,70 @@ function Map({ root }) {
 }
 
 const short = (n) => n.split("/").pop();
+
+/** Layers (the Strata direction, 17 Nov 2026): the same map read top to bottom. Entry blocks (nothing calls them), base blocks
+ *  (they call no other block), features between, then the outside packages by kind. Under each layer, its links down. */
+function Layers({ root }) {
+  const { data, error, loading } = useRead(["code-map", "--root", root]);
+  if (error) return <Failed error={error} />;
+  if (loading || !data) return <span className="skel" />;
+  const blocks = data.blocks.filter((b) => b.symbols > 0);
+  const links = data.links.filter((l) => blocks.some((b) => b.name === l.from) && blocks.some((b) => b.name === l.to));
+  const calls = (b) => links.some((l) => l.from === b.name);
+  const entry = blocks.filter((b) => b.entry);
+  const base = blocks.filter((b) => !b.entry && !calls(b));
+  const features = blocks.filter((b) => !entry.includes(b) && !base.includes(b));
+  const max = Math.max(1, ...links.map((l) => l.references));
+  const strata = [
+    ["Entry", "Where a run starts: nothing else in the project calls these.", entry],
+    ["Features", "What the project does.", features],
+    ["Base", "Shared by everything: calls no other block.", base],
+  ].filter(([, , list]) => list.length);
+  const down = (list) => links.filter((l) => list.some((b) => b.name === l.from)).sort((a, b) => b.references - a.references);
+  const kinds = KINDS.map(([k, label]) => [label, data.outside.filter((o) => o.class === k)]).filter(([, l]) => l.length);
+  return (
+    <div className="layers">
+      {strata.map(([title, note, list]) => (
+        <section key={title} className="stratum" aria-label={title}>
+          <div><h2 className="title">{title}</h2><p className="dimmed">{note}</p></div>
+          <div className="cells">
+            {list.map((b) => (
+              <div key={b.name} className="cell">
+                <b className="mono">{b.name}</b>
+                <span className="dimmed">{num(b.symbols)} symbols · {num(b.files)} files</span>
+                {b.memories?.count > 0 && <span className="mems">{b.memories.count === 1 ? "1 memory" : `${b.memories.count} memories`}</span>}
+              </div>
+            ))}
+          </div>
+          {down(list).length > 0 && (
+            <ul className="down">
+              {down(list).map((l) => (
+                <li key={l.from + l.to} className={l.references / max > 0.5 ? "heavy" : ""}>
+                  {short(l.from)} → <b>{short(l.to)}</b> {num(l.references)}
+                  <i style={{ width: Math.max(4, 90 * (l.references / max)) }} />
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      ))}
+      {kinds.length > 0 && (
+        <section className="stratum" aria-label="Outside">
+          <div><h2 className="title">Outside</h2><p className="dimmed">Services and runtimes the project calls out to.</p></div>
+          <div className="cells">
+            {kinds.flatMap(([label, list]) => list.map((o) => (
+              <div key={o.package} className="cell">
+                <b className="mono">{o.package}</b>
+                <span className="dimmed">{label.toLowerCase()} · {num(o.references)} refs · {o.used_by.map(short).join(", ")}</span>
+              </div>
+            )))}
+          </div>
+        </section>
+      )}
+      <p className="dimmed">Read top to bottom: each layer calls the ones below it. The longest bars are the heaviest links.</p>
+    </div>
+  );
+}
 
 function Memories({ list }) {
   if (!list?.length) return null;
