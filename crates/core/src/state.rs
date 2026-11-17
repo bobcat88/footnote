@@ -36,6 +36,21 @@ pub fn state_dir() -> Result<PathBuf> {
     Ok(dir)
 }
 
+/// Append one line to a log shared by several processes (metrics, activity, hook errors). The whole line goes out in one write
+/// to a file opened for appending, so lines from processes writing at the same moment never interleave; formatting straight
+/// into the file wrote each line in many small pieces, and lines from the launcher's parallel reads came out shuffled.
+pub fn append_line(path: &Path, line: &str) -> std::io::Result<()> {
+    use std::io::Write;
+    let mut buf = String::with_capacity(line.len() + 1);
+    buf.push_str(line.trim_end_matches('\n'));
+    buf.push('\n');
+    std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)?
+        .write_all(buf.as_bytes())
+}
+
 pub fn audit_path() -> Result<PathBuf> {
     Ok(state_dir()?.join("audit.jsonl"))
 }
@@ -236,5 +251,35 @@ mod tests {
         assert!(!write_private(&path, b"second").unwrap());
         assert_eq!(std::fs::read(&path).unwrap(), b"first");
         std::fs::remove_dir_all(&dir).ok();
+    }
+}
+
+#[cfg(test)]
+mod append_tests {
+    #[test]
+    fn lines_from_writers_at_the_same_moment_never_interleave() {
+        let t = tempfile::tempdir().unwrap();
+        let path = t.path().join("log.jsonl");
+        let workers: Vec<_> = (0..16)
+            .map(|w| {
+                let path = path.clone();
+                std::thread::spawn(move || {
+                    for i in 0..200 {
+                        let line = serde_json::json!({"worker": w, "i": i, "pad": "x".repeat(200)})
+                            .to_string();
+                        super::append_line(&path, &line).unwrap(); // a fresh handle each time, like separate processes
+                    }
+                })
+            })
+            .collect();
+        for w in workers {
+            w.join().unwrap();
+        }
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert_eq!(text.lines().count(), 16 * 200);
+        assert!(
+            text.lines()
+                .all(|l| serde_json::from_str::<serde_json::Value>(l).is_ok())
+        );
     }
 }

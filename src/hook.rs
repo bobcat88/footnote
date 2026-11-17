@@ -3,8 +3,8 @@ use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::{
-    fs::{self, OpenOptions},
-    io::{Read, Write},
+    fs,
+    io::Read,
     path::{Path, PathBuf},
     process::{Command, Stdio},
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
@@ -360,13 +360,7 @@ fn metric(state: &Path, on: bool, mut row: Value) {
                 .as_millis() as u64
         );
         row["pid"] = json!(std::process::id());
-        if let Ok(mut f) = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(state.join("metrics.jsonl"))
-        {
-            let _ = writeln!(f, "{row}");
-        }
+        let _ = crate::state::append_line(&state.join("metrics.jsonl"), &row.to_string());
     }
 }
 
@@ -412,13 +406,10 @@ fn note(s: &Settings, dir: &Path, event: &str, project: &str, v: &Value) {
     let t = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |d| d.as_millis() as u64);
-    if let Ok(mut f) = OpenOptions::new().create(true).append(true).open(&path) {
-        let _ = writeln!(
-            f,
-            "{}",
-            json!({"t": t, "event": event, "project": project, "ids": ids})
-        );
-    }
+    let _ = crate::state::append_line(
+        &path,
+        &json!({"t": t, "event": event, "project": project, "ids": ids}).to_string(),
+    );
 }
 
 fn handle(state: &Path, s: &Settings, event: &Value) -> Result<Option<Value>> {
@@ -527,18 +518,12 @@ pub fn run(embed: bool) {
     if let Err(e) = run_inner(&state, embed) {
         // Keep only the outer stage, never the error chain: SQLite/parser errors can quote user text or paths.
         let dir = state.join("memory-hook");
-        if crate::state::ensure_private_dir(&dir).is_ok()
-            && let Ok(mut log) = OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open(dir.join("hook.log"))
-        {
-            let _ = writeln!(
-                log,
-                "{} hook failed: {}",
-                time::OffsetDateTime::now_utc().unix_timestamp(),
-                e
+        if crate::state::ensure_private_dir(&dir).is_ok() {
+            let line = format!(
+                "{} hook failed: {e}",
+                time::OffsetDateTime::now_utc().unix_timestamp()
             );
+            let _ = crate::state::append_line(&dir.join("hook.log"), &line);
         }
     }
 }

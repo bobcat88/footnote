@@ -64,7 +64,8 @@ mod imp {
         v["t"] = json!(t);
         v["pid"] = json!(std::process::id());
         if let Some(Ok(mut f)) = sink.as_ref().map(|m| m.lock()) {
-            let _ = writeln!(f, "{v}"); // observability never breaks the operation it observes
+            // One write per line (see state::append_line); observability never breaks the operation it observes.
+            let _ = f.write_all(format!("{v}\n").as_bytes());
         }
     }
 
