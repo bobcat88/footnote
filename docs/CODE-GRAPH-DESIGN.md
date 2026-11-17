@@ -275,6 +275,13 @@ lower bound: some extra links are real calls in feature-gated code the compiler 
 calls only (no type references, no functions passed as values) and no guessing. TypeScript and Python are not measured on a large
 project yet.
 
+**Against the incumbent, same files and same scoring (17 November 2026).** codebase-memory-mcp 0.12.1 (tree-sitter plus its own
+resolution), freshly indexed in `fast` mode, its `CALLS` edges exported with their line: **precision 0.52, recall 0.39** (1,424
+links, 733 right). Footnote's base layer: **0.79 and 0.38** (918 links, 728 right). Same recall, about half the wrong links. Its
+errors are the ones the base layer was fixed for: `x.map()` or `x.contains()` linked to a project function of that name through
+its `suffix_match` and `unique_name` strategies. Scripts: `bench/experiments/code-graph/` (`compare_graphs.py` for two
+Footnote graphs, `score_cbm.py` for a codebase-memory export); both keep only files in the compiler graph.
+
 **What makes it more than the competition (Johan, 17 November 2026).**
 - **The base layer resolves names through scopes and imports, not by bare name.** `save` in a file that imports it from
   `./store` links to `store.save`, not to every function called `save`. This is the stack-graphs idea. CodeGraph and
