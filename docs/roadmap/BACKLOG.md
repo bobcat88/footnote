@@ -74,6 +74,10 @@ Plan and decisions: [P1-PLAN.md](P1-PLAN.md) (engine commands first, then design
 
 ## P2: new products
 
+- **Personal corpus (Johan, 17 Nov), planned:** the Second Brain as an encrypted personal corpus after a sensitivity triage, with
+  originals in secure storage, one editable Markdown per original linked by content hash, and benchmarked high-precision OCR.
+  Six gated steps in [PERSONAL-CORPUS-PLAN.md](PERSONAL-CORPUS-PLAN.md); nothing is ingested before Johan approves a step.
+
 12. **Footnote Alias** (pseudonymisation before the LLM): desk study done 16 Nov ([ALIAS-DESK-STUDY.md](../research/ALIAS-DESK-STUDY.md)):
     French identifier rules in Rust (no tool ships them), one small model for names and addresses chosen by measurement on French
     text (GLiNER2-PII, urchade multi PII, OpenAI Privacy Filter as reference), stable keyed pseudonyms. Done 16 Nov: evaluation
