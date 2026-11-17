@@ -67,38 +67,116 @@ fn contains(outer: [i32; 4], at: [i32; 4]) -> bool {
 
 /// What to tell someone without the Rust indexer.
 pub const INSTALL_INDEXER: &str = "Footnote Code needs rust-analyzer to read Rust projects: install it with `rustup component add rust-analyzer`";
+const INSTALL_TS: &str = "Footnote Code needs scip-typescript to read TypeScript projects: install it with `npm install -g @sourcegraph/scip-typescript`";
+const INSTALL_PY: &str = "Footnote Code needs scip-python to read Python projects: install it with `npm install -g @sourcegraph/scip-python`";
+
+/// The compiler-grade indexer for a project, chosen from its marker files (#110). Footnote never writes into the project: a
+/// TypeScript or JavaScript project needs its own tsconfig.json (scip-typescript's --infer-tsconfig would write one there).
+struct Indexer {
+    name: &'static str,
+    program: &'static str,
+    args: Vec<std::ffi::OsString>,
+    install: &'static str,
+}
+
+fn indexer(root: &Path, out: &Path) -> Result<Indexer> {
+    let has = |f: &str| root.join(f).is_file();
+    if has("Cargo.toml") {
+        return Ok(Indexer {
+            name: "rust-analyzer scip",
+            program: "rust-analyzer",
+            args: vec!["scip".into(), root.into(), "--output".into(), out.into()],
+            install: INSTALL_INDEXER,
+        });
+    }
+    if has("tsconfig.json") {
+        return Ok(Indexer {
+            name: "scip-typescript",
+            // npm installs a .cmd launcher on Windows, which Command does not find by name alone.
+            program: if cfg!(windows) {
+                "scip-typescript.cmd"
+            } else {
+                "scip-typescript"
+            },
+            args: vec![
+                "index".into(),
+                "--no-progress-bar".into(),
+                "--output".into(),
+                out.into(),
+            ],
+            install: INSTALL_TS,
+        });
+    }
+    if [
+        "pyproject.toml",
+        "setup.py",
+        "setup.cfg",
+        "requirements.txt",
+    ]
+    .iter()
+    .any(|f| has(f))
+    {
+        if cfg!(windows) {
+            bail!(
+                "scip-python cannot run on Windows yet (it crashes at start: github.com/sourcegraph/scip-python/issues/210); index Python projects from WSL, Linux or macOS"
+            );
+        }
+        let name = root
+            .file_name()
+            .map_or_else(|| "project".into(), |n| n.to_string_lossy().into_owned());
+        return Ok(Indexer {
+            name: "scip-python",
+            program: "scip-python",
+            args: vec![
+                "index".into(),
+                ".".into(),
+                "--project-name".into(),
+                name.into(),
+                "--output".into(),
+                out.into(),
+            ],
+            install: INSTALL_PY,
+        });
+    }
+    if has("package.json") {
+        bail!(
+            "{}: a JavaScript project needs a tsconfig.json (with allowJs) for Footnote Code; Footnote never writes one into your project",
+            root.display()
+        );
+    }
+    bail!(
+        "{}: no Cargo.toml, tsconfig.json or Python project file; Footnote Code reads Rust, TypeScript/JavaScript and Python",
+        root.display()
+    )
+}
 
 /// Run the indexer on `root` and build the graph into `db` (written beside it, then renamed: a reader never sees half a graph).
 pub fn index(root: &Path, db: &Path) -> Result<Value> {
     let started = Instant::now();
-    if !root.join("Cargo.toml").is_file() {
-        bail!(
-            "no Cargo.toml in {}: Footnote Code reads Rust projects for now",
-            root.display()
-        );
-    }
     let parent = db.parent().context("database path")?;
     std::fs::create_dir_all(parent)?;
-    let scip_file = db.with_extension("scip");
-    let out = std::process::Command::new("rust-analyzer")
-        .arg("scip")
-        .arg(root)
-        .arg("--output")
-        .arg(&scip_file)
+    let scip_file = std::path::absolute(db.with_extension("scip"))?;
+    let ix = indexer(root, &scip_file)?;
+    let out = std::process::Command::new(ix.program)
+        .args(&ix.args)
+        .current_dir(root)
         .output();
     let out = match out {
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => bail!(INSTALL_INDEXER),
-        r => r.context("run rust-analyzer")?,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => bail!(ix.install),
+        r => r.with_context(|| format!("run {}", ix.name))?,
     };
     // rustup's proxy exists but the component is missing: it exits with "Unknown binary 'rust-analyzer'".
     if !out.status.success() && String::from_utf8_lossy(&out.stderr).contains("Unknown binary") {
-        bail!(INSTALL_INDEXER);
+        bail!(ix.install);
     }
     if !out.status.success() {
-        bail!(
-            "rust-analyzer scip failed: {}",
-            String::from_utf8_lossy(&out.stderr).trim()
-        );
+        let err = String::from_utf8_lossy(&out.stderr);
+        let msg = if err.trim().is_empty() {
+            String::from_utf8_lossy(&out.stdout).into_owned()
+        } else {
+            err.into_owned()
+        };
+        bail!("{} failed: {}", ix.name, msg.trim());
     }
     let indexer_ms = started.elapsed().as_millis();
     let bytes = std::fs::read(&scip_file)?;
@@ -109,7 +187,7 @@ pub fn index(root: &Path, db: &Path) -> Result<Value> {
     let counts = write(&building, root, &docs)?;
     std::fs::rename(&building, db)?;
     Ok(
-        json!({"root": root, "db": db, "indexer": "rust-analyzer scip", "files": counts.0, "symbols": counts.1,
+        json!({"root": root, "db": db, "indexer": ix.name, "files": counts.0, "symbols": counts.1,
         "references": counts.2, "indexer_ms": indexer_ms, "total_ms": started.elapsed().as_millis()}),
     )
 }

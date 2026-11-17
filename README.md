@@ -200,10 +200,16 @@ text; encryption protects Footnote's store, not what agents write down.
 
 ### Code graph
 
-Footnote Code answers "who calls this, and what does it call" from the compiler's own index, not from a guess. Rust only for now; it needs rust-analyzer (`rustup component add rust-analyzer`), and says so if it is missing.
+Footnote Code answers "who calls this, and what does it call" from the compiler's own index, not from a guess. It picks the indexer from the project's files and says which one is missing:
+
+| Project | Marker | Indexer to install |
+|---|---|---|
+| Rust | `Cargo.toml` | `rustup component add rust-analyzer` |
+| TypeScript, JavaScript | `tsconfig.json` (Footnote never writes one into your project) | `npm install -g @sourcegraph/scip-typescript` |
+| Python | `pyproject.toml`, `setup.py`, `setup.cfg` or `requirements.txt` | `npm install -g @sourcegraph/scip-python` (not on Windows yet: [upstream issue #210](https://github.com/sourcegraph/scip-python/issues/210)) |
 
 ```sh
-footnote code-index .          # build the graph of the Rust project here (seconds; rebuild after big changes)
+footnote code-index .          # build the graph of the project here (seconds; rebuild after big changes)
 footnote code lookup           # the symbol `lookup`: signature, file and lines, callers with call-site lines, callees
 footnote code-map               # architecture map: folders as blocks, links between them, outside packages used
 ```
