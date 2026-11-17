@@ -13,6 +13,8 @@ mod models;
 mod personal;
 #[cfg(feature = "memory")]
 mod projects;
+#[cfg(feature = "memory")]
+mod review;
 mod status;
 mod usage;
 

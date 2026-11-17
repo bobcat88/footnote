@@ -332,6 +332,23 @@ pub fn forget(c: &mut Connection, id: i64) -> Result<Value> {
     Ok(json!({"forgotten": id}))
 }
 
+/// Undo `forget` (or a supersession): the memory is searchable again, at a new revision. Nothing was ever deleted.
+pub fn restore(c: &mut Connection, id: i64) -> Result<Value> {
+    let tx = c.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+    let source = memory_source(&tx, id)?;
+    let status: String = tx.query_row("SELECT status FROM sources WHERE id=?1", [source], |r| {
+        r.get(0)
+    })?;
+    anyhow::ensure!(status != "indexed", "memory {id} is not retired");
+    tx.execute(
+        "UPDATE sources SET status='indexed',revision=revision+1 WHERE id=?1",
+        [source],
+    )?;
+    tx.execute("INSERT INTO search_fts(rowid,text,heading) SELECT id,text,heading FROM chunks WHERE source_id=?1", [source])?;
+    tx.commit()?;
+    Ok(json!({"restored": id, "was": status}))
+}
+
 fn row(r: &rusqlite::Row<'_>) -> rusqlite::Result<Value> {
     Ok(
         json!({"id": r.get::<_, i64>(0)?, "kind": r.get::<_, String>(1)?, "scope": r.get::<_, String>(2)?, "observed_at": r.get::<_, String>(3)?, "text": r.get::<_, String>(4)?}),

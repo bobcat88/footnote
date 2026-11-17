@@ -113,6 +113,17 @@ enum Action {
         id: i64,
     },
     #[cfg(feature = "memory")]
+    /// Bring back an agent memory retired by `forget` or replaced through `supersedes`.
+    MemoryRestore {
+        id: i64,
+    },
+    #[cfg(feature = "memory")]
+    /// Memories worth a second look: near-duplicates, old session summaries, memories no prompt used. Changes nothing.
+    MemoryReview {
+        #[arg(long, default_value_t = 20, value_parser = clap::value_parser!(u16).range(1..=200))]
+        limit: u16,
+    },
+    #[cfg(feature = "memory")]
     /// Add or remove tags on an agent memory (at most 10; lowercase words such as rust, windows, bugfix, resolved).
     MemoryTag {
         id: i64,
@@ -585,6 +596,8 @@ fn execute(cli: Cli) -> Result<Value> {
         Action::Projects => return crate::projects::list(&crate::state::state_dir()?),
         #[cfg(feature = "memory")]
         Action::Activity { days } => return crate::activity::activity(*days),
+        #[cfg(feature = "memory")]
+        Action::MemoryReview { limit } => return crate::review::review(usize::from(*limit)),
         Action::Usage { days } => return crate::usage::usage(*days),
         Action::Find { query, limit } => return crate::find::find(query, usize::from(*limit)),
         Action::Options => return footnote_core::config::options(&crate::state::state_dir()?),
@@ -710,6 +723,8 @@ fn execute(cli: Cli) -> Result<Value> {
         #[cfg(feature = "memory")]
         Action::Forget { id } => crate::memory::forget(&mut c, id),
         #[cfg(feature = "memory")]
+        Action::MemoryRestore { id } => crate::memory::restore(&mut c, id),
+        #[cfg(feature = "memory")]
         Action::MemoryTag { id, add, remove } => crate::memory::retag(&mut c, id, &add, &remove),
         #[cfg(feature = "memory")]
         Action::MemoryRescope { from, to } => crate::memory::rescope(&mut c, &from, &to),
@@ -756,7 +771,7 @@ fn execute(cli: Cli) -> Result<Value> {
         Action::Serve { .. } => unreachable!("serve is dispatched before the database is opened"),
         Action::Mcp => unreachable!("mcp is dispatched before the database is opened"),
         #[cfg(feature = "memory")]
-        Action::Uninstall { .. } | Action::Activity { .. } => {
+        Action::Uninstall { .. } | Action::Activity { .. } | Action::MemoryReview { .. } => {
             unreachable!("dispatched before the database is opened")
         }
         Action::Usage { .. } | Action::Find { .. } => {
@@ -799,6 +814,7 @@ fn writes(a: &Action) -> bool {
         #[cfg(feature = "memory")]
         Action::Remember { .. }
         | Action::Forget { .. }
+        | Action::MemoryRestore { .. }
         | Action::MemoryTag { .. }
         | Action::MemoryRescope { .. } => true,
         Action::Propose { .. } | Action::Validate { .. } | Action::RebuildEmbeddings { .. } => true,
@@ -843,6 +859,10 @@ fn action_name(a: &Action) -> &'static str {
         Action::Remember { .. } => "remember",
         #[cfg(feature = "memory")]
         Action::Forget { .. } => "forget",
+        #[cfg(feature = "memory")]
+        Action::MemoryRestore { .. } => "memory-restore",
+        #[cfg(feature = "memory")]
+        Action::MemoryReview { .. } => "memory-review",
         #[cfg(feature = "memory")]
         Action::MemoryTag { .. } => "memory-tag",
         #[cfg(feature = "memory")]
