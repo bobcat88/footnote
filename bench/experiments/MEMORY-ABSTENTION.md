@@ -88,3 +88,8 @@ model changes:
   the threshold is still the single parameter chosen by the rule.
 - Step 4 matters more here: added time per prompt is reported on an idle machine (Johan confirms idle first), and adoption also
   needs his go on that cost.
+
+**Stopped before scoring (17 November 2026, Johan's call).** Recall itself works (any@3 0.91 on his real memories); the gate would
+only trim irrelevant memories, about 150 to 250 tokens per prompt, which agents already mostly ignore. That gain does not justify a
+2.3 GB model and likely a few hundred milliseconds per prompt. No score was taken with this model; the partial download was deleted.
+Cheaper levers if the noise ever matters: `memory.recall_limit` 2, or a fixture of agent-written memories with no-answer prompts.
