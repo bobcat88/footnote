@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Code map · Strata</title>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,500;6..72,600&family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#17130f;--paper:#1d1814;--rule:#3a3129;--ink:#efe6da;--dim:#b4a796;--mute:#968a7b;--acc:#ff5a36;--band:#241e19}
+*{box-sizing:border-box;margin:0}
+body{background:var(--bg);color:var(--ink);font:15px/1.5 "Instrument Sans",system-ui,sans-serif;min-height:100vh;padding:34px 56px}
+.top{display:flex;align-items:baseline;gap:22px;border-bottom:1px solid var(--rule);padding-bottom:16px}
+h1{font:600 34px/1.1 Newsreader,serif}
+.top .m{font:13px "JetBrains Mono";color:var(--mute)}
+.top .r{margin-left:auto;display:flex;gap:18px;color:var(--dim);font-size:14px}.top .r b{color:var(--ink);font-weight:600;border-bottom:2px solid var(--acc)}
+.layer{display:grid;grid-template-columns:200px 1fr 280px;gap:28px;padding:20px 0;border-bottom:1px solid var(--rule);align-items:start;animation:in .5s ease-out both}
+.layer:nth-of-type(2){animation-delay:.08s}.layer:nth-of-type(3){animation-delay:.16s}.layer:nth-of-type(4){animation-delay:.24s}
+@keyframes in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.lab h2{font:600 22px Newsreader,serif}.lab p{color:var(--mute);font-size:13px}
+.cells{display:flex;gap:12px;flex-wrap:wrap}
+.cell{background:var(--band);border:1px solid var(--rule);border-radius:4px;padding:12px 16px;min-width:190px}
+.cell h3{font:500 15px "JetBrains Mono"}.cell p{color:var(--dim);font-size:13px}.cell .n{font:12px "JetBrains Mono";color:var(--mute);margin-top:6px}
+.cell .mem{color:var(--acc);font:600 12px "Instrument Sans";margin-top:4px}
+.side{font-size:13px;color:var(--dim)}.side b{font:500 13px "JetBrains Mono";color:var(--ink)}
+.down{grid-column:2;display:flex;gap:10px;flex-wrap:wrap;margin-top:-6px}
+.down span{font:12.5px "JetBrains Mono";color:var(--dim);padding:3px 0}
+.down span b{color:var(--ink);font-weight:500}
+.down .heavy{color:var(--acc)}.down .heavy b{color:var(--acc)}
+.bar{display:inline-block;height:6px;background:var(--acc);border-radius:2px;vertical-align:middle;margin-left:6px}
+.foot{margin-top:18px;color:var(--mute);font-size:13px;display:flex;gap:28px}
+@media (prefers-reduced-motion:reduce){.layer{animation:none}}
+</style></head><body>
+<div class="top"><h1>How BorgKnowledge is built</h1><span class="m">8 blocks · 12 links · read from the compiler, 17 Nov 17:42</span>
+<div class="r"><b>Layers</b><span>Symbols</span><span>Inputs and outputs</span></div></div>
+
+<section class="layer"><div class="lab"><h2>Entry</h2><p>Where a run starts</p></div>
+<div class="cells">
+ <div class="cell"><h3>src</h3><p>CLI, MCP server, hook, daemon</p><div class="n">14 files · 453 symbols</div><div class="mem">2 memories</div></div>
+ <div class="cell"><h3>tests</h3><p>End-to-end suites</p><div class="n">29 files · 122 symbols</div></div></div>
+<div class="side">Calls down into <b>5</b> blocks. Heaviest: <b>core</b> 86, <b>search</b> 55.</div>
+<div class="down"><span class="heavy">→ <b>core</b> 86<i class="bar" style="width:86px"></i></span><span class="heavy">→ <b>search</b> 55<i class="bar" style="width:55px"></i></span><span>→ <b>memory</b> 20</span><span>→ <b>library</b> 8</span><span>→ <b>code</b> 4</span></div></section>
+
+<section class="layer"><div class="lab"><h2>Features</h2><p>What Footnote does</p></div>
+<div class="cells">
+ <div class="cell"><h3>crates/search</h3><p>Keyword and vector search</p><div class="n">7 files · 181 symbols</div></div>
+ <div class="cell"><h3>crates/memory</h3><p>Memory, tags, anchors</p><div class="n">2 files · 27 symbols</div><div class="mem">1 memory</div></div>
+ <div class="cell"><h3>crates/code</h3><p>Graph from compiler indexes</p><div class="n">2 files · 49 symbols</div><div class="mem">3 memories</div></div>
+ <div class="cell"><h3>crates/library</h3><p>Docs crawler</p><div class="n">3 files · 41 symbols</div></div>
+ <div class="cell"><h3>crates/alias</h3><p>French identifiers</p><div class="n">2 files · 46 symbols</div></div></div>
+<div class="side">Features lean on search: <b>memory</b> 12, <b>library</b> 4. No feature calls another feature's internals.</div>
+<div class="down"><span class="heavy">search → <b>core</b> 41<i class="bar" style="width:41px"></i></span><span>library → <b>core</b> 14</span><span>memory → <b>search</b> 12</span><span>code → <b>core</b> 2</span><span>alias → <b>core</b> 1</span></div></section>
+
+<section class="layer"><div class="lab"><h2>Base</h2><p>Shared by everything</p></div>
+<div class="cells"><div class="cell"><h3>crates/core</h3><p>State folder, config, hashing, audit log</p><div class="n">6 files · 79 symbols</div></div></div>
+<div class="side">Depends on no other block. <b>145</b> references arrive here.</div></section>
+
+<section class="layer"><div class="lab"><h2>Outside</h2><p>Packages it uses</p></div>
+<div class="cells">
+ <div class="cell"><h3>rusqlite</h3><p>database</p><div class="n">223 refs · core, search, memory</div></div>
+ <div class="cell"><h3>tantivy</h3><p>database</p><div class="n">82 refs · search</div></div>
+ <div class="cell"><h3>ureq · url</h3><p>network</p><div class="n">102 refs · library, src</div></div>
+ <div class="cell"><h3>ort</h3><p>model</p><div class="n">19 refs · search</div></div></div>
+<div class="side">Plus <b>serde_json</b>, <b>anyhow</b> everywhere (1,492 refs).</div></section>
+
+<div class="foot"><span>Read top to bottom: each layer only calls the layers below it.</span><span style="color:var(--acc)">Vermilion = the heaviest links.</span></div>
+</body></html>

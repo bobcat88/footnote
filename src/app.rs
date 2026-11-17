@@ -556,7 +556,9 @@ fn execute(cli: Cli) -> Result<Value> {
         }
         #[cfg(feature = "code")]
         Action::CodeMap { root, depth } => {
-            return footnote_code::map(&code_db(root)?, (*depth).max(1));
+            let mut map = footnote_code::map(&code_db(root)?, (*depth).max(1))?;
+            crate::find::add_block_memories(&mut map);
+            return Ok(map);
         }
         #[cfg(feature = "code")]
         Action::Code { name, root, limit } => {

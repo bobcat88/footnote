@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Code map · Living canvas</title>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#09090b;--grid:#18181c;--card:#111114;--b:#2a2a31;--text:#ededf0;--dim:#a1a1aa;--mute:#8b8b95;--acc:#f59e0b}
+*{box-sizing:border-box;margin:0}
+body{background:var(--bg);color:var(--text);font:13px/1.4 Geist,system-ui,sans-serif;height:100vh;display:grid;grid-template-rows:44px 1fr;grid-template-columns:260px 1fr;overflow:hidden}
+.bar{grid-column:1/3;display:flex;align-items:center;gap:10px;padding:0 14px;border-bottom:1px solid var(--b);color:var(--dim)}
+.bar b{color:var(--text);font-weight:600}.bar .pill{border:1px solid var(--b);border-radius:6px;padding:3px 8px;font-size:12px}
+.bar .r{margin-left:auto;display:flex;gap:8px}
+nav{border-right:1px solid var(--b);padding:14px}
+nav h5{font-size:11px;color:var(--mute);text-transform:uppercase;letter-spacing:.06em;margin:4px 0 8px}
+.flow{border:1px solid var(--b);border-radius:8px;padding:10px;margin-bottom:8px;cursor:pointer}
+.flow.on{border-color:var(--acc);background:rgba(245,158,11,.07)}
+.flow b{display:block;font-weight:600}.flow span{color:var(--mute);font-size:12px}
+.flow ol{margin:8px 0 0 16px;color:var(--dim);font-size:12px}
+main{position:relative;background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);background-size:32px 32px;overflow:hidden}
+svg{position:absolute;inset:0;width:100%;height:100%}
+.c{position:absolute;width:168px;background:var(--card);border:1px solid var(--b);border-radius:6px;padding:9px 11px}
+.c .ic{width:18px;height:18px;border-radius:4px;background:#26262c;display:inline-grid;place-items:center;font-size:10px;margin-right:6px;vertical-align:-3px}
+.c b{font-weight:600}.c p{color:var(--dim);font-size:11.5px;margin-top:2px}.c .t{font:11px "JetBrains Mono";color:var(--mute);margin-top:4px}
+.c.hot{border-color:var(--acc);box-shadow:0 0 0 3px rgba(245,158,11,.12)}
+.c .m{position:absolute;right:8px;top:8px;font-size:10.5px;color:var(--acc)}
+.grp{position:absolute;border:1px solid #23232a;border-radius:10px;background:rgba(255,255,255,.012)}
+.grp span{position:absolute;left:10px;top:7px;font-size:11px;color:var(--mute)}
+.lb{position:absolute;transform:translate(-50%,-50%);background:#16161a;border:1px solid var(--b);border-radius:4px;padding:1px 6px;font-size:11px;color:var(--dim);white-space:nowrap}
+.lb.hot{color:var(--acc);border-color:rgba(245,158,11,.5)}
+</style></head><body>
+<div class="bar"><b>BorgKnowledge</b> › Code › <b>Architecture</b><span class="pill">compiler graph</span><span class="pill">depth 2</span><div class="r"><span class="pill">Search ⌘K</span><span class="pill">Export</span></div></div>
+<nav aria-label="Flows">
+ <h5>Flows</h5>
+ <div class="flow on"><b>A prompt recalls memories</b><span>hook → memory → search → core</span><ol><li>src reads the prompt</li><li>memory filters by scope and tags</li><li>search ranks by words and meaning</li><li>core opens the encrypted store</li></ol></div>
+ <div class="flow"><b>An agent looks up a symbol</b><span>mcp → code → core</span></div>
+ <div class="flow"><b>Crawl and index docs</b><span>library → search → core</span></div>
+ <h5 style="margin-top:16px">Memories on the path</h5>
+ <div class="flow"><b style="color:var(--acc)">crates/memory</b><span>Anchors link memories to files (17 Nov)</span></div>
+</nav>
+<main>
+<div class="grp" style="left:60px;top:60px;width:1030px;height:640px"><span>Footnote One · Cargo workspace</span></div>
+<div class="grp" style="left:1140px;top:60px;width:470px;height:640px"><span>Outside packages</span></div>
+<svg aria-hidden="true"><defs><marker id="h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10z" fill="#71717a"/></marker><marker id="hh" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10z" fill="#f59e0b"/></marker></defs>
+<g fill="none" stroke="#3f3f46" stroke-width="1.3" marker-end="url(#h)">
+<path d="M260 190 C 400 190 420 330 540 330"/><path d="M180 230 L180 420"/><path d="M710 360 C 820 360 820 500 870 520"/><path d="M640 640 L640 560" /><path d="M1000 560 C 1100 560 1150 260 1180 230"/><path d="M1000 600 C 1100 600 1150 350 1180 330"/><path d="M270 460 C 450 600 500 580 560 600" />
+</g>
+<g fill="none" stroke="#f59e0b" stroke-width="1.8" marker-end="url(#hh)"><path d="M180 240 C 180 330 180 360 180 420"/><path d="M260 470 C 380 470 440 360 540 345"/><path d="M710 345 C 800 345 780 520 868 520"/></g>
+</svg>
+<div class="c hot" style="left:96px;top:160px"><span class="m">2 mem</span><span class="ic">▣</span><b>src</b><p>CLI, MCP, hook, daemon</p><div class="t">Rust · 14 files</div></div>
+<div class="c" style="left:330px;top:120px"><span class="ic">◇</span><b>tests</b><p>End-to-end suites</p><div class="t">29 files</div></div>
+<div class="c hot" style="left:96px;top:420px"><span class="m">1 mem</span><span class="ic">◎</span><b>crates/memory</b><p>Scope, tags, anchors</p><div class="t">Rust · 2 files</div></div>
+<div class="c hot" style="left:540px;top:310px"><span class="ic">⌕</span><b>crates/search</b><p>Words and meaning</p><div class="t">Rust · 7 files</div></div>
+<div class="c hot" style="left:868px;top:500px"><span class="ic">▤</span><b>crates/core</b><p>State, config, audit</p><div class="t">Rust · 6 files</div></div>
+<div class="c" style="left:560px;top:580px"><span class="m">3 mem</span><span class="ic">⟨⟩</span><b>crates/code</b><p>Compiler graph</p><div class="t">Rust · 2 files</div></div>
+<div class="c" style="left:330px;top:560px"><span class="ic">⇣</span><b>crates/library</b><p>Docs crawler</p><div class="t">Rust · 3 files</div></div>
+<div class="c" style="left:820px;top:140px"><span class="ic">Aa</span><b>crates/alias</b><p>French identifiers</p><div class="t">Rust · 2 files</div></div>
+<div class="c" style="left:1180px;top:200px"><span class="ic">⛁</span><b>rusqlite</b><p>SQLite</p><div class="t">database · 223 refs</div></div>
+<div class="c" style="left:1180px;top:300px"><span class="ic">⛁</span><b>tantivy</b><p>Keyword index</p><div class="t">database · 82 refs</div></div>
+<div class="c" style="left:1390px;top:200px"><span class="ic">◌</span><b>ort</b><p>ONNX runtime</p><div class="t">model · 19 refs</div></div>
+<div class="c" style="left:1390px;top:300px"><span class="ic">⇄</span><b>ureq</b><p>HTTP client</p><div class="t">network · 47 refs</div></div>
+<span class="lb hot" style="left:180px;top:330px">filters by scope · 20</span>
+<span class="lb hot" style="left:420px;top:420px">ranks with · 12</span>
+<span class="lb hot" style="left:790px;top:440px">stores through · 41</span>
+<span class="lb" style="left:400px;top:250px">searches · 55</span>
+<span class="lb" style="left:1110px;top:420px">reads and writes · 223</span>
+</main>
+</body></html>

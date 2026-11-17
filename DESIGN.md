@@ -105,6 +105,13 @@ and asked for these settings to be applied for him. Composition reference: `.des
 - **Code views, by zoom level:** architecture map (blocks with import counts and outside services as dashed nodes: the inputs and
   outputs), then a block's files, then one symbol's callers and callees. Never the whole graph at once; the full "hairball" only
   as ambient decoration in mini mode.
+- **Architecture map, blueprint layout (Johan, 17 Nov 2026):** chosen as a blend of four studio directions (`.design-studio/codemap`).
+  Three columns: Flows | map | detail. The map sits on a 24 px blueprint grid, with the code in a solid zone and "Calls out" in a
+  dashed zone grouped by kind (databases, model runtimes, network and APIs, files and system). `server` and `mcp` packages are
+  listed as "Calls in". Blocks carry yellow (`--warn`) memory pills from anchored memories. A flow starts at an entry block and
+  follows the heaviest references; the lit path animates with dots, but not under reduced motion. The detail panel shows the
+  selected flow or block: its memories first, then its steps or links. All colours, type and radii are this section's tokens; the
+  directions' own styles were for choosing structure only. Still to come: a Layers tab (the Strata direction).
 
 ## 10. Decision log
 | Date | Decision | Reason | Rejected alternative |

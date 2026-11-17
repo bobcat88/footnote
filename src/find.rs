@@ -181,6 +181,40 @@ pub fn related(name: &str, files: &[String], limit: usize) -> Value {
     json!({"memory": memory, "library": library})
 }
 
+/// Adds `memories: {count, recent}` to each block of an architecture map: memories anchored to files under that block
+/// (the map's memory pills). Without Memory in the build, switched off or unreadable, blocks are left as they are.
+#[cfg(feature = "code")]
+pub fn add_block_memories(map: &mut Value) {
+    #[cfg(feature = "memory")]
+    {
+        let Ok(state) = crate::state::state_dir() else {
+            return;
+        };
+        if !on(&state, "memory") {
+            return;
+        }
+        let Some(c) = crate::status::memory_db(&state)
+            .ok()
+            .filter(|db| db.exists())
+            .and_then(|db| crate::app::open(&db, false).ok())
+        else {
+            return;
+        };
+        for b in map["blocks"].as_array_mut().into_iter().flatten() {
+            let name = b["name"].as_str().unwrap_or("").to_string();
+            if let Ok((count, recent)) = footnote_memory::anchored_under(&c, &name, 3) {
+                let recent: Vec<Value> = recent
+                    .into_iter()
+                    .map(|m| json!({"id": m["id"], "kind": m["kind"], "observed_at": m["observed_at"], "text": text(&m["text"], 300)}))
+                    .collect();
+                b["memories"] = json!({"count": count, "recent": recent});
+            }
+        }
+    }
+    #[cfg(not(feature = "memory"))]
+    let _ = map;
+}
+
 /// Whether `text` names the symbol: written as code (`` `name` `` or `name(`), or as a whole word when the name cannot be an
 /// ordinary word (an underscore, an inner capital or a digit), so `usage` does not match prose about usage.
 #[cfg(all(feature = "code", any(feature = "memory", feature = "library")))]

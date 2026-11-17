@@ -489,6 +489,16 @@ fn memories_anchored_to_code_are_found_by_symbol_or_file() {
     assert_eq!(by(&["src/usage.rs"]).len(), 1);
     assert_eq!(by(&["claude_line", "src/usage.rs"]).len(), 1); // one memory, listed once
     assert!(by(&["src/find.rs"]).is_empty());
+    let under = |f: &str| footnote_memory::anchored_under(&c, f, 5).unwrap().0;
+    assert_eq!(
+        (
+            under("src"),
+            under("sr"),
+            under("src/usage.rs"),
+            under("crates")
+        ),
+        (1, 0, 1, 0)
+    );
     let id = stored["stored"][0]["id"].as_i64().unwrap().to_string();
     run(&db, &["forget", &id], None);
     assert!(

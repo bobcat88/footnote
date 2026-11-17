@@ -70,25 +70,36 @@ const activity = {
 const codeMap = {
   root: "D:/work/atlas-api", origin: "compiler", depth: 2,
   blocks: [
-    { name: "src", files: 14, symbols: 212 },
-    { name: "crates/http", files: 6, symbols: 96 },
-    { name: "crates/store", files: 5, symbols: 74 },
-    { name: "crates/common", files: 4, symbols: 41 },
-    { name: "tests", files: 7, symbols: 58 },
+    { name: "src", files: 14, symbols: 212, entry: true, memories: { count: 2, recent: [
+      { id: 51, kind: "fix", observed_at: "2026-11-14", text: "Requests hung on shutdown because the job queue was dropped first; the server now drains it before exit." },
+      { id: 48, kind: "fact", observed_at: "2026-11-09", text: "Every route returns problem+json errors; the old plain-text errors were removed in v2." }] } },
+    { name: "crates/http", files: 6, symbols: 96, entry: false, memories: { count: 1, recent: [
+      { id: 17, kind: "fact", observed_at: "2026-11-12", text: "The API keeps cursor pagination; offset pagination was dropped after the slow-count incident." }] } },
+    { name: "crates/store", files: 5, symbols: 74, entry: false, memories: { count: 3, recent: [
+      { id: 63, kind: "fix", observed_at: "2026-11-15", text: "Migrations ran twice under two replicas; an advisory lock now guards them." },
+      { id: 60, kind: "fact", observed_at: "2026-11-13", text: "Orders are soft-deleted; reports must filter deleted_at." }] } },
+    { name: "crates/jobs", files: 4, symbols: 58, entry: false },
+    { name: "crates/common", files: 4, symbols: 41, entry: false },
+    { name: "tests", files: 11, symbols: 63, entry: true },
   ],
   links: [
     { from: "src", to: "crates/http", references: 64 },
-    { from: "src", to: "crates/store", references: 38 },
-    { from: "crates/http", to: "crates/common", references: 22 },
-    { from: "crates/store", to: "crates/common", references: 17 },
-    { from: "src", to: "crates/common", references: 9 },
+    { from: "crates/http", to: "crates/store", references: 48 },
+    { from: "crates/store", to: "crates/common", references: 22 },
+    { from: "src", to: "crates/jobs", references: 18 },
+    { from: "crates/jobs", to: "crates/store", references: 15 },
+    { from: "crates/http", to: "crates/common", references: 12 },
+    { from: "tests", to: "crates/http", references: 30 },
   ],
   outside: [
-    { package: "serde_json", version: "1.0.140", references: 310, class: null, used_by: ["crates/http", "src"] },
-    { package: "sqlx", version: "0.8.6", references: 122, class: "database", used_by: ["crates/store"] },
-    { package: "reqwest", version: "0.12.22", references: 48, class: "network", used_by: ["crates/http"] },
-    { package: "async-openai", version: "0.29.0", references: 21, class: "model", used_by: ["src"] },
-    { package: "tokio", version: "1.47.1", references: 19, class: null, used_by: ["crates/http", "src", "crates/store"] },
+    { package: "serde_json", version: "1.0.140", references: 310, class: null, used_by: ["src", "crates/http", "crates/store"] },
+    { package: "axum", version: "0.8.4", references: 120, class: "server", used_by: ["src", "crates/http"] },
+    { package: "sqlx", version: "0.8.6", references: 96, class: "database", used_by: ["crates/store"] },
+    { package: "redis", version: "0.32.4", references: 31, class: "database", used_by: ["crates/jobs"] },
+    { package: "reqwest", version: "0.12.22", references: 27, class: "network", used_by: ["crates/jobs"] },
+    { package: "async-openai", version: "0.29.0", references: 14, class: "model", used_by: ["crates/jobs"] },
+    { package: "walkdir", version: "2.5.0", references: 6, class: "system", used_by: ["src"] },
+    { package: "anyhow", version: "1.0.98", references: 88, class: null, used_by: ["src", "crates/common"] },
   ],
 };
 

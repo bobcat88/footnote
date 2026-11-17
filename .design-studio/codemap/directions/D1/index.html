@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Code map · Model view</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#14171c;--canvas:#181c22;--dot:#2a303a;--panel:#1d2229;--line:#2b323c;--text:#e8ecf1;--dim:#9aa4b1;--mute:#6c7684;
+--acc:#3d7bff;--acc-2:#2f63d6;--out:#2a3038;--out-b:#3a424d;--warn:#f0b13d;--r:12px}
+*{box-sizing:border-box;margin:0}
+body{background:var(--bg);color:var(--text);font:14px/1.45 Manrope,system-ui,sans-serif;height:100vh;display:grid;grid-template-rows:52px 1fr;overflow:hidden}
+header{display:flex;align-items:center;gap:14px;padding:0 20px;border-bottom:1px solid var(--line);background:var(--panel)}
+.crumb{display:flex;align-items:center;gap:8px;color:var(--dim);font-weight:500}
+.crumb b{color:var(--text);font-weight:600}
+.crumb .sep{color:var(--mute)}
+.nav{display:flex;gap:4px}.nav button{width:28px;height:28px;border-radius:7px;border:1px solid var(--line);background:transparent;color:var(--dim);cursor:pointer}
+.seg{margin-left:auto;display:flex;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:2px}
+.seg button{border:0;background:transparent;color:var(--dim);font:600 12px Manrope;padding:5px 12px;border-radius:6px;cursor:pointer}
+.seg button.on{background:var(--panel);color:var(--text);box-shadow:0 0 0 1px var(--line)}
+.meta{font:12px "JetBrains Mono";color:var(--mute)}
+main{position:relative;background:var(--canvas);background-image:radial-gradient(var(--dot) 1px,transparent 1.2px);background-size:22px 22px}
+svg.links{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.sys{position:absolute;left:300px;top:44px;width:1240px;height:880px;border:1.5px dashed #46526a;border-radius:18px;background:rgba(61,123,255,.035)}
+.sys .t{position:absolute;left:22px;top:14px;font-weight:700;font-size:15px}
+.sys .d{position:absolute;left:22px;top:36px;color:var(--dim);font-size:13px}
+.sys .k{position:absolute;right:22px;top:16px;font:12px "JetBrains Mono";color:var(--mute)}
+.box{position:absolute;width:250px;height:132px;border-radius:var(--r);background:var(--acc);color:#fff;padding:30px 18px 14px;display:flex;flex-direction:column;
+box-shadow:0 10px 28px rgba(0,0,0,.35);cursor:pointer;transition:transform .16s ease-out,box-shadow .16s ease-out}
+.box:hover{transform:translateY(-2px);box-shadow:0 16px 34px rgba(0,0,0,.45)}
+.box .mem + .open + h3, .box h3{font-size:17px;font-weight:700;text-align:center}
+.box p{font-size:12.5px;opacity:.88;text-align:center;margin-top:4px;line-height:1.35}
+.box .n{margin-top:auto;display:flex;justify-content:center;gap:14px;font:11.5px "JetBrains Mono";opacity:.8}
+.box .open{position:absolute;right:10px;top:10px;width:20px;height:20px;border-radius:5px;background:rgba(255,255,255,.16);display:grid;place-items:center;font-size:11px}
+.box.tests{background:#33415a}.box.big{width:290px;height:150px}
+.box .mem{position:absolute;left:10px;top:10px;font:600 10.5px Manrope;background:rgba(255,255,255,.18);border-radius:20px;padding:2px 8px}
+.ext{position:absolute;width:190px;height:86px;border-radius:10px;background:var(--out);border:1px solid var(--out-b);padding:12px 14px}
+.ext h4{font-size:14px;font-weight:700}.ext p{font-size:11.5px;color:var(--dim)}.ext .n{font:11px "JetBrains Mono";color:var(--mute);margin-top:6px}
+.ext .tag{position:absolute;right:10px;top:10px;font:600 10px Manrope;color:var(--warn);border:1px solid rgba(240,177,61,.4);border-radius:4px;padding:1px 5px}
+.chip{position:absolute;transform:translate(-50%,-50%);background:#232933;border:1px solid var(--line);color:var(--text);font:12px Manrope;padding:4px 9px;border-radius:7px;white-space:nowrap;box-shadow:0 4px 12px rgba(0,0,0,.3)}
+.chip b{font-family:"JetBrains Mono";font-weight:500;color:#9cc0ff}
+.zoom{position:absolute;left:18px;bottom:18px;display:grid;gap:4px}
+.zoom button{width:32px;height:32px;border-radius:8px;border:1px solid var(--line);background:var(--panel);color:var(--dim);font-size:16px}
+.legend{position:absolute;right:20px;bottom:18px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 14px;font-size:12px;color:var(--dim);display:flex;gap:16px}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:-2px;margin-right:6px}
+.outside{position:absolute;left:1580px;top:100px;font-weight:700;color:var(--dim);font-size:12px;letter-spacing:.06em;text-transform:uppercase}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style></head><body>
+<header>
+  <div class="nav"><button aria-label="Back">‹</button><button aria-label="Forward">›</button></div>
+  <div class="crumb">Footnote Code <span class="sep">/</span> BorgKnowledge <span class="sep">/</span> <b>System view</b></div>
+  <span class="meta">compiler graph · rust-analyzer · 1,052 symbols · indexed 17:42</span>
+  <div class="seg"><button class="on">Model</button><button>Symbols</button><button>Whole graph</button></div>
+</header>
+<main>
+  <svg class="links" viewBox="0 0 1920 1028" preserveAspectRatio="none">
+    <defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#8aa0c4"/></marker></defs>
+    <g stroke="#8aa0c4" stroke-width="1.6" stroke-dasharray="6 5" fill="none" marker-end="url(#a)">
+      <path d="M705 300 L705 610" stroke-width="3"/>
+      <path d="M850 230 C 1000 230 1060 300 1105 350" stroke-width="2.4"/>
+      <path d="M1180 482 C 1180 560 900 600 860 640" stroke-width="2"/>
+      <path d="M640 300 C 560 360 520 400 500 450"/>
+      <path d="M770 300 C 820 360 860 420 880 450"/>
+      <path d="M455 582 C 470 620 560 650 580 660"/>
+    </g>
+  </svg>
+  <section class="sys" aria-label="Footnote One, the system">
+    <div class="t">Footnote One</div><div class="d">The engine binary and its crates · one Cargo workspace</div><div class="k">system · 65 files</div>
+  </section>
+  <div class="box big" style="left:560px;top:150px"><span class="mem">2 memories</span><span class="open" title="Open">⤢</span><h3>src</h3><p>CLI, MCP server, hook and daemon · the app</p><div class="n"><span>14 files</span><span>453 symbols</span></div></div>
+  <div class="box" style="left:1050px;top:350px"><span class="open">⤢</span><h3>crates/search</h3><p>Chunks, keyword and vector search, ranking</p><div class="n"><span>7 files</span><span>181 symbols</span></div></div>
+  <div class="box big" style="left:560px;top:610px"><span class="open">⤢</span><h3>crates/core</h3><p>State folder, config, hashing, audit log</p><div class="n"><span>6 files</span><span>79 symbols</span></div></div>
+  <div class="box" style="left:330px;top:450px"><span class="mem">1 memory</span><span class="open">⤢</span><h3>crates/memory</h3><p>Agent memory, tags, anchors, encryption</p><div class="n"><span>2 files</span><span>27 symbols</span></div></div>
+  <div class="box" style="left:830px;top:450px;width:220px"><span class="mem">3 memories</span><span class="open">⤢</span><h3>crates/code</h3><p>Code graph from compiler indexes</p><div class="n"><span>2 files</span><span>49 symbols</span></div></div>
+  <div class="box" style="left:1260px;top:650px;width:230px"><span class="open">⤢</span><h3>crates/library</h3><p>Documentation crawler and extraction</p><div class="n"><span>3 files</span><span>41 symbols</span></div></div>
+  <div class="box" style="left:1050px;top:150px;width:220px;height:110px;background:#5b4fd6"><span class="open">⤢</span><h3>crates/alias</h3><p>French identifiers, pseudonyms</p><div class="n"><span>2 files</span><span>46 symbols</span></div></div>
+  <div class="box tests" style="left:1300px;top:150px;width:210px;height:110px"><h3>tests</h3><p>End-to-end suites</p><div class="n"><span>29 files</span><span>122 symbols</span></div></div>
+
+  <span class="chip" style="left:705px;top:455px">uses <b>86</b> refs · config, hashing</span>
+  <span class="chip" style="left:985px;top:262px">searches with <b>55</b></span>
+  <span class="chip" style="left:1000px;top:590px">stores through <b>41</b></span>
+  <span class="chip" style="left:520px;top:375px">remembers via <b>20</b></span>
+
+  <div class="outside">Outside · 10 packages</div>
+  <div class="ext" style="left:1580px;top:130px"><span class="tag">database</span><h4>rusqlite</h4><p>SQLite storage</p><div class="n">223 refs · core, search, memory</div></div>
+  <div class="ext" style="left:1580px;top:230px"><span class="tag">database</span><h4>tantivy</h4><p>Keyword index</p><div class="n">82 refs · search</div></div>
+  <div class="ext" style="left:1580px;top:330px"><span class="tag">network</span><h4>ureq · url</h4><p>Model downloads, crawler</p><div class="n">102 refs · library, src</div></div>
+  <div class="ext" style="left:1580px;top:430px"><span class="tag">model</span><h4>ort</h4><p>ONNX embeddings</p><div class="n">19 refs · search</div></div>
+  <div class="ext" style="left:1580px;top:530px;opacity:.75"><h4>serde_json · anyhow</h4><p>Data and errors, everywhere</p><div class="n">1,492 refs</div></div>
+
+  <div class="zoom"><button aria-label="Zoom in">+</button><button aria-label="Zoom out">−</button><button aria-label="Fit">⤢</button></div>
+  <div class="legend"><span><i style="background:var(--acc)"></i>project block</span><span><i style="background:var(--out);border:1px solid var(--out-b)"></i>outside package</span><span>arrow width = references</span><span>⤢ open the block</span></div>
+</main>
+</body></html>

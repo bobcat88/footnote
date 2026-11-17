@@ -88,6 +88,69 @@ pub fn anchored(c: &Connection, anchors: &[String], limit: usize) -> Result<Vec<
     Ok(rows.collect::<rusqlite::Result<_>>()?)
 }
 
+/// Live memories anchored to a file under folder `under` (or to `under` itself): their count and the newest `limit`, for
+/// the architecture map's memory pills. `.` (the project root) matches every file anchor without a folder.
+pub fn anchored_under(c: &Connection, under: &str, limit: usize) -> Result<(i64, Vec<Value>)> {
+    let exists: bool = c.query_row(
+        "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='memory_anchors')",
+        [],
+        |r| r.get(0),
+    )?;
+    if !exists {
+        return Ok((0, vec![]));
+    }
+    // LIKE escapes: a folder named `a_b` must not match `axb/`.
+    let prefix = format!(
+        "{}/",
+        under
+            .replace('\\', "\\\\")
+            .replace('%', "\\%")
+            .replace('_', "\\_")
+    );
+    let filter = if under == "." {
+        "a.anchor NOT LIKE '%/%' AND a.anchor LIKE '%.%'"
+    } else {
+        "(a.anchor = ?1 OR a.anchor LIKE ?2 || '%' ESCAPE '\\')"
+    };
+    let base = format!(
+        "FROM memory_anchors a JOIN sources s ON s.id=a.source_id JOIN memories m ON m.source_id=s.id
+         JOIN chunks ch ON ch.source_id=s.id WHERE s.status='indexed' AND {filter}"
+    );
+    let bind = |sql: &str| -> rusqlite::Result<rusqlite::Statement<'_>> { c.prepare(sql) };
+    let (n, rows): (i64, Vec<Value>) = if under == "." {
+        let n = c.query_row(&format!("SELECT count(DISTINCT s.id) {base}"), [], |r| {
+            r.get(0)
+        })?;
+        let mut q = bind(&format!(
+            "SELECT DISTINCT ch.id, ch.text, m.kind, m.observed_at {base} ORDER BY m.observed_at DESC, ch.id DESC LIMIT ?1"
+        ))?;
+        let v = q
+            .query_map([limit as i64], row)?
+            .collect::<rusqlite::Result<_>>()?;
+        (n, v)
+    } else {
+        let n = c.query_row(
+            &format!("SELECT count(DISTINCT s.id) {base}"),
+            params![under, prefix],
+            |r| r.get(0),
+        )?;
+        let mut q = bind(&format!(
+            "SELECT DISTINCT ch.id, ch.text, m.kind, m.observed_at {base} ORDER BY m.observed_at DESC, ch.id DESC LIMIT ?3"
+        ))?;
+        let v = q
+            .query_map(params![under, prefix, limit as i64], row)?
+            .collect::<rusqlite::Result<_>>()?;
+        (n, v)
+    };
+    fn row(r: &rusqlite::Row) -> rusqlite::Result<Value> {
+        Ok(
+            json!({"id": r.get::<_, i64>(0)?, "text": r.get::<_, String>(1)?, "kind": r.get::<_, String>(2)?,
+                  "observed_at": r.get::<_, String>(3)?}),
+        )
+    }
+    Ok((n, rows))
+}
+
 /// A tag is one short lowercase word or hyphenated phrase: `rust`, `windows`, `bugfix`, `daemon`, `resolved`.
 fn tag(t: &str) -> Result<&str> {
     let ok = (1..=32).contains(&t.len())

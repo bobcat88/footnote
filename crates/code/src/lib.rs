@@ -387,18 +387,60 @@ pub fn lookup(db: &Path, name: &str, limit: usize) -> Result<Value> {
     Ok(json!({"root": root, "origin": "compiler", "symbols": found, "stale": stale}))
 }
 
-/// What an outside package is for, from a short hand-written list; `None` when not listed.
+/// What an outside package is for, from a hand-written list across Rust, JavaScript and Python; `None` when not listed.
+/// `server` and `mcp` mean the project is called in (it serves HTTP or MCP); the other kinds are what it calls out to.
+/// shortcut: a fixed list; unknown packages stay unclassed. Grow it when real projects show common misses.
 fn class(package: &str) -> Option<&'static str> {
     Some(match package {
-        "rusqlite" | "sqlx" | "diesel" | "postgres" | "tokio-postgres" | "redis" | "mongodb"
-        | "sled" | "rocksdb" | "duckdb" | "libsql" | "tantivy" | "qdrant-client" | "lancedb"
-        | "sea-orm" => "database",
-        "reqwest" | "ureq" | "hyper" | "axum" | "actix-web" | "warp" | "tonic" | "url" | "http"
-        | "isahc" | "surf" | "tungstenite" | "tokio-tungstenite" | "rocket" | "poem" | "iroh" => {
-            "network"
-        }
-        "async-openai" | "openai" | "anthropic" | "ollama-rs" | "rig-core" | "genai" | "ort"
-        | "llama-cpp-2" | "candle-core" | "tokenizers" | "mistralrs" => "model",
+        "rusqlite"
+        | "sqlx"
+        | "diesel"
+        | "postgres"
+        | "tokio-postgres"
+        | "redis"
+        | "mongodb"
+        | "sled"
+        | "rocksdb"
+        | "duckdb"
+        | "libsql"
+        | "tantivy"
+        | "qdrant-client"
+        | "lancedb"
+        | "sea-orm"
+        | "pg"
+        | "mysql2"
+        | "better-sqlite3"
+        | "sqlite3"
+        | "@prisma/client"
+        | "prisma"
+        | "mongoose"
+        | "ioredis"
+        | "typeorm"
+        | "drizzle-orm"
+        | "knex"
+        | "sqlalchemy"
+        | "psycopg"
+        | "psycopg2"
+        | "pymongo"
+        | "asyncpg"
+        | "chromadb"
+        | "pinecone"
+        | "@supabase/supabase-js"
+        | "firebase-admin" => "database",
+        "axum" | "actix-web" | "warp" | "rocket" | "poem" | "tonic" | "express" | "fastify"
+        | "koa" | "hono" | "@nestjs/core" | "next" | "fastapi" | "flask" | "django"
+        | "starlette" | "aiohttp" => "server",
+        "rmcp" | "mcp-sdk" | "@modelcontextprotocol/sdk" | "mcp" | "fastmcp" => "mcp",
+        "reqwest" | "ureq" | "hyper" | "url" | "http" | "isahc" | "surf" | "tungstenite"
+        | "tokio-tungstenite" | "iroh" | "axios" | "node-fetch" | "undici" | "got" | "ky"
+        | "requests" | "httpx" | "urllib3" | "websockets" | "stripe" | "@aws-sdk/client-s3"
+        | "boto3" | "googleapis" => "network",
+        "async-openai" | "openai" | "anthropic" | "@anthropic-ai/sdk" | "ollama-rs" | "ollama"
+        | "rig-core" | "genai" | "ort" | "llama-cpp-2" | "candle-core" | "tokenizers"
+        | "mistralrs" | "langchain" | "@langchain/core" | "transformers" | "torch"
+        | "onnxruntime" | "onnxruntime-node" | "ai" => "model",
+        "windows-sys" | "windows" | "libc" | "nix" | "walkdir" | "notify" | "dirs" | "keyring"
+        | "fs-extra" | "chokidar" | "watchdog" | "psutil" | "zstd" => "system",
         "std" | "core" | "alloc" => "standard library",
         _ => return None,
     })
@@ -489,7 +531,9 @@ pub fn map(db: &Path, depth: usize) -> Result<Value> {
     outside.sort_by(|a, b| b.1.0.cmp(&a.1.0).then(a.0.cmp(&b.0)));
     Ok(json!({
         "root": root, "origin": "compiler", "depth": depth,
-        "blocks": blocks.iter().map(|(b, (f, s))| json!({"name": b, "files": f, "symbols": s})).collect::<Vec<_>>(),
+        // An entry block is one no other block references: where a run, a request or a test starts.
+        "blocks": blocks.iter().map(|(b, (f, s))| json!({"name": b, "files": f, "symbols": s,
+            "entry": !links.iter().any(|((_, to), _)| to == b)})).collect::<Vec<_>>(),
         "links": links.iter().map(|((a, b), n)| json!({"from": a, "to": b, "references": n})).collect::<Vec<_>>(),
         "outside": outside.iter().map(|((p, v), (n, used))| json!({"package": p, "version": v, "references": n,
             "class": class(p), "used_by": used})).collect::<Vec<_>>(),

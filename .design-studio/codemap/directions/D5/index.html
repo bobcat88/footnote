@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Code map · Blueprint</title>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0a1311;--bp:#0d1a17;--grid:#14251f;--grid2:#1a3029;--tile:#101c19;--line:#22372f;--text:#e6efeb;--dim:#a3b8b0;--mute:#82988f;
+--acc:#2dd4bf;--soft:rgba(45,212,191,.13);--pin:#f5c46b;--db:#8ab4ff;--net:#f4a261;--model:#c49bff;--mcp:#2dd4bf;--disk:#b5c4bd}
+*{box-sizing:border-box;margin:0}
+body{background:var(--bg);color:var(--text);font:14px/1.45 "Plus Jakarta Sans",system-ui,sans-serif;height:100vh;display:grid;grid-template-columns:300px 1fr 380px;grid-template-rows:56px 1fr;overflow:hidden}
+header{grid-column:1/4;display:flex;align-items:center;gap:16px;padding:0 22px;border-bottom:1px solid var(--line)}
+header h1{font-size:16px;font-weight:700}header .sub{font:12px "JetBrains Mono";color:var(--mute)}
+.tabs{margin-left:auto;display:flex;gap:6px}.tabs span{padding:6px 14px;border-radius:999px;color:var(--dim);font-weight:600;font-size:13px}.tabs .on{background:var(--soft);color:var(--acc)}
+nav{border-right:1px solid var(--line);padding:18px;overflow:auto}
+nav h2{font-size:12px;color:var(--mute);font-weight:600;letter-spacing:.05em;margin:0 0 10px}
+.flow{border:1px solid var(--line);border-radius:14px;padding:12px;margin-bottom:8px;cursor:pointer}
+.flow.on{border-color:var(--acc);background:var(--soft)}
+.flow b{display:block;font-weight:600}.flow span{color:var(--mute);font:12px "JetBrains Mono"}
+.flow ol{margin:8px 0 0 18px;color:var(--dim);font-size:12.5px}
+main{position:relative;overflow:hidden;background-color:var(--bp);
+background-image:linear-gradient(var(--grid2) 1px,transparent 1px),linear-gradient(90deg,var(--grid2) 1px,transparent 1px),linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);
+background-size:120px 120px,120px 120px,24px 24px,24px 24px}
+svg{position:absolute;inset:0;width:100%;height:100%}
+.zone{position:absolute;border-radius:22px}
+.zone>.zt{position:absolute;left:18px;top:-11px;background:var(--bp);padding:0 8px;font:600 12px "JetBrains Mono";letter-spacing:.04em}
+.code{left:250px;top:40px;width:640px;height:880px;border:1.5px solid #2c4a41;background:rgba(45,212,191,.025)}
+.code>.zt{color:var(--acc)}
+.in{left:24px;top:40px;width:190px;height:880px;border:1.5px dashed #2c4a41}.in>.zt{color:var(--dim)}
+.out{left:930px;top:40px;width:270px;height:880px;border:1.5px dashed #2c4a41}.out>.zt{color:var(--dim)}
+.tile{position:absolute;width:200px;padding:13px 15px;border-radius:18px;background:var(--tile);border:1px solid var(--line);cursor:pointer;transition:border-color .16s ease-out,transform .16s ease-out}
+.tile:hover{transform:translateY(-2px);border-color:#35564c}
+.tile.on{border-color:var(--acc);box-shadow:0 0 0 4px var(--soft)}
+.tile h3{font-size:15px;font-weight:700}.tile p{color:var(--dim);font-size:12.5px}.tile .n{font:12px "JetBrains Mono";color:var(--mute);margin-top:6px}
+.pin{position:absolute;top:-11px;right:12px;background:var(--pin);color:#2b1d00;font:700 11px "Plus Jakarta Sans";padding:3px 9px;border-radius:999px;box-shadow:0 0 0 3px var(--bp)}
+.kind{font:600 11px "JetBrains Mono";letter-spacing:.04em;margin:18px 0 6px 16px}
+.ext{position:absolute;left:946px;width:238px;padding:9px 12px;border-radius:12px;border:1px solid var(--line);background:rgba(10,19,17,.85);display:flex;gap:10px;align-items:center}
+.ext i{width:8px;height:8px;border-radius:50%;flex:none}
+.ext b{font-weight:600}.ext span{color:var(--mute);font:12px "JetBrains Mono";margin-left:auto}
+.ext small{display:block;color:var(--dim);font-size:12px}
+.cin{position:absolute;left:40px;width:158px;padding:10px 12px;border-radius:12px;border:1px solid var(--line);background:rgba(10,19,17,.85)}
+.cin b{font-weight:600;display:block}.cin small{color:var(--dim);font-size:12px}
+.lbl{font:500 12px "JetBrains Mono";fill:var(--dim)}
+.flowdot{fill:var(--acc)}
+aside{border-left:1px solid var(--line);padding:20px 22px;overflow:auto;background:var(--bg)}
+aside h2{font-size:22px;font-weight:700}aside .p{color:var(--dim);margin-top:2px}
+aside h3{margin:20px 0 8px;font-size:12px;color:var(--mute);font-weight:600;letter-spacing:.05em;display:flex;justify-content:space-between}
+.mem{background:var(--tile);border:1px solid var(--line);border-radius:14px;padding:11px 13px;margin-bottom:8px}
+.mem .m{font:12px "JetBrains Mono";color:var(--pin)}.mem p{font-size:13px;margin-top:3px}
+.row{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--line);font-size:13px}.row span:last-child{font-family:"JetBrains Mono";color:var(--dim)}
+@media (prefers-reduced-motion:reduce){.moving{display:none}}
+</style></head><body>
+<header><h1>Architecture</h1><span class="sub">BorgKnowledge · compiler graph · 1,052 symbols · 3,103 references</span>
+<div class="tabs"><span class="on">Map</span><span>Layers</span><span>Symbols</span></div></header>
+
+<nav aria-label="Flows">
+ <h2>FLOWS</h2>
+ <div class="flow on"><b>A prompt recalls memories</b><span>agent → hook → memory → search → core → memory.db</span>
+  <ol><li>The agent's hook sends the prompt to src</li><li>memory filters by scope and tags</li><li>search ranks by words and meaning (ort)</li><li>core reads the encrypted store</li></ol></div>
+ <div class="flow"><b>An agent looks up a symbol</b><span>agent → MCP → code → graph db</span></div>
+ <div class="flow"><b>Crawl and index docs</b><span>docs site → library → search → corpus db</span></div>
+ <div class="flow"><b>Install a model</b><span>src → ureq → Hugging Face</span></div>
+</nav>
+
+<main>
+ <section class="zone in" aria-label="Calls in"><span class="zt">CALLS IN</span></section>
+ <section class="zone code" aria-label="The code"><span class="zt">THE CODE · Footnote One</span></section>
+ <section class="zone out" aria-label="Calls out"><span class="zt">CALLS OUT</span></section>
+
+ <svg aria-hidden="true">
+  <g fill="none" stroke="#284239">
+   <path id="a1" d="M198 150 C 240 150 250 150 280 150" stroke-width="3"/>
+   <path id="a2" d="M198 250 C 240 250 250 180 280 170" stroke-width="2"/>
+   <path id="f1" d="M380 210 C 380 300 380 330 380 370" stroke-width="4"/>
+   <path id="f2" d="M480 410 C 560 410 580 410 640 410" stroke-width="3"/>
+   <path id="f3" d="M740 460 C 740 560 600 620 560 650" stroke-width="5"/>
+   <path id="f4" d="M480 170 C 600 170 700 260 740 370" stroke-width="5"/>
+   <path id="f5" d="M420 210 C 460 400 480 600 470 650" stroke-width="6"/>
+   <path d="M640 760 C 600 740 580 720 560 700" stroke-width="2"/>
+   <path d="M800 430 C 870 400 900 300 946 260" stroke-width="2" stroke-dasharray="5 5"/>
+   <path d="M560 720 C 800 760 880 140 946 140" stroke-width="2.5" stroke-dasharray="5 5"/>
+   <path d="M800 450 C 880 470 900 400 946 400" stroke-width="1.6" stroke-dasharray="5 5"/>
+   <path d="M720 800 C 820 800 880 520 946 520" stroke-width="1.6" stroke-dasharray="5 5"/>
+   <path d="M480 160 C 700 120 850 640 946 640" stroke-width="1.4" stroke-dasharray="5 5"/>
+  </g>
+  <g stroke="var(--acc)" stroke-width="2.4" fill="none" opacity=".85"><path d="M198 150 C 240 150 250 150 280 150"/><path d="M380 210 C 380 300 380 330 380 370"/><path d="M480 410 C 560 410 580 410 640 410"/><path d="M740 460 C 740 560 600 620 560 650"/></g>
+  <g class="moving">
+   <circle r="3.4" class="flowdot"><animateMotion dur="1.2s" repeatCount="indefinite"><mpath href="#a1"/></animateMotion></circle>
+   <circle r="3.4" class="flowdot"><animateMotion dur="1.4s" repeatCount="indefinite"><mpath href="#f1"/></animateMotion></circle>
+   <circle r="3.4" class="flowdot"><animateMotion dur="1.6s" repeatCount="indefinite"><mpath href="#f2"/></animateMotion></circle>
+   <circle r="3.4" class="flowdot"><animateMotion dur="1.6s" begin="-.8s" repeatCount="indefinite"><mpath href="#f3"/></animateMotion></circle>
+  </g>
+  <text class="lbl" x="390" y="300">filters · 20</text><text class="lbl" x="530" y="398">ranks · 12</text><text class="lbl" x="660" y="590">stores · 41</text>
+  <text class="lbl" x="520" y="125">searches · 55</text><text class="lbl" x="440" y="560">uses · 86</text>
+ </svg>
+
+ <div class="cin" style="top:120px"><b>Agents over MCP</b><small>Claude Code, Codex · 13 tools</small></div>
+ <div class="cin" style="top:220px"><b>Agent hook</b><small>every prompt, every stop</small></div>
+ <div class="cin" style="top:320px"><b>CLI and launcher</b><small>footnote …</small></div>
+
+ <div class="tile on" style="left:280px;top:110px"><span class="pin">2 memories</span><h3>src</h3><p>CLI, MCP server, hook, daemon</p><div class="n">14 files · 453 symbols</div></div>
+ <div class="tile on" style="left:280px;top:370px"><span class="pin">1 memory</span><h3>crates/memory</h3><p>Scope, tags, anchors</p><div class="n">2 files · 27 symbols</div></div>
+ <div class="tile on" style="left:640px;top:370px;width:220px"><h3>crates/search</h3><p>Words and meaning</p><div class="n">7 files · 181 symbols</div></div>
+ <div class="tile on" style="left:360px;top:650px;width:220px"><h3>crates/core</h3><p>State, config, encrypted store</p><div class="n">6 files · 79 symbols</div></div>
+ <div class="tile" style="left:640px;top:180px;width:200px"><span class="pin">3 memories</span><h3>crates/code</h3><p>Compiler graph</p><div class="n">2 files · 49 symbols</div></div>
+ <div class="tile" style="left:640px;top:740px;width:200px"><h3>crates/library</h3><p>Docs crawler</p><div class="n">3 files · 41 symbols</div></div>
+ <div class="tile" style="left:640px;top:60px;width:200px;opacity:.7;padding:9px 15px"><h3>crates/alias</h3><p>French identifiers · 46 symbols</p></div>
+
+ <div style="position:absolute;left:930px;top:80px;width:270px">
+  <div class="kind" style="color:var(--db)">DATABASES</div></div>
+ <div class="ext" style="top:118px"><i style="background:var(--db)"></i><div><b>SQLite</b><small>memory.db, corpora, graphs · rusqlite</small></div><span>223</span></div>
+ <div class="ext" style="top:190px"><i style="background:var(--db)"></i><div><b>Keyword index</b><small>tantivy</small></div><span>82</span></div>
+ <div style="position:absolute;left:930px;top:240px;width:270px"><div class="kind" style="color:var(--model)">MODEL RUNTIMES</div></div>
+ <div class="ext" style="top:278px"><i style="background:var(--model)"></i><div><b>ONNX Runtime</b><small>embeddings · ort</small></div><span>19</span></div>
+ <div style="position:absolute;left:930px;top:332px;width:270px"><div class="kind" style="color:var(--net)">NETWORK · APIs</div></div>
+ <div class="ext" style="top:370px"><i style="background:var(--net)"></i><div><b>Hugging Face</b><small>model downloads · ureq</small></div><span>47</span></div>
+ <div class="ext" style="top:442px"><i style="background:var(--net)"></i><div><b>Documentation sites</b><small>crawler · ureq, url</small></div><span>55</span></div>
+ <div style="position:absolute;left:930px;top:496px;width:270px"><div class="kind" style="color:var(--disk)">FILES AND SYSTEM</div></div>
+ <div class="ext" style="top:534px"><i style="background:var(--disk)"></i><div><b>State folder</b><small>%LOCALAPPDATA%\footnote</small></div><span>—</span></div>
+ <div class="ext" style="top:606px"><i style="background:var(--disk)"></i><div><b>Windows key store</b><small>recovery key · windows-sys</small></div><span>—</span></div>
+ <div class="ext" style="top:678px"><i style="background:var(--disk)"></i><div><b>Indexers</b><small>rust-analyzer, scip-typescript, scip-python</small></div><span>—</span></div>
+ <div style="position:absolute;left:946px;top:770px;width:238px;color:var(--mute);font-size:12.5px">Libraries without an outside service (serde_json, anyhow, time…) stay off the map: 1,492 references.</div>
+</main>
+
+<aside aria-label="Selected flow">
+ <h2>A prompt recalls memories</h2><p class="p">Lit on the map: agent → hook → src → memory → search → core → SQLite.</p>
+ <h3>MEMORIES ON THIS PATH <span>3</span></h3>
+ <div class="mem"><div class="m">fact · 17 Nov · crates/memory</div><p>Memories carry code anchors; a lookup lists them by file or symbol.</p></div>
+ <div class="mem"><div class="m">fix · 17 Nov · src/usage.rs</div><p>Limits come from Codex rate_limits lines; Claude Code writes one only when hit.</p></div>
+ <div class="mem"><div class="m">fact · 16 Nov · crates/core</div><p>Personal memory runs on an encrypted store with a recovery key.</p></div>
+ <h3>STEPS <span>references</span></h3>
+ <div class="row"><span>src → crates/memory</span><span>20</span></div>
+ <div class="row"><span>crates/memory → crates/search</span><span>12</span></div>
+ <div class="row"><span>crates/search → crates/core</span><span>41</span></div>
+ <div class="row"><span>crates/core → SQLite</span><span>223</span></div>
+</aside>
+</body></html>
