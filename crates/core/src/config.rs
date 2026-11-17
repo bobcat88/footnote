@@ -82,6 +82,13 @@ pub fn catalogue() -> Vec<OptionSpec> {
             cost: "A local log of memory ids, projects and times (memory-hook/activity.jsonl, capped at 512 KB); never what you asked",
         },
         OptionSpec {
+            key: "usage.lean_log",
+            default: json!(true),
+            range: None,
+            gain: "The Usage view shows what Footnote's trimmed search results saved, measured on each call",
+            cost: "One line per agent search in usage/lean.jsonl in the state folder (time, tool, two sizes; never text), capped at about 1 MB",
+        },
+        OptionSpec {
             key: "memory.metrics",
             default: json!(false),
             range: None,

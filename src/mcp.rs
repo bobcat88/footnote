@@ -438,7 +438,10 @@ fn initialize(params: &Value) -> Value {
 }
 
 fn run_tool(db: &Path, name: &str, args: &Value) -> Value {
-    match crate::metrics::timed!(format!("mcp.{name}"), dispatch(db, name, args)) {
+    footnote_search::store::take_lean_bytes(); // only this call's results count
+    let result = crate::metrics::timed!(format!("mcp.{name}"), dispatch(db, name, args));
+    log_lean(name);
+    match result {
         Ok(value) => {
             let text = value.to_string();
             if text.len() > MAX_RESPONSE {
@@ -452,6 +455,40 @@ fn run_tool(db: &Path, name: &str, args: &Value) -> Value {
         }
         Err(e) => tool_envelope(format!("{e:#}"), true),
     }
+}
+
+/// Measured saving of lean results (usage view): one line per tool call that returned search results, with the bytes before and
+/// after trimming and never any text. Option `usage.lean_log`; the file is capped by keeping one older generation.
+fn log_lean(tool: &str) {
+    let (before, after) = footnote_search::store::take_lean_bytes();
+    if before == 0 {
+        return;
+    }
+    let Ok(state) = crate::state::state_dir() else {
+        return;
+    };
+    let on = footnote_core::config::product_settings(&state, "usage")
+        .map_or(true, |v| v["lean_log"].as_bool().unwrap_or(true));
+    if !on {
+        return;
+    }
+    let path = state.join("usage").join("lean.jsonl");
+    if std::fs::metadata(&path).is_ok_and(|m| m.len() > 512 * 1024) {
+        let _ = std::fs::rename(&path, path.with_extension("jsonl.old"));
+    }
+    let line =
+        json!({"t": footnote_core::audit::now_ms(), "tool": tool, "before": before, "after": after})
+            .to_string()
+            + "
+";
+    let _ = std::fs::create_dir_all(path.parent().expect("usage folder"))
+        .and_then(|()| {
+            std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&path)
+        })
+        .and_then(|mut f| std::io::Write::write_all(&mut f, line.as_bytes()));
 }
 
 fn tool_envelope(text: String, is_error: bool) -> Value {

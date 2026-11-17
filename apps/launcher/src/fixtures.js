@@ -129,7 +129,7 @@ const usage = {
   ],
   by_agent: [{ agent: "claude-code", requests: 4050 }, { agent: "codex", requests: 580 }],
   unpriced_models: [],
-  measured_savings: { source: "rtk gain --daily", rtk: { saved_tokens: 419000, before_tokens: 2998000, after_tokens: 2579000, saved_share: 0.14, commands: 6400, by_day: [] } },
+  measured_savings: { source: "rtk gain --daily", footnote: { calls: 412, saved_bytes: 1_840_000, saved_tokens_estimate: 460_000 }, rtk: { saved_tokens: 419000, before_tokens: 2998000, after_tokens: 2579000, saved_share: 0.14, commands: 6400, by_day: [] } },
 };
 
 export const fixtures = {

@@ -402,18 +402,17 @@ pub fn usage(days: u16) -> Result<Value> {
 /// what it removes never reaches the agent, so it is not in the session counts above (no double counting).
 fn measured_savings(first: &str) -> Value {
     let not_measured = json!([
-        "Footnote's own lean results: sizes before and after are not recorded yet",
         "behaviour skills such as ponytail: a saving exists only against a benchmark without them, so it is an estimate, not shown here"
     ]);
     let rtk = run_rtk().map(|v| rtk_days(&v, first));
     match rtk {
         Ok(days) => {
-            json!({"source": "rtk gain --daily (RTK's own count of tokens before and after its filters)",
+            json!({"source": "rtk gain --daily (RTK's own count of tokens before and after its filters)", "footnote": lean_days(first),
                            "note": "tokens the agent never had to read; dates as RTK records them (local time); not priced, because a trimmed result would also have been re-read at cache rates on later turns",
                            "rtk": days, "not_measured": not_measured})
         }
         Err(e) => {
-            json!({"source": "rtk", "available": false, "reason": format!("{e:#}"), "not_measured": not_measured})
+            json!({"source": "rtk", "available": false, "reason": format!("{e:#}"), "footnote": lean_days(first), "not_measured": not_measured})
         }
     }
 }
@@ -447,6 +446,42 @@ fn run_rtk() -> Result<Value> {
     serde_json::from_slice(&out).map_err(|_| {
         anyhow::anyhow!("rtk gain gave no JSON (an RTK version without --format json?)")
     })
+}
+
+/// Footnote's own lean results from `first` on: bytes before and after trimming, summed per day (dates in UTC), from
+/// usage/lean.jsonl. Tokens are an estimate (bytes / 4); bytes are what was measured.
+fn lean_days(first: &str) -> Value {
+    let Ok(state) = crate::state::state_dir() else {
+        return json!(null);
+    };
+    let dir = state.join("usage");
+    let mut by: BTreeMap<String, (u64, u64, u64)> = BTreeMap::new();
+    for file in ["lean.jsonl.old", "lean.jsonl"] {
+        let text = std::fs::read_to_string(dir.join(file)).unwrap_or_default();
+        for v in text
+            .lines()
+            .filter_map(|l| serde_json::from_str::<Value>(l).ok())
+        {
+            let date = v["t"]
+                .as_i64()
+                .and_then(|ms| time::OffsetDateTime::from_unix_timestamp(ms / 1000).ok())
+                .map(|t| t.date().to_string());
+            let Some(date) = date.filter(|d| d.as_str() >= first) else {
+                continue;
+            };
+            let e = by.entry(date).or_default();
+            e.0 += 1;
+            e.1 += v["before"].as_u64().unwrap_or(0);
+            e.2 += v["after"].as_u64().unwrap_or(0);
+        }
+    }
+    let (calls, before, after) = by
+        .values()
+        .fold((0, 0, 0), |a, d| (a.0 + d.0, a.1 + d.1, a.2 + d.2));
+    json!({"source": "Footnote's lean search results, measured on each agent call (usage.lean_log)",
+        "calls": calls, "before_bytes": before, "after_bytes": after, "saved_bytes": before.saturating_sub(after),
+        "saved_tokens_estimate": before.saturating_sub(after) / 4,
+        "by_day": by.into_iter().map(|(d, (c, b, a))| json!({"date": d, "calls": c, "before_bytes": b, "after_bytes": a})).collect::<Vec<_>>()})
 }
 
 /// RTK's daily rows from `first` on, plus their totals.

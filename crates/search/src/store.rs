@@ -376,7 +376,24 @@ pub fn hit(r: &rusqlite::Row<'_>, full: bool) -> rusqlite::Result<Value> {
 }
 /// What a search returns per hit: where it is and what it says. Hashes, revision, status and extractor stay in `get <id>`;
 /// the untrusted-data label is stated once per response (`TRUST`). About a third fewer characters per result list.
+/// Bytes of search results before and after `lean`, since the last `take_lean_bytes` (the usage view's measured saving).
+static LEAN_BYTES: [std::sync::atomic::AtomicU64; 2] = [
+    std::sync::atomic::AtomicU64::new(0),
+    std::sync::atomic::AtomicU64::new(0),
+];
+
+/// Bytes counted by `lean` since the last call: (before, after). Resets the counters.
+pub fn take_lean_bytes() -> (u64, u64) {
+    use std::sync::atomic::Ordering::Relaxed;
+    (
+        LEAN_BYTES[0].swap(0, Relaxed),
+        LEAN_BYTES[1].swap(0, Relaxed),
+    )
+}
+
 pub fn lean(mut hits: Vec<Value>) -> Vec<Value> {
+    let size = |h: &Vec<Value>| serde_json::to_vec(h).map_or(0, |b| b.len() as u64);
+    let before = size(&hits);
     for v in &mut hits {
         if let Some(o) = v.as_object_mut() {
             for k in ["sha256", "revision", "status", "extractor", "trust"] {
@@ -391,6 +408,9 @@ pub fn lean(mut hits: Vec<Value>) -> Vec<Value> {
             }
         }
     }
+    use std::sync::atomic::Ordering::Relaxed;
+    LEAN_BYTES[0].fetch_add(before, Relaxed);
+    LEAN_BYTES[1].fetch_add(size(&hits), Relaxed);
     hits
 }
 /// Windows canonical paths carry the verbatim prefix `\\?\`, which many tools cannot open; agents get the ordinary form.

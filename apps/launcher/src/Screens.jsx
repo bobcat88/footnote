@@ -260,6 +260,11 @@ function Trimmed({ s }) {
       ) : (
         <div className="sub">{s?.reason ?? "No measured savings for this period."}</div>
       )}
+      {s?.footnote?.calls > 0 && (
+        <div className="sub">
+          Footnote's trimmed search results: {mb(s.footnote.saved_bytes) === "0 MB" ? `${num(Math.round(s.footnote.saved_bytes / 1000))} kB` : mb(s.footnote.saved_bytes)} fewer over {num(s.footnote.calls)} {s.footnote.calls === 1 ? "search" : "searches"}, about {tokens(s.footnote.saved_tokens_estimate)} tokens.
+        </div>
+      )}
     </section>
   );
 }
