@@ -456,3 +456,46 @@ fn tags_narrow_recall_before_ranking_and_untagged_memories_stay_candidates() {
     let eleven: Vec<String> = (0..11).map(|i| format!("t{i}")).collect();
     assert!(fails(&db, &["remember"], json!([tagged("y", json!(eleven))])).contains("at most 10"));
 }
+
+#[cfg(feature = "memory")]
+#[test]
+fn memories_anchored_to_code_are_found_by_symbol_or_file() {
+    let t = tempfile::tempdir().unwrap();
+    let db = t.path().join("memory.db");
+    let mut a = mem(
+        "The usage reader counts Codex limits.",
+        "fact",
+        "footnote",
+        "2026-11-17",
+    );
+    a["code"] = json!(["src\\usage.rs", "./claude_line"]);
+    let stored = run(
+        &db,
+        &["remember"],
+        Some(json!([
+            a,
+            mem("Unanchored note.", "fact", "footnote", "2026-11-17")
+        ])),
+    );
+    assert_eq!(
+        stored["stored"][0]["code"],
+        json!(["claude_line", "src/usage.rs"])
+    );
+    let c = rusqlite::Connection::open(&db).unwrap();
+    let by = |anchors: &[&str]| {
+        let anchors: Vec<String> = anchors.iter().map(|s| s.to_string()).collect();
+        footnote_memory::anchored(&c, &anchors, 5).unwrap()
+    };
+    assert_eq!(by(&["src/usage.rs"]).len(), 1);
+    assert_eq!(by(&["claude_line", "src/usage.rs"]).len(), 1); // one memory, listed once
+    assert!(by(&["src/find.rs"]).is_empty());
+    let id = stored["stored"][0]["id"].as_i64().unwrap().to_string();
+    run(&db, &["forget", &id], None);
+    assert!(
+        by(&["src/usage.rs"]).is_empty(),
+        "a forgotten memory is not returned"
+    );
+    let mut bad = mem("x", "fact", "footnote", "2026-11-17");
+    bad["code"] = json!("src/usage.rs");
+    assert!(fails(&db, &["remember"], json!([bad])).contains("`code` must be an array"));
+}

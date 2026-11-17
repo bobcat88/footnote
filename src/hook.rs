@@ -124,6 +124,26 @@ fn hidden(command: &mut Command) -> &mut Command {
 
 /// The project scope: the repository's name on its `origin` remote (the same on every clone and machine: `footnote`, not the
 /// local folder `BorgKnowledge`), else the repository folder's name, else the working folder's.
+/// The files changed in the working tree (from `git status --porcelain`), offered as `code` anchors for the memories being
+/// saved, so a code lookup later finds them (CODE-GRAPH-DESIGN.md section 12). Paths only; nothing is read from the files.
+fn changed_hint(status: &str) -> String {
+    let files: Vec<&str> = status
+        .lines()
+        // `git` trims its output, so the first line may have lost its leading space: split on the status word, not a column.
+        .filter_map(|l| l.trim_start().split_once(' ').map(|(_, p)| p.trim_start()))
+        .map(|p| p.rsplit(" -> ").next().unwrap_or(p).trim_matches('"'))
+        .filter(|p| !p.is_empty() && !p.ends_with('/'))
+        .take(20)
+        .collect();
+    if files.is_empty() {
+        return String::new();
+    }
+    format!(
+        "\nFiles changed in this working tree: {}. In each memory about some of them, list those files (and any symbol it is about) in \"code\".",
+        files.join(", ")
+    )
+}
+
 fn project_of(cwd: &str) -> String {
     let remote = git(cwd, &["remote", "get-url", "origin"]);
     let name = remote
@@ -467,9 +487,11 @@ fn handle(state: &Path, s: &Settings, event: &Value) -> Result<Option<Value>> {
             } else if st.turns.saturating_sub(st.asked_at) >= s.every_turns {
                 st.asked_at = st.turns;
                 let today = time::OffsetDateTime::now_local()?.date().to_string();
-                out = Some(
-                    json!({"decision": "block", "reason": SAVE.replace("{today}", &today).replace("{project}", &project)}),
-                );
+                let reason = SAVE
+                    .replace("{today}", &today)
+                    .replace("{project}", &project)
+                    + &changed_hint(&git(&e.cwd, &["status", "--porcelain"]));
+                out = Some(json!({"decision": "block", "reason": reason}));
             }
         }
         _ => {}
@@ -536,6 +558,18 @@ fn log_line(e: &anyhow::Error) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_save_request_offers_changed_files_as_anchors() {
+        // As `git` returns it: trimmed, so the first line lost its leading space.
+        let status = "M src/usage.rs\n M crates/code/src/lib.rs\nR  old.rs -> src/new.rs\n?? \"a b.md\"\n?? scratch/";
+        let hint = changed_hint(status);
+        assert!(
+            hint.contains("src/usage.rs, crates/code/src/lib.rs, src/new.rs, a b.md."),
+            "{hint}"
+        );
+        assert_eq!(changed_hint(""), "");
+    }
 
     #[test]
     fn a_hook_failure_is_logged_without_the_text_that_caused_it() {

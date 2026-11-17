@@ -104,11 +104,11 @@ pub fn find(query: &str, limit: usize) -> Result<Value> {
 /// fixes and decisions that name it, and documentation passages about it. Keyword search only: a symbol name is an exact word,
 /// and a lookup must stay fast (no model load).
 #[cfg(feature = "code")]
-pub fn related(name: &str, limit: usize) -> Value {
+pub fn related(name: &str, files: &[String], limit: usize) -> Value {
     let Ok(state) = crate::state::state_dir() else {
         return json!(null);
     };
-    let _ = (name, limit, &state); // used only when Memory or Library is in the build
+    let _ = (name, files, limit, &state); // used only when Memory or Library is in the build
     #[cfg(any(feature = "memory", feature = "library"))]
     let words = |db: &Path| -> Result<Vec<Value>> {
         let c = crate::app::open(db, false)?;
@@ -130,14 +130,33 @@ pub fn related(name: &str, limit: usize) -> Value {
     };
     #[cfg(feature = "memory")]
     let memory = if on(&state, "memory") {
-        crate::status::memory_db(&state)
+        let db = crate::status::memory_db(&state)
             .ok()
-            .filter(|db| db.exists())
-            .and_then(|db| words(&db).ok())
+            .filter(|db| db.exists());
+        // Memories anchored to the symbol or its files first (exact), then passages that name it as code.
+        let mut anchors: Vec<String> = std::iter::once(name)
+            .chain(files.iter().map(String::as_str))
+            .filter_map(footnote_memory::anchor)
+            .collect();
+        anchors.dedup();
+        let mut hits: Vec<Value> = db
+            .as_deref()
+            .and_then(|db| crate::app::open(db, false).ok())
+            .and_then(|c| footnote_memory::anchored(&c, &anchors, limit).ok())
             .unwrap_or_default()
             .into_iter()
-            .map(|h| json!({"id": h["id"], "text": text(&h["text"], 300)}))
-            .collect()
+            .map(|h| json!({"id": h["id"], "text": text(&h["text"], 300), "match": "anchor"}))
+            .collect();
+        for h in db
+            .as_deref()
+            .and_then(|db| words(db).ok())
+            .unwrap_or_default()
+        {
+            if hits.len() < limit && !hits.iter().any(|x| x["id"] == h["id"]) {
+                hits.push(json!({"id": h["id"], "text": text(&h["text"], 300), "match": "text"}));
+            }
+        }
+        hits
     } else {
         Vec::new()
     };

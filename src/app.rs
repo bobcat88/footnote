@@ -894,7 +894,13 @@ fn canonical(root: &Path) -> Result<PathBuf> {
 pub(crate) fn code_lookup(root: &Path, name: &str, limit: usize) -> Result<Value> {
     let mut v = footnote_code::lookup(&code_db(root)?, name, limit)?;
     if v["symbols"].as_array().is_some_and(|s| !s.is_empty()) {
-        v["related"] = crate::find::related(name, 3);
+        let files: Vec<String> = v["symbols"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|s| s["path"].as_str().map(String::from))
+            .collect();
+        v["related"] = crate::find::related(name, &files, 3);
     }
     Ok(v)
 }

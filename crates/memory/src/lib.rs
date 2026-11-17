@@ -30,6 +30,64 @@ pub const MAX_TAGS: usize = 10;
 /// until something writes to it (the hook's recall among them). Reads treat a missing table as "no tags".
 const TAGS: &str = "CREATE TABLE IF NOT EXISTS memory_tags(source_id INTEGER NOT NULL REFERENCES sources(id),tag TEXT NOT NULL,PRIMARY KEY(source_id,tag)) WITHOUT ROWID";
 
+/// Code anchors: the files (repository-relative, `/` separators) and symbols a memory is about, so a code lookup finds the
+/// memories about a symbol or its file exactly (CODE-GRAPH-DESIGN.md section 12). Created on first write, like `memory_tags`.
+const ANCHORS: &str = "CREATE TABLE IF NOT EXISTS memory_anchors(source_id INTEGER NOT NULL REFERENCES sources(id),anchor TEXT NOT NULL,PRIMARY KEY(source_id,anchor)) WITHOUT ROWID;CREATE INDEX IF NOT EXISTS memory_anchors_by_anchor ON memory_anchors(anchor)";
+const MAX_ANCHORS: usize = 20;
+
+/// One anchor: a path or a symbol, at most 300 characters on one line; `\` becomes `/` and a leading `./` is dropped, so
+/// `src\usage.rs` and `./src/usage.rs` are the same anchor.
+pub fn anchor(a: &str) -> Option<String> {
+    let a = a.trim().replace('\\', "/");
+    let a = a.trim_start_matches("./");
+    (!a.is_empty() && a.chars().count() <= 300 && !a.chars().any(char::is_control))
+        .then(|| a.to_string())
+}
+
+fn anchor_list(v: &Value) -> Result<Vec<String>> {
+    if v.is_null() {
+        return Ok(vec![]);
+    }
+    let mut out: Vec<String> = v
+        .as_array()
+        .context("`code` must be an array of file paths or symbol names")?
+        .iter()
+        .map(|a| {
+            a.as_str()
+                .and_then(anchor)
+                .context("each `code` entry is a file path or symbol name of 1 to 300 characters")
+        })
+        .collect::<Result<_>>()?;
+    out.sort_unstable();
+    out.dedup();
+    if out.len() > MAX_ANCHORS {
+        bail!("at most {MAX_ANCHORS} `code` anchors per memory");
+    }
+    Ok(out)
+}
+
+/// Live memories anchored to any of `anchors` (a symbol's name, its file), newest first, as chunk id and text.
+pub fn anchored(c: &Connection, anchors: &[String], limit: usize) -> Result<Vec<Value>> {
+    let exists: bool = c.query_row(
+        "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='memory_anchors')",
+        [],
+        |r| r.get(0),
+    )?;
+    if !exists || anchors.is_empty() {
+        return Ok(vec![]);
+    }
+    let mut s = c.prepare(
+        "SELECT DISTINCT ch.id, ch.text, m.observed_at FROM memory_anchors a JOIN sources s ON s.id=a.source_id
+         JOIN memories m ON m.source_id=s.id JOIN chunks ch ON ch.source_id=s.id
+         WHERE s.status='indexed' AND a.anchor IN (SELECT value FROM json_each(?1))
+         ORDER BY m.observed_at DESC, ch.id DESC LIMIT ?2",
+    )?;
+    let rows = s.query_map(params![serde_json::to_string(anchors)?, limit as i64], |r| {
+        Ok(json!({"id": r.get::<_, i64>(0)?, "text": r.get::<_, String>(1)?, "observed_at": r.get::<_, String>(2)?}))
+    })?;
+    Ok(rows.collect::<rusqlite::Result<_>>()?)
+}
+
 /// A tag is one short lowercase word or hyphenated phrase: `rust`, `windows`, `bugfix`, `daemon`, `resolved`.
 fn tag(t: &str) -> Result<&str> {
     let ok = (1..=32).contains(&t.len())
@@ -240,6 +298,7 @@ pub fn remember(c: &mut Connection, items: &Value, models: &[PathBuf]) -> Result
     }
     let tx = c.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
     tx.execute_batch(TAGS)?;
+    tx.execute_batch(ANCHORS)?;
     let (mut stored, mut duplicates) = (Vec::new(), 0);
     for m in items {
         let text = field(m, "text", MAX_TEXT)?
@@ -255,6 +314,7 @@ pub fn remember(c: &mut Connection, items: &Value, models: &[PathBuf]) -> Result
         date(observed)?;
         let session = field(m, "session", 200)?;
         let tags = tag_list(&m["tags"])?;
+        let anchors = anchor_list(&m["code"])?;
         let supersedes = match &m["supersedes"] {
             Value::Null => None,
             v => Some(memory_source(
@@ -291,6 +351,10 @@ pub fn remember(c: &mut Connection, items: &Value, models: &[PathBuf]) -> Result
         for t in &tags {
             tx.execute("INSERT INTO memory_tags VALUES(?1,?2)", params![id, t])?;
         }
+        tx.execute("DELETE FROM memory_anchors WHERE source_id=?1", [id])?;
+        for a in &anchors {
+            tx.execute("INSERT INTO memory_anchors VALUES(?1,?2)", params![id, a])?;
+        }
         // The heading carries kind, scope and date: every hit shows them, and the model can tell an old fact from a new one.
         footnote_search::store::add_chunk(
             &tx,
@@ -307,7 +371,11 @@ pub fn remember(c: &mut Connection, items: &Value, models: &[PathBuf]) -> Result
         let chunk: i64 = tx.query_row("SELECT id FROM chunks WHERE source_id=?1", [id], |r| {
             r.get(0)
         })?;
-        stored.push(json!({"id": chunk, "kind": kind, "scope": scope, "tags": tags}));
+        let mut row = json!({"id": chunk, "kind": kind, "scope": scope, "tags": tags});
+        if !anchors.is_empty() {
+            row["code"] = json!(anchors);
+        }
+        stored.push(row);
     }
     tx.commit()?;
     let mut report = json!({"stored": stored, "duplicates": duplicates});

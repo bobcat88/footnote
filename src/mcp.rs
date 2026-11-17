@@ -1063,7 +1063,8 @@ fn tool_definitions() -> Value {
                             "observed_at": {"type": "string", "description": "YYYY-MM-DD"},
                             "session": {"type": "string", "maxLength": 200},
                             "supersedes": {"type": "integer"},
-                            "tags": {"type": "array", "items": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,31}$"}, "maxItems": 10, "description": "1 to 5 short lowercase tags naming the stack, platform, component or state (rust, windows, daemon, bugfix, resolved); they narrow recall later."}
+                            "tags": {"type": "array", "items": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,31}$"}, "maxItems": 10, "description": "1 to 5 short lowercase tags naming the stack, platform, component or state (rust, windows, daemon, bugfix, resolved); they narrow recall later."},
+                                "code": {"type": "array", "items": {"type": "string", "maxLength": 300}, "maxItems": 20, "description": "The files (repository-relative) and symbols this memory is about, such as src/usage.rs or claude_line; a code lookup then lists this memory under that symbol."}
                         },
                         "required": ["text", "kind", "scope", "observed_at"],
                         "additionalProperties": false
