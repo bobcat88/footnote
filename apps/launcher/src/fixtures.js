@@ -121,6 +121,7 @@ const usage = {
   ],
   by_agent: [{ agent: "claude-code", requests: 4050 }, { agent: "codex", requests: 580 }],
   unpriced_models: [],
+  measured_savings: { source: "rtk gain --daily", rtk: { saved_tokens: 419000, before_tokens: 2998000, after_tokens: 2579000, saved_share: 0.14, commands: 6400, by_day: [] } },
 };
 
 export const fixtures = {
@@ -137,7 +138,8 @@ export const fixtures = {
     },
     projects: { projects: [] },
     activity: { activity_log: false, days: [], most_used: [] },
-    usage: { ...usage, totals: Object.fromEntries(Object.keys(usage.totals).map((k) => [k, 0])), by_day: [], by_model: [], by_agent: [] },
+    usage: { ...usage, totals: Object.fromEntries(Object.keys(usage.totals).map((k) => [k, 0])), by_day: [], by_model: [], by_agent: [],
+      measured_savings: { source: "rtk", available: false, reason: "RTK is not installed (rtk not on PATH)" } },
     "models list": { ...models, models: models.models.map((m) => ({ ...m, installed: false, bytes: undefined })) },
   },
 };

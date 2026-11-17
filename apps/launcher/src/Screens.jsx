@@ -177,6 +177,27 @@ const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD",
 const tokens = (n) => (n >= 1e9 ? `${(n / 1e9).toFixed(1)} B` : n >= 1e6 ? `${(n / 1e6).toFixed(1)} M` : num(n));
 const AGENT = { "claude-code": "Claude Code", codex: "Codex" };
 
+/** Measured savings only (goal 19): what RTK trimmed from command output before agents read it. Not priced, never added to the
+ * totals: a trimmed result would also have been re-read at cache rates later, so any money figure would be an estimate. */
+function Trimmed({ s }) {
+  const r = s?.rtk;
+  return (
+    <section className="card">
+      <h2>Trimmed before agents read it</h2>
+      {r ? (
+        <>
+          <div className="big">{tokens(r.saved_tokens)}</div>
+          <div className="sub">
+            {Math.round(100 * r.saved_share)} % of {tokens(r.before_tokens)} command output, measured by RTK. Not priced.
+          </div>
+        </>
+      ) : (
+        <div className="sub">{s?.reason ?? "No measured savings for this period."}</div>
+      )}
+    </section>
+  );
+}
+
 export function Usage() {
   const [days, setDays] = useState(7);
   const { data, error } = useRead(["usage", "--days", String(days)]);
@@ -212,6 +233,7 @@ export function Usage() {
                 )}
               </div>
             </section>
+            <Trimmed s={data.measured_savings} />
           </div>
           <div className="split">
             <table className="tbl">

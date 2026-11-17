@@ -392,13 +392,104 @@ pub fn usage(days: u16) -> Result<Value> {
         "by_agent": list(&by[1], "agent"),
         "by_model": list(&by[2], "model"),
         "unpriced_models": unpriced,
+        "measured_savings": measured_savings(&first),
         "read": {"files": files, "new_bytes": new_bytes, "ms": started.elapsed().as_millis()},
     }))
+}
+
+/// Savings measured where the output was filtered, shown apart from the token counts and prices above. Today the only
+/// measured source is RTK (output filtering of shell commands): it records the size before and after each filtered command, and
+/// what it removes never reaches the agent, so it is not in the session counts above (no double counting).
+fn measured_savings(first: &str) -> Value {
+    let not_measured = json!([
+        "Footnote's own lean results: sizes before and after are not recorded yet",
+        "behaviour skills such as ponytail: a saving exists only against a benchmark without them, so it is an estimate, not shown here"
+    ]);
+    let rtk = run_rtk().map(|v| rtk_days(&v, first));
+    match rtk {
+        Ok(days) => {
+            json!({"source": "rtk gain --daily (RTK's own count of tokens before and after its filters)",
+                           "note": "tokens the agent never had to read; dates as RTK records them (local time); not priced, because a trimmed result would also have been re-read at cache rates on later turns",
+                           "rtk": days, "not_measured": not_measured})
+        }
+        Err(e) => {
+            json!({"source": "rtk", "available": false, "reason": format!("{e:#}"), "not_measured": not_measured})
+        }
+    }
+}
+
+fn run_rtk() -> Result<Value> {
+    use wait_timeout::ChildExt;
+    let mut cmd = std::process::Command::new("rtk");
+    cmd.args(["gain", "--daily", "--format", "json"])
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null());
+    #[cfg(windows)]
+    std::os::windows::process::CommandExt::creation_flags(&mut cmd, 0x08000000); // CREATE_NO_WINDOW
+    let mut child = cmd
+        .spawn()
+        .map_err(|_| anyhow::anyhow!("RTK is not installed (rtk not on PATH)"))?;
+    let mut out = Vec::new();
+    let mut stdout = child.stdout.take().expect("piped");
+    let reader =
+        std::thread::spawn(move || std::io::Read::read_to_end(&mut stdout, &mut out).map(|_| out));
+    if child
+        .wait_timeout(std::time::Duration::from_secs(5))?
+        .is_none()
+    {
+        let _ = child.kill();
+        anyhow::bail!("rtk gain did not answer within 5 s");
+    }
+    let out = reader
+        .join()
+        .map_err(|_| anyhow::anyhow!("rtk output reader failed"))??;
+    serde_json::from_slice(&out).map_err(|_| {
+        anyhow::anyhow!("rtk gain gave no JSON (an RTK version without --format json?)")
+    })
+}
+
+/// RTK's daily rows from `first` on, plus their totals.
+fn rtk_days(v: &Value, first: &str) -> Value {
+    let days: Vec<Value> = v["daily"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|d| d["date"].as_str().is_some_and(|date| date >= first))
+        .map(|d| {
+            json!({"date": d["date"], "commands": d["commands"], "before_tokens": d["input_tokens"],
+                        "after_tokens": d["output_tokens"], "saved_tokens": d["saved_tokens"]})
+        })
+        .collect();
+    let sum = |k: &str| days.iter().map(|d| d[k].as_u64().unwrap_or(0)).sum::<u64>();
+    let (before, saved) = (sum("before_tokens"), sum("saved_tokens"));
+    json!({"by_day": days, "commands": sum("commands"), "before_tokens": before, "after_tokens": sum("after_tokens"),
+           "saved_tokens": saved, "saved_share": if before > 0 { saved as f64 / before as f64 } else { 0.0 }})
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn rtk_savings_keep_the_window_and_sum_it() {
+        let v = json!({"daily": [
+            {"date": "2026-11-10", "commands": 5, "input_tokens": 100, "output_tokens": 90, "saved_tokens": 10},
+            {"date": "2026-11-16", "commands": 2, "input_tokens": 400, "output_tokens": 100, "saved_tokens": 300},
+            {"date": "2026-11-17", "commands": 1, "input_tokens": 100, "output_tokens": 0, "saved_tokens": 100}]});
+        let r = rtk_days(&v, "2026-11-16");
+        assert_eq!(r["by_day"].as_array().unwrap().len(), 2);
+        assert_eq!(
+            (
+                r["commands"].as_u64(),
+                r["saved_tokens"].as_u64(),
+                r["before_tokens"].as_u64()
+            ),
+            (Some(3), Some(400), Some(500))
+        );
+        assert_eq!(r["saved_share"], 0.8);
+        assert_eq!(rtk_days(&json!({}), "2026-11-16")["saved_tokens"], 0);
+    }
 
     #[test]
     fn prices_pick_the_longest_prefix_and_the_long_context_tier() {
