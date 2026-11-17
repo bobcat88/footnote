@@ -231,6 +231,10 @@ fn last_entry(file: &mut File) -> Result<Option<(u64, String)>> {
 /// Recompute the chain. Returns `(entry_count, last_hash)` or the first break.
 pub fn verify(path: &Path, key: Option<&[u8]>) -> Result<(u64, String)> {
     let file = File::open(path).with_context(|| format!("open audit log {}", path.display()))?;
+    // Appends hold an exclusive lock; on Windows that lock is mandatory, so reading during another session's append failed and a
+    // server starting at that moment refused to serve (#167). A shared lock waits for the append to finish, then reads whole lines.
+    file.lock_shared()
+        .with_context(|| format!("lock audit log {}", path.display()))?;
     let mut prev = GENESIS.to_string();
     let mut count = 0_u64;
     for (index, line) in BufReader::new(file).lines().enumerate() {

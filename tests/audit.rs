@@ -308,3 +308,76 @@ fn two_sessions_open_at_once_keep_one_chain() {
         .collect();
     assert_eq!(seqs, vec![1, 2, 3, 4], "{report}");
 }
+
+/// #167: a server that starts while another session holds the audit log's lock (appending) waits for it, instead of reading a
+/// locked file, failing verification and refusing to serve.
+#[test]
+fn a_server_starting_during_an_append_waits_instead_of_refusing() {
+    use std::io::{BufRead, BufReader, Write};
+    use std::process::{Command as Std, Stdio};
+    let t = tmp();
+    let db = fixture(&t);
+    let audit = t.path().join("audit.jsonl");
+    let state = t.path().join("state");
+    let serve = || {
+        let mut c = Std::new(assert_cmd::cargo::cargo_bin!("footnote"));
+        c.env("FOOTNOTE_STATE_DIR", &state)
+            .arg("--db")
+            .arg(&db)
+            .args(["serve", "--mcp", "--audit"])
+            .arg(&audit);
+        c
+    };
+    // One call first, so the log exists and has a chain to verify.
+    let msg = json!({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"footnote_stats","arguments":{}}});
+    let first = serve()
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let out = first.wait_with_output_after(&format!("{msg}\n"));
+    assert!(out.contains("\"result\""), "{out}");
+
+    // Hold the append lock, start a second server, release after 300 ms: it must answer.
+    let held = std::fs::OpenOptions::new()
+        .read(true)
+        .append(true)
+        .open(&audit)
+        .unwrap();
+    held.lock().unwrap();
+    let mut child = serve()
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(300));
+    held.unlock().unwrap();
+    writeln!(child.stdin.as_mut().unwrap(), "{msg}").unwrap();
+    let mut line = String::new();
+    BufReader::new(child.stdout.take().unwrap())
+        .read_line(&mut line)
+        .unwrap();
+    drop(child.stdin.take());
+    let status = child.wait_with_output().unwrap();
+    assert!(
+        line.contains("\"result\""),
+        "server refused: {line} {}",
+        String::from_utf8_lossy(&status.stderr)
+    );
+}
+
+trait WaitAfter {
+    fn wait_with_output_after(self, input: &str) -> String;
+}
+impl WaitAfter for std::process::Child {
+    fn wait_with_output_after(mut self, input: &str) -> String {
+        use std::io::Write;
+        self.stdin
+            .take()
+            .unwrap()
+            .write_all(input.as_bytes())
+            .unwrap();
+        String::from_utf8_lossy(&self.wait_with_output().unwrap().stdout).to_string()
+    }
+}
