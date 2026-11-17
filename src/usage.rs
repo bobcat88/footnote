@@ -208,6 +208,36 @@ fn claude_line(line: &[u8], st: &mut FileState) -> Option<(String, String, Token
     ))
 }
 
+/// DeepSeek Harness: each `assistant/message` line carries its reply's `usage` (input excludes cache reads) and the model in
+/// `message.source.model`; `time` is in milliseconds.
+fn dsh_line(line: &[u8], _: &mut FileState) -> Option<(String, String, Tokens)> {
+    if !line.windows(7).any(|w| w == b"\"usage\"") {
+        return None;
+    }
+    let v: Value = serde_json::from_slice(line).ok()?;
+    if v.get("type")?.as_str()? != "assistant/message" {
+        return None;
+    }
+    let d = v.get("data")?;
+    let u = d.get("usage")?;
+    let model = d["message"]["source"]["model"]
+        .as_str()
+        .unwrap_or("deepseek");
+    let n = |k: &str| u.get(k).and_then(Value::as_u64).unwrap_or(0);
+    let t = Tokens {
+        input: n("inputTokens"),
+        output: n("outputTokens"),
+        cache_read: n("cacheReadTokens"),
+        cache_write_5m: n("cacheWriteTokens"),
+        ..Default::default()
+    };
+    let date = time::OffsetDateTime::from_unix_timestamp(v.get("time")?.as_i64()? / 1000)
+        .ok()?
+        .date()
+        .to_string();
+    Some((date, model.into(), request(model, t)))
+}
+
 /// Codex: `turn_context` sets the model; each `token_usage_record` is one response, input including its cached part.
 fn codex_line(line: &[u8], st: &mut FileState) -> Option<(String, String, Tokens)> {
     let has = |s: &[u8]| line.windows(s.len()).any(|w| w == s);
@@ -250,6 +280,26 @@ type Parse = fn(&[u8], &mut FileState) -> Option<(String, String, Tokens)>;
 fn read_file(path: &Path, agent: &str, parse: Parse, st: &mut FileState) -> Result<u64> {
     let mut f = std::fs::File::open(path)?;
     let len = f.metadata()?.len();
+    if path.extension().is_some_and(|x| x == "zstd") {
+        // Compressed sessions cannot be read from where the last run stopped: a changed file is counted again in full.
+        if len == st.offset && st.offset > 0 && head_hash(&mut f, st.offset)? == st.head {
+            return Ok(0);
+        }
+        *st = FileState::default();
+        f.seek(SeekFrom::Start(0))?;
+        let data = zstd::decode_all((&mut f).take(len))?;
+        for line in data.split(|&b| b == b'\n') {
+            if let Some((date, model, t)) = parse(line, st) {
+                st.rows
+                    .entry(format!("{date}|{agent}|{model}"))
+                    .or_default()
+                    .add(&t);
+            }
+        }
+        st.offset = len;
+        st.head = head_hash(&mut f, len)?;
+        return Ok(len);
+    }
     if len < st.offset || (st.offset > 0 && head_hash(&mut f, st.offset)? != st.head) {
         *st = FileState::default(); // rewritten or cut: start over
     }
@@ -279,7 +329,10 @@ fn sessions(dir: &Path) -> Vec<PathBuf> {
     walkdir::WalkDir::new(dir)
         .into_iter()
         .filter_map(|e| e.ok())
-        .filter(|e| e.file_type().is_file() && e.path().extension().is_some_and(|x| x == "jsonl"))
+        .filter(|e| {
+            let name = e.file_name().to_string_lossy();
+            e.file_type().is_file() && (name.ends_with(".jsonl") || name.ends_with(".jsonl.zstd"))
+        })
         .map(|e| e.into_path())
         .collect()
 }
@@ -301,6 +354,9 @@ fn sources() -> Vec<(&'static str, PathBuf, Parse)> {
     }
     if let Some(d) = dir("CODEX_HOME", ".codex") {
         out.push(("codex", d.join("sessions"), codex_line));
+    }
+    if let Some(d) = dir("DSH_HOME", ".dsh") {
+        out.push(("deepseek-harness", d.join("sessions"), dsh_line));
     }
     out
 }
@@ -385,6 +441,10 @@ pub fn usage(days: u16) -> Result<Value> {
         .collect();
     Ok(json!({
         "days": days,
+        "agents_not_measured": [
+            "grok: keeps no token counts on this computer (only a general log)",
+            "gemini: no session folder found on this computer"
+        ],
         "note": "dates in UTC; counts only, no prompt or answer text is kept; api_price_usd is what the priced requests would cost at list API prices, not what a subscription pays; unpriced_requests are of models without a price yet",
         "prices": PRICES,
         "totals": totals,
@@ -505,6 +565,29 @@ fn rtk_days(v: &Value, first: &str) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn deepseek_harness_replies_are_counted_with_their_cache_reads_apart() {
+        let line = br#"{"type":"assistant/message","time":1792964444792,"data":{"message":{"source":{"model":"deepseek-flash"}},"usage":{"cacheReadTokens":8576,"cacheWriteTokens":0,"inputTokens":4081,"outputTokens":136,"totalTokens":12793}}}"#;
+        let (date, model, t) = dsh_line(line, &mut FileState::default()).unwrap();
+        assert_eq!(
+            (date.as_str(), model.as_str()),
+            ("2026-10-25", "deepseek-flash")
+        );
+        assert_eq!(
+            (
+                t.input,
+                t.output,
+                t.cache_read,
+                t.requests,
+                t.unpriced_requests
+            ),
+            (4081, 136, 8576, 1, 1)
+        );
+        let user =
+            br#"{"type":"user/message","time":1792964444792,"data":{"usage":{"inputTokens":1}}}"#;
+        assert!(dsh_line(user, &mut FileState::default()).is_none());
+    }
 
     #[test]
     fn rtk_savings_keep_the_window_and_sum_it() {

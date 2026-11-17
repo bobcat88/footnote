@@ -24,6 +24,8 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.10"
 walkdir = "2"
+# DeepSeek Harness keeps its sessions zstd-compressed (src/usage.rs); already in the tree through tantivy.
+zstd = { version = "0.14", default-features = false }
 tempfile = "3"
 wait-timeout = "0.2"
 time = { version = "0.3", features = ["local-offset"] }
@@ -92,6 +94,7 @@ ureq.workspace = true
 regex.workspace = true
 url.workspace = true
 walkdir.workspace = true
+zstd.workspace = true
 zeroize = { version = "1", optional = true }
 
 [target.'cfg(windows)'.dependencies]

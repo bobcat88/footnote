@@ -241,7 +241,7 @@ export function Activity() {
 
 const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 });
 const tokens = (n) => (n >= 1e9 ? `${(n / 1e9).toFixed(1)} B` : n >= 1e6 ? `${(n / 1e6).toFixed(1)} M` : num(n));
-const AGENT = { "claude-code": "Claude Code", codex: "Codex" };
+const AGENT = { "claude-code": "Claude Code", codex: "Codex", "deepseek-harness": "DeepSeek Harness" };
 
 /** Measured savings only (goal 19): what RTK trimmed from command output before agents read it. Not priced, never added to the
  * totals: a trimmed result would also have been re-read at cache rates later, so any money figure would be an estimate. */
@@ -279,7 +279,7 @@ export function Usage() {
     <div className="body">
       <div className="bar">
         <Range days={days} setDays={setDays} options={[1, 7, 30]} />
-        <span className="dimmed">From Claude Code and Codex session files on this computer. Counts only, no text kept.</span>
+        <span className="dimmed">From Claude Code, Codex and DeepSeek Harness session files on this computer. Counts only, no text kept.</span>
       </div>
       {error ? <Failed error={error} /> : !data ? <span className="skel" /> : (
         <>
