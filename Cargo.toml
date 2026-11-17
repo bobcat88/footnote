@@ -109,3 +109,11 @@ sha2.workspace = true
 [profile.dist]
 inherits = "release"
 lto = "thin"
+
+# Tests load embedding models dozens of times; hashing the model and parsing its tokenizer unoptimized cost ~1.6 s per load.
+[profile.dev.package.sha2]
+opt-level = 3
+
+[profile.dev.package.tokenizers]
+opt-level = 3
+
