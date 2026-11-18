@@ -509,3 +509,50 @@ fn memories_anchored_to_code_are_found_by_symbol_or_file() {
     bad["code"] = json!("src/usage.rs");
     assert!(fails(&db, &["remember"], json!([bad])).contains("`code` must be an array"));
 }
+
+#[test]
+fn an_mcp_client_cannot_load_a_model_folder_of_its_choosing() {
+    let t = tempfile::tempdir().unwrap();
+    let state = t.path().join("state");
+    // A folder that brings its own manifest: the encoder would check the files against hashes the client chose.
+    let planted = t.path().join("planted");
+    fs::create_dir(&planted).unwrap();
+    fs::write(planted.join("manifest.json"), r#"{"runtime":"onnx"}"#).unwrap();
+    let call = |model: Value| -> Value {
+        let lines = [
+            json!({"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"t","version":"1"}}}),
+            json!({"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"footnote_remember","arguments":
+                {"memories": [mem("x", "fact", "global", "2026-11-18")], "model": model}}}),
+        ];
+        let input: String = lines.iter().map(|v| format!("{v}\n")).collect();
+        let out = cmd(&t.path().join("memory.db"), &["serve", "--mcp"])
+            .env("FOOTNOTE_STATE_DIR", &state)
+            .write_stdin(input)
+            .assert()
+            .success()
+            .get_output()
+            .stdout
+            .clone();
+        let last = String::from_utf8(out)
+            .unwrap()
+            .lines()
+            .last()
+            .unwrap()
+            .to_string();
+        serde_json::from_str::<Value>(&last).unwrap()["result"].clone()
+    };
+    for model in [
+        json!(planted.to_str().unwrap()),
+        json!([planted.to_str().unwrap()]),
+        json!("not-installed"),
+        json!(".."),
+        json!(state.join("models").join("..").to_str().unwrap()),
+    ] {
+        let refused = call(model.clone());
+        assert_eq!(refused["isError"], true, "{model}: {refused}");
+        assert!(
+            refused.to_string().contains("installed model"),
+            "{model}: {refused}"
+        );
+    }
+}

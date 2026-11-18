@@ -24,7 +24,7 @@ struct Recipe {
     max_length: u32,
     pad_token: &'static str,
     quantization: &'static str,
-    /// Pinned (file, sha256); empty for the older comparison models, whose digest is recorded at first download.
+    /// Pinned (file, sha256) of every downloaded file; a download that does not match is removed.
     sha256: &'static [(&'static str, &'static str)],
     role: &'static str,
     /// Written into the manifest and shown on install when it restricts use; empty for the permissive ONNX models.
@@ -97,7 +97,16 @@ const RECIPES: &[Recipe] = &[
         max_length: 512,
         pad_token: "<pad>",
         quantization: "onnx-dynamic-int8",
-        sha256: &[],
+        sha256: &[
+            (
+                "model.onnx",
+                "f80102d3f2a1229f387d3c81909990d8945513e347b0eab049f7de3c6f98c193",
+            ),
+            (
+                "tokenizer.json",
+                "0b44a9d7b51c3c62626640cda0e2c2f70fdacdc25bbbd68038369d14ebdf4c39",
+            ),
+        ],
         role: "earlier model, tests and comparison",
         license: "MIT",
     },
@@ -112,7 +121,16 @@ const RECIPES: &[Recipe] = &[
         max_length: 128,
         pad_token: "<pad>",
         quantization: "onnx-dynamic-int8",
-        sha256: &[],
+        sha256: &[
+            (
+                "model.onnx",
+                "66fc00f5f29afcaff34092e1bdd20008ca3918265a82fb9695a551e510cc4ebc",
+            ),
+            (
+                "tokenizer.json",
+                "b60b6b43406a48bf3638526314f3d232d97058bc93472ff2de930d43686fa441",
+            ),
+        ],
         role: "earlier model, tests and comparison",
         license: "Apache-2.0",
     },

@@ -561,7 +561,7 @@ fn dispatch(db: &Path, name: &str, args: &Value) -> Result<Value> {
             let models = if args["model"].is_null() {
                 vec![]
             } else {
-                model_args(args)?
+                model_args(db, args)?
             };
             crate::memory::remember(&mut memory_db(db)?, &args["memories"], &models)
         }
@@ -634,7 +634,7 @@ fn memory_db(db: &Path) -> Result<Connection> {
 }
 
 /// `model`: one local embedding directory, or an array of up to three (an ensemble, blended equally).
-fn model_args(args: &Value) -> Result<Vec<PathBuf>> {
+fn model_args(db: &Path, args: &Value) -> Result<Vec<PathBuf>> {
     let list: Vec<String> = match &args["model"] {
         Value::String(s) => vec![s.clone()],
         Value::Array(a) => a
@@ -655,7 +655,34 @@ fn model_args(args: &Value) -> Result<Vec<PathBuf>> {
     {
         bail!("`model` takes 1 to 3 directories of at most {MAX_FILTER} bytes");
     }
-    Ok(list.into_iter().map(PathBuf::from).collect())
+    list.iter().map(|m| trusted_model(db, m)).collect()
+}
+
+/// A model folder an MCP client may name: an installed model (by name or by its folder under the models folder), or a
+/// folder whose manifest this database already holds vectors from. The encoder checks the files against the manifest in the
+/// same folder, so a folder chosen freely by the client would bring its own "pinned" hashes; this keeps the pin with the
+/// user. One message for every refusal, so the reply never tells whether a path exists.
+fn trusted_model(db: &Path, given: &str) -> Result<PathBuf> {
+    let models = crate::models::models_dir(&crate::state::state_dir()?);
+    let is_name = !given.contains(['/', '\\']) && given != "." && given != "..";
+    let path = if is_name {
+        models.join(given)
+    } else {
+        PathBuf::from(given)
+    };
+    let inside = match (std::fs::canonicalize(&models), std::fs::canonicalize(&path)) {
+        (Ok(root), Ok(p)) => p != root && p.starts_with(&root),
+        _ => false,
+    };
+    if inside
+        || (db.exists()
+            && !crate::semantic::embedded_with(&read_db(db)?, [path.clone()]).is_empty())
+    {
+        return Ok(path);
+    }
+    bail!(
+        "`model` must name an installed model (`footnote models list`) or a model folder this database already has vectors from"
+    )
 }
 
 fn recall(db: &Path, args: &Value) -> Result<Value> {
@@ -678,7 +705,7 @@ fn recall(db: &Path, args: &Value) -> Result<Value> {
     let given = if args["model"].is_null() {
         vec![]
     } else {
-        model_args(args)?
+        model_args(db, args)?
     };
     let models = app::search_models(&c, mode.as_deref(), given)?;
     if models.is_empty() {
@@ -695,7 +722,7 @@ fn memory_recall(db: &Path, args: &Value) -> Result<Value> {
     let models = if args["model"].is_null() {
         Vec::new()
     } else {
-        model_args(args)?
+        model_args(db, args)?
     };
     let c = read_db(db)?;
     let mut tags = tags_arg(args)?;
