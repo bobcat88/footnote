@@ -587,6 +587,13 @@ fn dispatch(db: &Path, name: &str, args: &Value) -> Result<Value> {
                 Some(r) => std::path::PathBuf::from(r),
                 None => std::env::current_dir()?,
             };
+            // Only projects Footnote has recorded, never any folder on the machine (#211).
+            if !known_project(&crate::state::state_dir()?, &root) {
+                bail!(
+                    "{} is not a project Footnote knows: start an agent session there (the memory hook records it) and try again",
+                    root.display()
+                );
+            }
             let limit = match args.get("limit") {
                 None => 30,
                 Some(v) => v
@@ -608,6 +615,22 @@ fn dispatch(db: &Path, name: &str, args: &Value) -> Result<Value> {
         }
         other => bail!("unknown tool: {other}"),
     }
+}
+
+/// Whether `root` is a project the hook recorded (`<state>/projects/*.json`) or a folder inside one (#211).
+#[cfg(feature = "code")]
+fn known_project(state: &std::path::Path, root: &std::path::Path) -> bool {
+    let canon = |p: &std::path::Path| std::fs::canonicalize(p).ok();
+    let Some(want) = canon(root) else {
+        return false;
+    };
+    std::fs::read_dir(state.join("projects"))
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter_map(|e| serde_json::from_slice::<Value>(&std::fs::read(e.path()).ok()?).ok())
+        .filter_map(|v| canon(std::path::Path::new(v["path"].as_str()?)))
+        .any(|p| want.starts_with(p))
 }
 
 /// Read-only connection. Read tools never create a database.

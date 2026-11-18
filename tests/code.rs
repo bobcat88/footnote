@@ -74,22 +74,36 @@ def step():
     );
     assert_eq!(found["stale"], serde_json::json!([]));
 
-    // The same answer reaches agents through the MCP tool.
-    let call = serde_json::json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
-        "params": {"name": "footnote_code", "arguments": {"name": "helper", "root": root}}});
-    let out = Command::new(assert_cmd::cargo::cargo_bin!("footnote"))
-        .env("FOOTNOTE_STATE_DIR", &state)
-        .env("FOOTNOTE_POLICY_FILE", state.join("no-policy.json"))
-        .args([
-            "--db",
-            state.join("kb.db").to_str().unwrap(),
-            "serve",
-            "--mcp",
-        ])
-        .write_stdin(format!("{call}\n"))
-        .output()
-        .unwrap();
-    let reply: Value = serde_json::from_slice(&out.stdout).unwrap();
+    // The same answer reaches agents through the MCP tool, for a project Footnote has recorded (#211) and only then.
+    let mcp = |root: &str| {
+        let call = serde_json::json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+            "params": {"name": "footnote_code", "arguments": {"name": "helper", "root": root}}});
+        let out = Command::new(assert_cmd::cargo::cargo_bin!("footnote"))
+            .env("FOOTNOTE_STATE_DIR", &state)
+            .env("FOOTNOTE_POLICY_FILE", state.join("no-policy.json"))
+            .args([
+                "--db",
+                state.join("kb.db").to_str().unwrap(),
+                "serve",
+                "--mcp",
+            ])
+            .write_stdin(format!("{call}\n"))
+            .output()
+            .unwrap();
+        serde_json::from_slice::<Value>(&out.stdout).unwrap()
+    };
+    let refused = mcp(root);
+    assert!(
+        refused.to_string().contains("not a project Footnote knows"),
+        "{refused}"
+    );
+    fs::create_dir_all(state.join("projects")).unwrap();
+    fs::write(
+        state.join("projects/demo.json"),
+        serde_json::json!({"name": "demo", "path": root}).to_string(),
+    )
+    .unwrap();
+    let reply = mcp(root);
     let text: Value =
         serde_json::from_str(reply["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
     assert_eq!(text["symbols"][0]["callers"][0]["name"], "run", "{reply}");

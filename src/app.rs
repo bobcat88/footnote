@@ -359,10 +359,12 @@ enum Action {
         #[arg(long)]
         pseudonymise: bool,
     },
-    /// Footnote Code: build the code graph of a Rust project from `rust-analyzer scip`.
+    /// Footnote Code: build the code graph of a project (Rust, TypeScript/JavaScript, Python, others by parser). Warning:
+    /// for Rust, `rust-analyzer scip` builds the project, which runs its build scripts and procedural macros, so index
+    /// only code you trust; without the compiler indexer, the parser graph runs no project code.
     #[cfg(feature = "code")]
     CodeIndex {
-        /// Project folder (holding Cargo.toml).
+        /// Project folder.
         #[arg(default_value = ".")]
         root: PathBuf,
     },

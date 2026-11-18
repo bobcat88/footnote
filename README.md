@@ -224,7 +224,7 @@ footnote code-map               # architecture map: folders as blocks, links bet
 footnote code-impact <name>     # before a change: callers up to 3 levels, tests reached, files and memories affected
 ```
 
-Agents get the same answer through `footnote_code`; files changed since indexing come back in `stale`. Design: [docs/CODE-GRAPH-DESIGN.md](docs/CODE-GRAPH-DESIGN.md).
+Agents get the same answer through `footnote_code`; files changed since indexing come back in `stale`. The tool reads only projects Footnote has recorded (every folder an agent session starts in) and refuses any other folder. Index only code you trust: for Rust, rust-analyzer builds the project, which runs its build scripts and procedural macros (scip-typescript and scip-python only read the code; the parser graph runs no project code). Design: [docs/CODE-GRAPH-DESIGN.md](docs/CODE-GRAPH-DESIGN.md).
 
 ### Desktop window
 
