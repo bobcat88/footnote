@@ -58,6 +58,27 @@ on a held-out set. Qualified/imported types, aliases, generic substitution, clos
 receivers remain limitations. A fresh corpus and an independent agent benchmark are still required before claiming an
 accuracy or productivity improvement.
 
+## Held-out check, 18 November 2026
+
+Two crates never used while writing or tuning the rule, copied from the local Cargo registry into scratch storage with
+every non-unstable feature made default: `clap_builder` 4.6.7 and `zip` 6.0.0. Fresh compiler graph per crate, parser run
+with rust-analyzer off PATH, `/tests/` left out. Each typed link is sorted by what the compiler graph says at that line:
+
+| Crate | Typed links | Same as compiler | Compiler links elsewhere | Line analyzed, no edge | Line not analyzed (cfg) |
+|---|---:|---:|---:|---:|---:|
+| clap_builder | 419 | 369 | 1 | 7 | 42 |
+| zip | 91 | 74 | 0 | 5 | 12 |
+
+Counting every analyzed-line mismatch as wrong, precision is 0.979 on clap_builder and 0.937 on zip (443 of 456, 0.971,
+together). Only one link contradicts the compiler. The raw `score_rules.py` figures (0.881 and 0.813) count lines
+rust-analyzer never analyzed as errors.
+
+The older `import` rule scored 0.151 raw on zip. Its 100 links without a compiler edge are mostly
+`SimpleFileOptions::default()` linked to `impl Default for FileOptions`, which rust-analyzer files under std's
+`Default::default` and not the impl, and `DateTime::from_date_and_time` inside `#[cfg(test)]` modules, which rust-analyzer's
+index barely covers (9 references in all). Spot checks found the parser's targets correct, so this is a gap in the truth
+graph rather than a parser error. A per-line comparison is not a substitute for an agent benchmark, which is still to do.
+
 ## Validation
 
 `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, and `cargo test --workspace` passed, with 137 tests passed
