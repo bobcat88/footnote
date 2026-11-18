@@ -37,6 +37,20 @@ ts = {e for e in edges(sys.argv[2], "resolved") if e[0] in both and e[3] in both
 hit = comp & ts
 print(f"files compared: {len(both)}")
 print(f"compiler edges: {len(comp)}  tree-sitter edges: {len(ts)}  in both: {len(hit)}")
-print(f"precision: {len(hit) / max(1, len(ts)):.3f}  recall: {len(hit) / max(1, len(comp)):.3f}")
-for e in sorted(ts - comp)[:12]:
-    print("  not in compiler graph:", e)
+print(f"precision: {len(hit) / max(1, len(ts)):.3f}  recall: {len(hit) / max(1, len(comp)):.3f}  (raw)")
+# The compiler graph has holes (#215): code behind features it did not enable, calls it files under a trait, test modules.
+# Each parser edge it lacks is classed by what the compiler says at that line, and precision is given on analyzed lines.
+lines, named = set(), set()
+for a, l, n in c.execute(
+    "SELECT rf.path, r.line, s.name FROM refs r JOIN files rf ON rf.id = r.file_id JOIN symbols s ON s.id = r.symbol_id WHERE r.origin = 'compiler'"
+):
+    lines.add((a.replace("\\", "/"), l))
+    named.add((a.replace("\\", "/"), l, n))
+miss = ts - comp
+elsewhere = [e for e in miss if e[:3] in named]
+no_edge = [e for e in miss if e[:3] not in named and e[:2] in lines]
+skipped = len(miss) - len(elsewhere) - len(no_edge)
+print(f"compiler links elsewhere: {len(elsewhere)}  analyzed line, no edge: {len(no_edge)}  line not analyzed: {skipped}")
+print(f"precision on analyzed lines: {len(hit) / max(1, len(hit) + len(elsewhere) + len(no_edge)):.3f}")
+for e in sorted(elsewhere)[:12]:
+    print("  compiler links elsewhere:", e)
