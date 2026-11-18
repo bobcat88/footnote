@@ -92,6 +92,11 @@ struct Tokens {
     requests: u64,
     /// What the priced requests would cost at list API prices; requests of a model not in `TABLE` are counted apart.
     api_price_usd: f64,
+    /// `api_price_usd` split by bucket (#238): cache traffic, not output, is most of an agent's bill.
+    cost_cache_read: f64,
+    cost_cache_write: f64,
+    cost_input: f64,
+    cost_output: f64,
     unpriced_requests: u64,
 }
 
@@ -104,6 +109,10 @@ impl Tokens {
         self.cache_write_1h += o.cache_write_1h;
         self.requests += o.requests;
         self.api_price_usd += o.api_price_usd;
+        self.cost_cache_read += o.cost_cache_read;
+        self.cost_cache_write += o.cost_cache_write;
+        self.cost_input += o.cost_input;
+        self.cost_output += o.cost_output;
         self.unpriced_requests += o.unpriced_requests;
     }
 }
@@ -127,12 +136,12 @@ fn request(model: &str, mut t: Tokens) -> Tokens {
         Some((above, long)) if prompt > *above => long,
         _ => base,
     };
-    t.api_price_usd = (t.input as f64 * p.input
-        + t.cache_write_5m as f64 * p.write_5m
-        + t.cache_write_1h as f64 * p.write_1h
-        + t.cache_read as f64 * p.read
-        + t.output as f64 * p.output)
-        / 1e6;
+    t.cost_input = t.input as f64 * p.input / 1e6;
+    t.cost_cache_write =
+        (t.cache_write_5m as f64 * p.write_5m + t.cache_write_1h as f64 * p.write_1h) / 1e6;
+    t.cost_cache_read = t.cache_read as f64 * p.read / 1e6;
+    t.cost_output = t.output as f64 * p.output / 1e6;
+    t.api_price_usd = t.cost_input + t.cost_cache_write + t.cost_cache_read + t.cost_output;
     t
 }
 
@@ -178,7 +187,7 @@ fn unix(ts: &str) -> Option<i64> {
 }
 
 /// Bumped when FileState gains what old indexes lack, so every file is read again once.
-const FORMAT: u32 = 2;
+const FORMAT: u32 = 3; // 3: per-bucket costs, so older indexes are recounted
 
 #[derive(Default, Serialize, Deserialize)]
 struct Index {
@@ -435,6 +444,8 @@ fn sources() -> Vec<(&'static str, PathBuf, Parse)> {
     }
     if let Some(d) = dir("CODEX_HOME", ".codex") {
         out.push(("codex", d.join("sessions"), codex_line));
+        // Archiving moves a session here; without it the session drops out of the totals (#238 audit: 83 responses in 7 days).
+        out.push(("codex", d.join("archived_sessions"), codex_line));
     }
     if let Some(d) = dir("DSH_HOME", ".dsh") {
         out.push(("deepseek-harness", d.join("sessions"), dsh_line));
@@ -527,7 +538,7 @@ pub fn usage(days: u16) -> Result<Value> {
             "grok: keeps no token counts on this computer (only a general log)",
             "gemini: no session folder found on this computer"
         ],
-        "note": "dates in UTC; counts only, no prompt or answer text is kept; api_price_usd is what the priced requests would cost at list API prices, not what a subscription pays; unpriced_requests are of models without a price yet",
+        "note": "dates in UTC; counts only, no prompt or answer text is kept; api_price_usd is what the priced requests would cost at list API prices, not what a subscription pays, and cost_cache_read, cost_cache_write, cost_input and cost_output split it by bucket; unpriced_requests are of models without a price yet",
         "prices": PRICES,
         "totals": totals,
         "by_day": list(&by[0], "date"),

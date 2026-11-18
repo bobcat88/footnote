@@ -100,6 +100,15 @@ fn usage_counts_tokens_and_list_prices_from_session_files() {
     );
     // Opus 5.5: 10 x $4 + 100 x $5 (5 min writes) + 200 x $8 (1 h writes) + 1000 x $0.20 (reads) + 100 x $20, per million.
     assert!(close(&o["api_price_usd"], 4340e-6), "{v}");
+    // The same price by bucket: reads 1000 x $0.20, writes 100 x $5 + 200 x $8, input 10 x $4, output 100 x $20.
+    for (k, usd) in [
+        ("cost_cache_read", 200e-6),
+        ("cost_cache_write", 2100e-6),
+        ("cost_input", 40e-6),
+        ("cost_output", 2000e-6),
+    ] {
+        assert!(close(&o[k], usd), "{k}: {v}");
+    }
     let g = model(&v, "gpt-6.1-sol");
     assert_eq!(
         (&g["input"], &g["cache_read"]),
@@ -156,5 +165,12 @@ fn usage_counts_tokens_and_list_prices_from_session_files() {
     .unwrap();
     let v = usage(dir.path());
     assert_eq!(v["totals"]["requests"], 2, "{v}");
+
+    // Codex archives a session by moving it: still counted, once.
+    let archived = dir.path().join("codex/archived_sessions/rollout-a.jsonl");
+    fs::create_dir_all(archived.parent().unwrap()).unwrap();
+    fs::rename(&rollout, &archived).unwrap();
+    let v = usage(dir.path());
+    assert_eq!(model(&v, "gpt-6.1-sol")["requests"], 1, "{v}");
     assert_eq!(model(&v, "claude-sonnet-5-5")["requests"], 1, "{v}");
 }
