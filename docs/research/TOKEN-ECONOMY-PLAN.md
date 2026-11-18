@@ -114,3 +114,19 @@ measured payoff, each shipped only after it beats the baseline on cost per accep
 - github.com/rtk-ai/rtk README; Ponytail 5 benchmark (installed plugin, `ponytail-gain`); Caveman and caveman-compress
   (JuliusBrussee/caveman); Headroom (chopratejas/headroom); context-mode (mksglu/context-mode); sqz (PyPI), llmtrim; TOON
   (toon-format/toon) and arXiv 2603.03306; tomron.net 6 Jul 2026 and besthub.dev comparisons.
+
+## 6. Measured on Johan's own sessions (18 November 2026, #238)
+
+Claude Code, last 7 days, 21 sessions, $842 at Opus 5.5 list prices (`bench/experiments/session_costs.py`, sizes and counts
+only; `footnote usage` gives the same totals):
+
+| Finding | Number | What it points to |
+|---|---|---|
+| Cost spent on calls that re-read more than 200k tokens | 83% (more than 400k: 55%); peaks of 850k to 970k | Session handoff (#250) is the largest lever |
+| A session's first call (fixed overhead plus the first message) | median 69k tokens | Trim the fixed part: tools, skills, CLAUDE.md, the memory pack (#242) |
+| Context added by tool results | Read 10.9M tokens, Bash 1.5M, everything else under 0.5M | Read less (#240) before shrinking shell output (#243) |
+| Re-writes after more than an hour idle | 8% of the cost | Start fresh with a handoff after a long pause (#250) |
+| Footnote's own memory injections | about 432k tokens added in the week | Fixed by #249 (no repeats, short lines) |
+| Split by bucket | cache reads 60%, writes 25%, output 15% | Output-side rules (#239) can save at most that 15% |
+
+Order that follows: #250 (handoff), #240 (graph-first reads), #242 (fixed overhead), then #243 and #239.
