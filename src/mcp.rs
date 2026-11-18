@@ -579,10 +579,6 @@ fn dispatch(db: &Path, name: &str, args: &Value) -> Result<Value> {
         }
         #[cfg(feature = "code")]
         "footnote_code" => {
-            let name = args["name"]
-                .as_str()
-                .filter(|n| !n.is_empty() && n.len() <= 200)
-                .context("`name` is required")?;
             let root = match args["root"].as_str() {
                 Some(r) => std::path::PathBuf::from(r),
                 None => std::env::current_dir()?,
@@ -594,6 +590,14 @@ fn dispatch(db: &Path, name: &str, args: &Value) -> Result<Value> {
                     root.display()
                 );
             }
+            // `outline`: a file's definitions and line ranges, to read one of them instead of the whole file (#240).
+            if let Some(path) = args["outline"].as_str().filter(|p| !p.is_empty()) {
+                return footnote_code::outline(&app::code_db(&root)?, path);
+            }
+            let name = args["name"]
+                .as_str()
+                .filter(|n| !n.is_empty() && n.len() <= 200)
+                .context("`name` (or `outline`) is required")?;
             let limit = match args.get("limit") {
                 None => 30,
                 Some(v) => v
@@ -603,7 +607,7 @@ fn dispatch(db: &Path, name: &str, args: &Value) -> Result<Value> {
             };
             // `impact`: the callers up to that many levels, the tests reached and the anchored memories, before a change.
             match args.get("impact").filter(|v| !v.is_null()) {
-                None => app::code_lookup(&root, name, limit),
+                None => app::code_lookup(&root, name, limit, args["body"] == true),
                 Some(v) => {
                     let depth = v
                         .as_u64()
@@ -1173,16 +1177,17 @@ fn tool_definitions() -> Value {
     if let Some(list) = tools.as_array_mut() {
         list.push(json!({
             "name": "footnote_code",
-            "description": "Footnote Code: a symbol's definition (signature, file, lines), who calls it (with call-site lines) and what it calls, or with impact what a change to it reaches, from the compiler's own index of the project (rust-analyzer for Rust). `stale` lists answer files changed since indexing; re-run `footnote code-index <root>` then. Read-only.",
+            "description": "Footnote Code: a symbol's definition (signature, file, lines), who calls it (with call-site lines) and what it calls, or with impact what a change to it reaches, from the project's code graph. Cheaper than reading files: `body` returns just the symbol's own lines, and `outline` lists a file's definitions with line ranges so you read one instead of the whole file. `stale` lists answer files changed since indexing; re-run `footnote code-index <root>` then. Read-only.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
                     "name": {"type": "string", "description": "Symbol name, e.g. a function or type: `lookup`, `Store`"},
+                    "body": {"type": "boolean", "description": "Also return each definition's source lines (at most 150)"},
+                    "outline": {"type": "string", "description": "Instead of a name: a file path (relative to root) whose definitions to list"},
                     "root": {"type": "string", "description": "Project folder; default: the server's working folder"},
                     "limit": {"type": "integer", "minimum": 1, "maximum": 100, "default": 30},
                     "impact": {"type": "integer", "minimum": 1, "maximum": 6, "description": "Before changing the symbol: its impact radius instead, callers up to this many levels with each link's grade (compiler or resolved), the tests that reach it, the files and blocks affected, and memories anchored to them. 3 is a good start."}
                 },
-                "required": ["name"],
                 "additionalProperties": false
             }
         }));

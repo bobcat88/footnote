@@ -75,9 +75,9 @@ def step():
     assert_eq!(found["stale"], serde_json::json!([]));
 
     // The same answer reaches agents through the MCP tool, for a project Footnote has recorded (#211) and only then.
-    let mcp = |root: &str| {
+    let mcp_with = |args: Value| {
         let call = serde_json::json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
-            "params": {"name": "footnote_code", "arguments": {"name": "helper", "root": root}}});
+            "params": {"name": "footnote_code", "arguments": args}});
         let out = Command::new(assert_cmd::cargo::cargo_bin!("footnote"))
             .env("FOOTNOTE_STATE_DIR", &state)
             .env("FOOTNOTE_POLICY_FILE", state.join("no-policy.json"))
@@ -92,6 +92,7 @@ def step():
             .unwrap();
         serde_json::from_slice::<Value>(&out.stdout).unwrap()
     };
+    let mcp = |root: &str| mcp_with(serde_json::json!({"name": "helper", "root": root}));
     let refused = mcp(root);
     assert!(
         refused.to_string().contains("not a project Footnote knows"),
@@ -107,6 +108,27 @@ def step():
     let text: Value =
         serde_json::from_str(reply["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
     assert_eq!(text["symbols"][0]["callers"][0]["name"], "run", "{reply}");
+    // Reading less (#240): one symbol's own lines, and a file's outline instead of the whole file.
+    let text_of = |r: Value| -> Value {
+        serde_json::from_str(r["result"]["content"][0]["text"].as_str().unwrap()).unwrap()
+    };
+    let body = text_of(mcp_with(
+        serde_json::json!({"name": "helper", "root": root, "body": true}),
+    ));
+    assert_eq!(
+        body["symbols"][0]["body"], "fn helper() -> u32 {\n    41\n}",
+        "{body}"
+    );
+    let outline = text_of(mcp_with(
+        serde_json::json!({"outline": "src/lib.rs", "root": root}),
+    ));
+    let names: Vec<&str> = outline["symbols"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|s| s["name"].as_str())
+        .collect();
+    assert_eq!(names, ["run", "helper"], "{outline}");
 
     fs::write(project.join("src/lib.rs"), format!("{lib}// edited\n")).unwrap();
     assert_eq!(

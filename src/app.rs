@@ -587,7 +587,7 @@ fn execute(cli: Cli) -> Result<Value> {
         } => return code_impact(root, name, *depth, *limit),
         #[cfg(feature = "code")]
         Action::Code { name, root, limit } => {
-            return code_lookup(root, name, *limit);
+            return code_lookup(root, name, *limit, false);
         }
         #[cfg(feature = "alias")]
         Action::AliasScan {
@@ -926,8 +926,39 @@ fn canonical(root: &Path) -> Result<PathBuf> {
 
 /// A symbol lookup plus what Memory and Library hold about it (three of each), when the symbol exists.
 #[cfg(feature = "code")]
-pub(crate) fn code_lookup(root: &Path, name: &str, limit: usize) -> Result<Value> {
+pub(crate) fn code_lookup(root: &Path, name: &str, limit: usize, body: bool) -> Result<Value> {
     let mut v = footnote_code::lookup(&code_db(root)?, name, limit)?;
+    // `body`: each definition's own lines, so an agent reads one function instead of its whole file (#240).
+    if body && let Some(list) = v["symbols"].as_array_mut() {
+        for s in list {
+            let (Some(path), Some(a), Some(b)) = (
+                s["path"].as_str(),
+                s["lines"][0].as_u64(),
+                s["lines"][1].as_u64(),
+            ) else {
+                continue;
+            };
+            if let Ok(text) = std::fs::read_to_string(root.join(path)) {
+                const MAX: usize = 150;
+                let lines: Vec<&str> = text
+                    .lines()
+                    .skip(a as usize - 1)
+                    .take((b - a + 1) as usize)
+                    .collect();
+                s["body"] = json!(
+                    lines
+                        .iter()
+                        .take(MAX)
+                        .copied()
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                );
+                if lines.len() > MAX {
+                    s["body_cut_at"] = json!(MAX);
+                }
+            }
+        }
+    }
     if v["symbols"].as_array().is_some_and(|s| !s.is_empty()) {
         let files: Vec<String> = v["symbols"]
             .as_array()

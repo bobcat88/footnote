@@ -467,6 +467,30 @@ fn write(
     Ok((docs.len(), ids.len(), refs))
 }
 
+/// A file's definitions in line order, each with kind, signature and line range (#240): what an agent reads before
+/// opening a large file, so it can read one function instead of the whole file.
+pub fn outline(db: &Path, path: &str) -> Result<Value> {
+    let c = Connection::open_with_flags(db, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+        .with_context(|| {
+            format!(
+                "no code graph at {}; run `footnote code-index` first",
+                db.display()
+            )
+        })?;
+    let path = path.replace('\\', "/");
+    let mut s = c.prepare(
+        "SELECT s.name, s.kind, s.signature, s.line, s.end_line FROM symbols s JOIN files f ON f.id = s.file_id
+         WHERE replace(f.path, '\\', '/') = ?1 AND s.kind != 'module' ORDER BY s.line",
+    )?;
+    let symbols: Vec<Value> = s
+        .query_map([&path], |r| {
+            Ok(json!({"name": r.get::<_, String>(0)?, "kind": r.get::<_, String>(1)?,
+                "signature": r.get::<_, String>(2)?, "lines": [r.get::<_, i64>(3)?, r.get::<_, i64>(4)?]}))
+        })?
+        .collect::<rusqlite::Result<_>>()?;
+    Ok(json!({"path": path, "symbols": symbols}))
+}
+
 /// Definitions named `name`, each with signature, place, callers and callees. `stale` lists answer files changed since indexing.
 pub fn lookup(db: &Path, name: &str, limit: usize) -> Result<Value> {
     let c = Connection::open_with_flags(db, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
