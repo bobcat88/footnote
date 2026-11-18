@@ -20,7 +20,31 @@ const SAVE: &str = r#"Footnote memory: before you stop, save what is worth remem
 - Skip what is already remembered, what is readable in the code or git history, and temporary task state.
 Then tell the user in one short line what you saved (count and ids), or that nothing was worth keeping. Then stop."#;
 const VISIBLE: &str = "Footnote memory: when one of these memories, or one recalled later in this session, shapes your answer, say so in a few words (for example \"from memory: ...\"). Do not mention memories that played no part.";
+const HANDOFF: &str = r#"Footnote: this session's context is {tokens} tokens, and every call re-reads all of it. Before you stop, save one handoff memory with the footnote_remember tool (MCP server footnote-memory): kind "session", scope "{project}", observed_at "{today}", tags ["handoff"], one self-contained paragraph with the task, the decisions made, what is done and left, the next step, and the files and issues involved. Then tell the user in one line that the session is long and that running /clear (or opening a new session) continues the work for a fraction of the cost; Footnote brings the handoff back first at the next start. Then stop."#;
 const MAX_EVENT: u64 = 2 * 1024 * 1024;
+
+/// The prompt size of the session's last model call (input plus cache read and written), from the last token count in
+/// Claude Code's session file. Only the tail is read, and only numbers are kept.
+fn context_tokens(transcript: &Path) -> Option<u64> {
+    use std::io::{Seek, SeekFrom};
+    let mut f = fs::File::open(transcript).ok()?;
+    let len = f.metadata().ok()?.len();
+    f.seek(SeekFrom::Start(len.saturating_sub(512 * 1024)))
+        .ok()?;
+    let mut buf = Vec::new();
+    f.read_to_end(&mut buf).ok()?;
+    buf.split(|&b| b == b'\n').rev().find_map(|line| {
+        if !line.windows(7).any(|w| w == b"\"usage\"") {
+            return None;
+        }
+        let v: Value = serde_json::from_slice(line).ok()?;
+        let u = v["message"].get("usage")?;
+        let n = |k: &str| u[k].as_u64().unwrap_or(0);
+        (v["type"] == "assistant").then(|| {
+            n("input_tokens") + n("cache_read_input_tokens") + n("cache_creation_input_tokens")
+        })
+    })
+}
 
 /// `<state dir>/memory.json` (state dir: FOOTNOTE_STATE_DIR, else %LOCALAPPDATA%/footnote or ~/.local/state/footnote).
 /// db: memory database (default memory.db in the state dir); models: embedding model folders, so memories are found by meaning;
@@ -42,6 +66,8 @@ struct Settings {
     resident: bool,
     idle_seconds: u64,
     infer_tags: bool,
+    /// Context size, in tokens, past which Stop asks once for a handoff and a fresh session (#250); 0 never asks.
+    handoff_tokens: u64,
 }
 impl Default for Settings {
     fn default() -> Self {
@@ -56,6 +82,7 @@ impl Default for Settings {
             resident: true,
             idle_seconds: 1800,
             infer_tags: false,
+            handoff_tokens: 200_000,
         }
     }
 }
@@ -87,6 +114,8 @@ struct Session {
     /// Memories already in this context (#242): each one is re-read by every later call, so it is never shown twice.
     /// Reset at SessionStart, which also follows a compaction that dropped them.
     shown: Vec<i64>,
+    /// Whether this session was already asked for a handoff (#250).
+    handoff_asked: bool,
 }
 
 fn ids(v: &Value) -> impl Iterator<Item = i64> + '_ {
@@ -102,6 +131,8 @@ struct Event {
     session: String,
     cwd: String,
     prompt: String,
+    /// Claude Code's session file; read only for its last token count, never its text.
+    transcript: String,
     stop_active: bool,
 }
 impl Event {
@@ -119,6 +150,7 @@ impl Event {
             session: text("session_id", "sessionId", "unknown"),
             cwd: text("cwd", "workspaceRoot", "."),
             prompt: text("prompt", "userPrompt", ""),
+            transcript: text("transcript_path", "transcriptPath", ""),
             stop_active: v["stop_hook_active"] == true || v["stopHookActive"] == true,
         }
     }
@@ -480,9 +512,19 @@ fn handle(state: &Path, s: &Settings, event: &Value) -> Result<Option<Value>> {
             let _ =
                 crate::projects::seen(state, &project, if top.is_empty() { &e.cwd } else { &top });
             embed_in_background(s, &db)?;
+            st.handoff_asked = false; // after a compaction the context is small again
             if db.exists() {
-                let memories =
-                    crate::memory::pack(&crate::app::open(&db, false)?, Some(&project), 3000)?;
+                let conn = crate::app::open(&db, false)?;
+                let mut memories = crate::memory::pack(&conn, Some(&project), 3000)?;
+                // The last long session's handoff, if recent, comes first (#250). An old database without tags has none.
+                let since =
+                    (time::OffsetDateTime::now_utc().date() - time::Duration::days(3)).to_string();
+                if let Ok(Some(h)) = crate::memory::handoff(&conn, &project, &since)
+                    && let Some(list) = memories["memories"].as_array_mut()
+                {
+                    list.retain(|m| m["id"] != h["id"]);
+                    list.insert(0, h);
+                }
                 note(s, &dir, "pack", &project, &memories);
                 st.shown = ids(&memories).collect();
                 let pack = render(
@@ -530,6 +572,21 @@ fn handle(state: &Path, s: &Settings, event: &Value) -> Result<Option<Value>> {
             if e.stop_active || st.embed {
                 st.embed = false;
                 embed_in_background(s, &db)?;
+            } else if let Some(tokens) = (s.handoff_tokens > 0 && !st.handoff_asked)
+                .then(|| context_tokens(Path::new(&e.transcript)))
+                .flatten()
+                .filter(|&n| n >= s.handoff_tokens)
+            {
+                // A long session: every call re-reads all of it (83% of a week's cost was on calls past 200k, #238).
+                st.handoff_asked = true;
+                st.asked_at = st.turns; // the handoff stands in for the periodic save
+                let today = time::OffsetDateTime::now_local()?.date().to_string();
+                let reason = HANDOFF
+                    .replace("{tokens}", &format!("{}k", tokens / 1000))
+                    .replace("{today}", &today)
+                    .replace("{project}", &project)
+                    + &changed_hint(&git(&e.cwd, &["status", "--porcelain"]));
+                out = Some(json!({"decision": "block", "reason": reason}));
             } else if st.turns.saturating_sub(st.asked_at) >= s.every_turns {
                 st.asked_at = st.turns;
                 let today = time::OffsetDateTime::now_local()?.date().to_string();

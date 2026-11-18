@@ -125,7 +125,7 @@ Supersedes decisions 1 and 4 above. Footnote Memory is for agents and by agents:
   - `footnote_remember` and `footnote_forget` agent tools.
   - Memory databases and corpus databases refuse each other's writes. Agent writes to a corpus are refused through a read-only connection, before any migration.
   - Tests in `tests/memory.rs`.
-- **Hook** (`footnote hook`, [src/hook.rs](../src/hook.rs), Rust since 15 Nov 2026): session-start pack, per-prompt recall, and every `every_turns` prompts a Stop request that has the agent save its memories; vectors for new memories in the background. Tests in `tests/hook.rs`.
+- **Hook** (`footnote hook`, [src/hook.rs](../src/hook.rs), Rust since 15 Nov 2026): session-start pack, per-prompt recall, and every `every_turns` prompts a Stop request that has the agent save its memories; vectors for new memories in the background. Tests in `tests/hook.rs`. Recall never repeats a memory already shown in the session, in lines cut at 200 characters (#249). Past `handoff_tokens` of context (200k by default, 0 off) Stop asks once for a handoff memory tagged `handoff` and suggests `/clear`; the next session's pack starts with the project's newest handoff of the last 3 days (#250).
 - **Live check:** the Claude CLI route (Haiku) extracted a global preference and a project fix from a synthetic conversation in 5 seconds.
 
 Not done yet:

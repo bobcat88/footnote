@@ -487,6 +487,15 @@ fn row(r: &rusqlite::Row<'_>) -> rusqlite::Result<Value> {
 }
 const LIVE: &str = "SELECT c.id,m.kind,m.scope,m.observed_at,c.text FROM memories m JOIN sources s ON s.id=m.source_id JOIN chunks c ON c.source_id=s.id WHERE s.status='indexed'";
 
+/// The project's newest handoff observed on or after `since` (#250): a memory tagged `handoff` that a long session saved
+/// before the user cleared it, put first in the next session's pack.
+pub fn handoff(c: &Connection, project: &str, since: &str) -> Result<Option<Value>> {
+    let mut s = c.prepare(&format!(
+        "{LIVE} AND m.scope=?1 AND m.observed_at>=?2 AND s.id IN (SELECT source_id FROM memory_tags WHERE tag='handoff') ORDER BY m.observed_at DESC, c.id DESC LIMIT 1"
+    ))?;
+    Ok(s.query_map([project, since], row)?.next().transpose()?)
+}
+
 /// Session-start pack: every global preference, then the project's newest decisions and fixes, then its last session
 /// summaries, then global facts, until `max_chars` of memory text is reached.
 pub fn pack(c: &Connection, project: Option<&str>, max_chars: usize) -> Result<Value> {

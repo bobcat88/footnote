@@ -69,10 +69,17 @@ pub fn catalogue() -> Vec<OptionSpec> {
         },
         OptionSpec {
             key: "memory.recall_limit",
-            default: json!(3),
+            default: json!(4),
             range: Some((1, 20)),
             gain: "Higher: more memories offered per prompt",
             cost: "Higher: more tokens per prompt and more noise",
+        },
+        OptionSpec {
+            key: "memory.handoff_tokens",
+            default: json!(200_000),
+            range: Some((0, 2_000_000)),
+            gain: "Lower: shorter sessions; every call re-reads the whole context, so a long one costs most (0: never ask)",
+            cost: "Lower: more often asked to save a handoff and clear the session",
         },
         OptionSpec {
             key: "memory.activity",

@@ -137,7 +137,10 @@ fn pack_recall_save_and_stop_loop_match_the_existing_contract() {
             && shown.as_array().unwrap().iter().all(Value::is_i64),
         "{shown}"
     );
-    assert_eq!(st, json!({"turns":3,"asked_at":3,"embed":false}));
+    assert_eq!(
+        st,
+        json!({"turns":3,"asked_at":3,"embed":false,"handoff_asked":false})
+    );
     assert!(!state.join("metrics.jsonl").exists());
 }
 
@@ -153,7 +156,7 @@ fn remember_aliases_and_legacy_state_keep_only_counters() {
     );
     assert_eq!(
         read(&state.join("memory-hook/s2.json")),
-        json!({"turns":3,"asked_at":0,"embed":true,"shown":[]})
+        json!({"turns":3,"asked_at":0,"embed":true,"shown":[],"handoff_asked":false})
     );
     assert_eq!(
         hook(state, json!({"hookEventName":"Stop","sessionId":"s2"})),
@@ -389,4 +392,58 @@ fn session_start_records_the_project_for_the_projects_list() {
     .unwrap();
     assert_eq!(again["projects"].as_array().unwrap().len(), 1);
     assert_eq!(again["projects"][0]["first_seen"], first);
+}
+
+/// Past the context threshold, Stop asks once for a handoff (#250); the saved handoff leads the next session's pack.
+#[test]
+fn a_long_session_is_asked_once_for_a_handoff_that_leads_the_next_pack() {
+    let t = tempfile::tempdir().unwrap();
+    let state = t.path();
+    seed(state, &[]);
+    let transcript = state.join("session.jsonl");
+    let usage = json!({"type": "assistant", "message": {"content": [], "usage": {"input_tokens": 5,
+        "cache_read_input_tokens": 240_000, "cache_creation_input_tokens": 1_000, "output_tokens": 9}}});
+    fs::write(&transcript, format!("{usage}\n")).unwrap();
+    let mut stop = event_in("h1", "Stop", "");
+    stop["transcript_path"] = json!(transcript);
+    let ask: Value = serde_json::from_str(&hook(state, stop.clone())).unwrap();
+    assert_eq!(ask["decision"], "block");
+    let reason = ask["reason"].as_str().unwrap();
+    assert!(
+        reason.contains("241k") && reason.contains(r#"tags ["handoff"]"#),
+        "{reason}"
+    );
+    assert_eq!(hook(state, stop), "", "asked once per session");
+
+    let project = reason
+        .split("scope \"")
+        .nth(1)
+        .unwrap()
+        .split('"')
+        .next()
+        .unwrap();
+    let today = time::OffsetDateTime::now_utc().date().to_string();
+    command(state)
+        .arg("--db")
+        .arg(state.join("memory.db"))
+        .arg("remember")
+        .write_stdin(
+            json!([{"text": "Handoff: session handoff built, tests next.", "kind": "session", "scope": project,
+                "observed_at": today, "tags": ["handoff"]}])
+            .to_string(),
+        )
+        .assert()
+        .success();
+    let start: Value =
+        serde_json::from_str(&hook(state, event_in("h2", "SessionStart", ""))).unwrap();
+    let pack = start["hookSpecificOutput"]["additionalContext"]
+        .as_str()
+        .unwrap();
+    assert!(
+        pack.lines()
+            .nth(1)
+            .unwrap()
+            .contains("Handoff: session handoff built"),
+        "{pack}"
+    );
 }
