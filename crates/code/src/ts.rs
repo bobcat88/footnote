@@ -552,6 +552,23 @@ fn parse(root: &Path, project: &str) -> anyhow::Result<(Vec<Document>, usize, Ve
     }
     let mut resolved = 0;
     let mut rules: Vec<String> = Vec::new();
+    // For `binds_locally`: each file decoded once, its line offsets and its own definitions.
+    let texts: Vec<String> = files
+        .iter()
+        .map(|f| String::from_utf8_lossy(&f.2).into_owned())
+        .collect();
+    let starts: Vec<Vec<usize>> = texts
+        .iter()
+        .map(|t| {
+            std::iter::once(0)
+                .chain(t.match_indices('\n').map(|(i, _)| i + 1))
+                .collect()
+        })
+        .collect();
+    let mut mine: Vec<Vec<usize>> = vec![Vec::new(); files.len()];
+    for (i, d) in defs.iter().enumerate() {
+        mine[d.file].push(i);
+    }
     for c in &calls {
         let cands = by_name
             .get(c.name.as_str())
@@ -572,7 +589,7 @@ fn parse(root: &Path, project: &str) -> anyhow::Result<(Vec<Document>, usize, Ve
             imports[c.file].get(&c.qualifier)
         };
         // A name the calling item binds itself (a closure in a `let`, a parameter) is not a project function.
-        if bare && binds_locally(&files[c.file].2, &defs, c) {
+        if bare && binds_locally(&texts[c.file], &starts[c.file], &defs, &mine[c.file], c) {
             continue;
         }
         let rust = files[c.file].1 == Lang::Rust;
@@ -716,21 +733,19 @@ fn parse(root: &Path, project: &str) -> anyhow::Result<(Vec<Document>, usize, Ve
 
 /// Whether the innermost item around a call declares the called name before the call: `let f =`, `const f`, `var f`,
 /// `f := `, `f = `, a parameter `f:` or a closure argument `|f|`. Text patterns, not scopes: a miss only loses a link.
-fn binds_locally(src: &[u8], defs: &[Def], c: &Call) -> bool {
-    let Some(item) = defs
+/// `text` is the file decoded once, `starts` its line offsets and `mine` its definitions: per call, a scan of every
+/// definition in the project and a fresh decode of the file made large repositories quadratic (#246).
+fn binds_locally(text: &str, starts: &[usize], defs: &[Def], mine: &[usize], c: &Call) -> bool {
+    let Some(item) = mine
         .iter()
-        .filter(|d| d.file == c.file && d.span[0] <= c.range[0] && c.range[0] <= d.span[2])
+        .map(|&d| &defs[d])
+        .filter(|d| d.span[0] <= c.range[0] && c.range[0] <= d.span[2])
         .min_by_key(|d| d.span[2] - d.span[0])
     else {
         return false;
     };
-    let text = String::from_utf8_lossy(src);
-    let before: String = text
-        .lines()
-        .skip(item.span[0] as usize)
-        .take((c.range[0] - item.span[0]) as usize + 1)
-        .collect::<Vec<_>>()
-        .join("\n");
+    let at = |line: i32| starts.get(line as usize).copied().unwrap_or(text.len());
+    let before = &text[at(item.span[0])..at(c.range[0] + 1)];
     let n = &c.name;
     [
         format!("let {n} "),
@@ -1305,9 +1320,11 @@ pub(crate) fn candidates(root: &Path) -> Vec<String> {
     walkdir::WalkDir::new(root)
         .into_iter()
         .filter_entry(|e| {
+            let name = e.file_name().to_string_lossy();
+            // Dot folders too: build copies like `.next-qloop-heavy` held most of a 43 MB copy of BorgInvestor (#246).
             !(e.file_type().is_dir()
                 && e.depth() > 0
-                && SKIP.contains(&e.file_name().to_string_lossy().as_ref()))
+                && (name.starts_with('.') || SKIP.contains(&name.as_ref())))
         })
         .filter_map(|e| e.ok())
         .filter(|e| e.file_type().is_file())
@@ -1606,6 +1623,17 @@ mod tests {
         ); // outside package
         assert!(!refs.iter().any(|s| s.contains("/load:"))); // two `load`, neither imported: no link
         assert_eq!(resolved, 2);
+    }
+
+    #[test]
+    fn outside_git_the_walk_skips_dependency_and_dot_folders() {
+        let t = tempfile::tempdir().unwrap();
+        for p in ["src/a.ts", ".next-qloop/chunk.js", "node_modules/x/i.js"] {
+            let f = t.path().join(p);
+            std::fs::create_dir_all(f.parent().unwrap()).unwrap();
+            std::fs::write(f, "").unwrap();
+        }
+        assert_eq!(candidates(t.path()), ["src/a.ts"]);
     }
 
     #[test]

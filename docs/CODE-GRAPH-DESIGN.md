@@ -345,3 +345,22 @@ constructors, typed locals and parameters, `await`, `Optional`). On held-out cod
 the compiler; receiver typing adds 1,814 Python and 2,153 TypeScript links there with none. Analyzed precision per rule is 0.95
 to 1.00, except held-out Python imports (0.79) where the compiler resolves the package to its installed copy or misses
 re-exports. Details: `bench/experiments/CODE-TS-PY-PRECISION-2026-11-18.md`.
+
+**Speed and precision against Graphify and codebase-memory-mcp (18 November 2026, #246).** Call links only, scored on the
+files the compiler graph covers, classes as in #215. Each cell: indexing time / correct links / precision on analyzed lines /
+conflict rate. Times are medians of 3 runs on an idle machine, scratch copies without `.git`.
+
+| Project | Footnote parser | Graphify 0.9.112 | codebase-memory-mcp 0.12.1 |
+|---|---|---|---|
+| zustand (TS, 51 files) | **0.31 s** / **198** / 0.947 / 0% | 1.5 s / 56 / **0.966** / 0% | 3.8 s / 111 / 0.841 / 0% |
+| hono (TS, 427) | **1.1 s** / **3,076** / 0.905 / 0.0% | 5.0 s / 834 / **0.906** / 0.2% | 4.3 s / 1,141 / 0.774 / 3.1% |
+| rich (Python, 212) | **0.5 s** / **5,229** / **0.999** / 0.0% | 3.4 s / 2,861 / 0.987 / 0.5% | 4.3 s / 3,169 / 0.961 / 1.5% |
+| brotli (Rust, 70) | **0.5 s** / **1,424** / **0.987** / 0.1% | 1.6 s / 1,037 / 0.871 / 0.5% | 4.5 s / 1,250 / 0.743 / 7.4% |
+| BorgInvestor (mixed, 2,387 incl. build output) | **1.7 s** / **8,837** / **0.996** / 0% | 18.9 s / 7,307 / 0.984 / 0% | aborted ("indexing aborted before publication") |
+
+The BorgInvestor parser time was 62 s before #246: each bare call scanned every definition of the project and decoded its
+file again (quadratic), and outside git the walk read dot-named build copies (`.next-qloop-heavy`, 43 MB in all). The real
+repository, where git applies `.gitignore`, holds 806 code files and takes 1.9 s. Its precision was measured on the full copy.
+Graphify review: Apache-2.0 (Graphify-Labs/graphify, PyPI `graphifyy`), `graphify update` builds the code graph with no LLM
+and no network, its only processes are `git ls-files` and `git config`, query logging is off by default; installed from wheels
+into a throwaway environment and run on scratch copies only. Scripts in `bench/experiments/code-graph/`: `graphify_to_tsv.py` and `cbm_to_tsv.py` export each tool's call edges, `score_three.py` scores the three.
