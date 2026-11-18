@@ -323,6 +323,9 @@ enum Action {
     Usage {
         #[arg(long, default_value_t = 7, value_parser = clap::value_parser!(u16).range(1..=365))]
         days: u16,
+        /// Price one Claude Code or Codex session file instead (tokens per category, list price, per model).
+        #[arg(long)]
+        file: Option<PathBuf>,
     },
     /// Browse agent memories, newest first (ids are those `forget` takes).
     #[cfg(feature = "memory")]
@@ -678,7 +681,12 @@ fn execute(cli: Cli) -> Result<Value> {
         Action::Activity { days } => return crate::activity::activity(*days),
         #[cfg(feature = "memory")]
         Action::MemoryReview { limit } => return crate::review::review(usize::from(*limit)),
-        Action::Usage { days } => return crate::usage::usage(*days),
+        Action::Usage { days, file } => {
+            return match file {
+                Some(f) => crate::usage::session(f),
+                None => crate::usage::usage(*days),
+            };
+        }
         Action::Find { query, limit } => return crate::find::find(query, usize::from(*limit)),
         Action::Corpora { action } => {
             return crate::find::corpora_command(match action {

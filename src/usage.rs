@@ -1,7 +1,7 @@
 //! `footnote usage`: tokens per day, agent and model, read from the agents' own session files on this computer (Claude Code
 //! and Codex). Only counts are kept: no prompt or answer text is copied. Files are read incrementally: the new bytes since the
 //! last run, with a guard that starts a file over when it was rewritten. Design: docs/roadmap/BACKLOG.md, "Spend and savings".
-use anyhow::Result;
+use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::collections::{BTreeMap, HashMap, VecDeque};
@@ -9,10 +9,11 @@ use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 
 /// List prices in USD per million tokens, from the providers' pricing pages, read 16 Nov 2026:
-/// https://platform.claude.com/docs/en/about-claude/pricing and https://developers.openai.com/api/docs/pricing (standard tier).
+/// https://platform.claude.com/docs/en/about-claude/pricing and https://developers.openai.com/api/docs/pricing (standard tier);
+/// gpt-6.2-sol read 18 Nov 2026 from the same OpenAI page (#223).
 /// Changing a price: edit the row and `PRICES`; every file is then read again so old counts get the new prices.
 /// shortcut: batch, fast tier, US-only inference (x1.1) and regional endpoints are not priced; add them when someone uses them.
-const PRICES: &str = "2026-11-16b";
+const PRICES: &str = "2026-11-18";
 
 #[derive(Clone, Copy)]
 struct Price {
@@ -53,6 +54,11 @@ const TABLE: &[Row] = &[
     ),
     ("claude-haiku-4-5", p(1.0, 1.25, 2.0, 0.10, 5.0), None),
     // OpenAI has no cache-write price: written tokens are plain input there.
+    (
+        "gpt-6.2-sol",
+        p(2.0, 2.0, 2.0, 0.10, 10.0),
+        Some((272_000, p(4.0, 4.0, 4.0, 0.20, 15.0))),
+    ),
     (
         "gpt-6.1-sol",
         p(2.0, 2.0, 2.0, 0.10, 10.0),
@@ -413,6 +419,40 @@ fn read_file(path: &Path, agent: &str, parse: Parse, st: &mut FileState) -> Resu
         st.head = head_hash(&mut f, st.offset)?; // over the same first bytes the next run compares
     }
     Ok(whole as u64)
+}
+
+/// Price one session file (#223), Claude Code or Codex, found by which reader recognises it: tokens per category, list
+/// price, priced and unpriced requests, per model. The benchmark collector calls this instead of copying the price table.
+pub fn session(path: &Path) -> Result<Value> {
+    let mut best: Option<(&str, FileState)> = None;
+    for (agent, parse) in [("claude-code", claude_line as Parse), ("codex", codex_line)] {
+        let mut st = FileState::default();
+        read_file(path, agent, parse, &mut st)?;
+        if !st.rows.is_empty() {
+            best = Some((agent, st));
+            break;
+        }
+    }
+    let (agent, st) = best.context("no Claude Code or Codex token counts in this file")?;
+    let (mut totals, mut by_model) = (Tokens::default(), BTreeMap::<String, Tokens>::new());
+    for (key, t) in &st.rows {
+        totals.add(t);
+        by_model
+            .entry(key.rsplit('|').next().unwrap_or_default().to_string())
+            .or_default()
+            .add(t);
+    }
+    let by_model: Vec<Value> = by_model
+        .into_iter()
+        .map(|(model, t)| {
+            let mut v = serde_json::to_value(t).unwrap_or_default();
+            v["model"] = json!(model);
+            v
+        })
+        .collect();
+    Ok(
+        json!({"file": path.display().to_string(), "agent": agent, "prices": PRICES, "totals": totals, "by_model": by_model}),
+    )
 }
 
 fn sessions(dir: &Path) -> Vec<PathBuf> {

@@ -174,3 +174,61 @@ fn usage_counts_tokens_and_list_prices_from_session_files() {
     assert_eq!(model(&v, "gpt-6.1-sol")["requests"], 1, "{v}");
     assert_eq!(model(&v, "claude-sonnet-5-5")["requests"], 1, "{v}");
 }
+
+/// One session file priced on its own (#223), as the benchmark collector does: Claude Code and Codex recognised by content.
+#[test]
+fn one_session_file_is_priced_alone() {
+    let dir = tempfile::tempdir().unwrap();
+    let ts = "2026-11-18T09:00:00.000Z";
+    let price = |file: &Path| -> Value {
+        let out = Command::new(assert_cmd::cargo::cargo_bin!("footnote"))
+            .env("FOOTNOTE_STATE_DIR", dir.path().join("state"))
+            .env("FOOTNOTE_POLICY_FILE", dir.path().join("no-policy.json"))
+            .args(["usage", "--file"])
+            .arg(file)
+            .output()
+            .unwrap();
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        serde_json::from_slice(&out.stdout).unwrap()
+    };
+    let session = dir.path().join("s.jsonl");
+    fs::write(
+        &session,
+        claude(
+            "m1",
+            "claude-opus-5-5",
+            ts,
+            json!({"input_tokens": 10, "output_tokens": 100, "cache_read_input_tokens": 1000}),
+        ),
+    )
+    .unwrap();
+    let v = price(&session);
+    assert_eq!(
+        (&v["agent"], &v["totals"]["requests"]),
+        (&json!("claude-code"), &json!(1)),
+        "{v}"
+    );
+    assert!(close(&v["totals"]["api_price_usd"], 2240e-6), "{v}"); // 10 x $4 + 1000 x $0.20 + 100 x $20
+    let rollout = dir.path().join("rollout.jsonl");
+    fs::write(
+        &rollout,
+        json!({"timestamp": ts, "type": "turn_context", "payload": {"model": "gpt-6.2-sol"}}).to_string()
+            + "\n"
+            + &json!({"timestamp": ts, "type": "token_usage_record", "payload": {"response_id": "r1",
+                "usage": {"input_tokens": 1000, "cached_input_tokens": 400, "output_tokens": 20}}})
+            .to_string()
+            + "\n",
+    )
+    .unwrap();
+    let v = price(&rollout);
+    assert_eq!(
+        (&v["agent"], &v["by_model"][0]["model"]),
+        (&json!("codex"), &json!("gpt-6.2-sol")),
+        "{v}"
+    );
+    assert!(close(&v["totals"]["api_price_usd"], 1440e-6), "{v}"); // 600 x $2 + 400 x $0.10 + 20 x $10
+}
