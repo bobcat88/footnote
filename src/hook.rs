@@ -24,7 +24,7 @@ const MAX_EVENT: u64 = 2 * 1024 * 1024;
 
 /// `<state dir>/memory.json` (state dir: FOOTNOTE_STATE_DIR, else %LOCALAPPDATA%/footnote or ~/.local/state/footnote).
 /// db: memory database (default memory.db in the state dir); models: embedding model folders, so memories are found by meaning;
-/// every_turns: prompts between save requests (10); recall_limit: memories per prompt (3); metrics: timings to metrics.jsonl;
+/// every_turns: prompts between save requests (10); recall_limit: memories per prompt (4); metrics: timings to metrics.jsonl;
 /// resident: recall by meaning through a daemon started on demand, gone after idle_seconds (1800). On by default since the recall switch passed (bench/experiments/MEMORY-RECALL-SWITCH.md); keyword answers when no daemon is ready.
 /// infer_tags: recall only among memories sharing a tag named in the prompt, plus untagged ones (bench/experiments/MEMORY-TAGS.md).
 /// enabled: false makes the hook do nothing (the launcher's switch). A company policy file overrides any of these
@@ -51,7 +51,7 @@ impl Default for Settings {
             db: None,
             models: vec![],
             every_turns: 10,
-            recall_limit: 3,
+            recall_limit: 4, // short lines (#242) leave room for one more
             metrics: false,
             resident: true,
             idle_seconds: 1800,
@@ -84,6 +84,17 @@ struct Session {
     turns: u64,
     asked_at: u64,
     embed: bool,
+    /// Memories already in this context (#242): each one is re-read by every later call, so it is never shown twice.
+    /// Reset at SessionStart, which also follows a compaction that dropped them.
+    shown: Vec<i64>,
+}
+
+fn ids(v: &Value) -> impl Iterator<Item = i64> + '_ {
+    v["memories"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|m| m["id"].as_i64())
 }
 
 struct Event {
@@ -204,20 +215,35 @@ fn session_path(dir: &Path, id: &str) -> PathBuf {
     dir.join(format!("{safe}.json"))
 }
 
-fn render(v: &Value, title: &str) -> String {
+/// `short`: per-prompt recall lines, capped at 200 characters with the id to fetch the rest (#242); the session pack keeps
+/// full text, since it carries the user's standing rules.
+fn render(v: &Value, title: &str, short: bool) -> String {
     let lines: Vec<String> = v["memories"]
         .as_array()
         .into_iter()
         .flatten()
         .map(|m| {
-            format!(
-                "- [{} · {} · {} · id {}] {}",
-                m["kind"].as_str().unwrap_or_default(),
-                m["scope"].as_str().unwrap_or_default(),
-                m["observed_at"].as_str().unwrap_or_default(),
-                m["id"],
-                m["text"].as_str().unwrap_or_default()
-            )
+            let text = m["text"].as_str().unwrap_or_default();
+            if short {
+                let cut = text.char_indices().nth(200).map_or(text.len(), |(i, _)| i);
+                let more = if cut < text.len() { "…" } else { "" };
+                format!(
+                    "- [id {} · {} · {}] {}{more}",
+                    m["id"],
+                    m["kind"].as_str().unwrap_or_default(),
+                    m["observed_at"].as_str().unwrap_or_default(),
+                    &text[..cut]
+                )
+            } else {
+                format!(
+                    "- [{} · {} · {} · id {}] {}",
+                    m["kind"].as_str().unwrap_or_default(),
+                    m["scope"].as_str().unwrap_or_default(),
+                    m["observed_at"].as_str().unwrap_or_default(),
+                    m["id"],
+                    text
+                )
+            }
         })
         .collect();
     if lines.is_empty() {
@@ -336,12 +362,12 @@ fn embed_in_background(s: &Settings, db: &Path) -> Result<()> {
     Ok(())
 }
 
-fn recall(s: &Settings, db: &Path, project: &str, query: &str) -> Result<Value> {
+fn recall(s: &Settings, db: &Path, project: &str, query: &str, limit: usize) -> Result<Value> {
     if s.resident && !s.models.is_empty() {
         let (send, recv) = std::sync::mpsc::channel();
         let (resident_db, args) = (
             db.to_path_buf(),
-            json!({"query": query, "project": project, "limit": s.recall_limit, "model": s.models, "infer_tags": s.infer_tags}),
+            json!({"query": query, "project": project, "limit": limit, "model": s.models, "infer_tags": s.infer_tags}),
         );
         std::thread::spawn(move || {
             let _ = send.send(crate::daemon::call(
@@ -368,7 +394,7 @@ fn recall(s: &Settings, db: &Path, project: &str, query: &str) -> Result<Value> 
     } else {
         vec![]
     };
-    crate::memory::recall(&c, query, Some(project), s.recall_limit, &[], &tags)
+    crate::memory::recall(&c, query, Some(project), limit, &[], &tags)
 }
 
 fn metric(state: &Path, on: bool, mut row: Value) {
@@ -456,7 +482,12 @@ fn handle(state: &Path, s: &Settings, event: &Value) -> Result<Option<Value>> {
                 let memories =
                     crate::memory::pack(&crate::app::open(&db, false)?, Some(&project), 3000)?;
                 note(s, &dir, "pack", &project, &memories);
-                let pack = render(&memories, "What you remember about this user and project");
+                st.shown = ids(&memories).collect();
+                let pack = render(
+                    &memories,
+                    "What you remember about this user and project",
+                    false,
+                );
                 out = context(
                     &e.name,
                     if pack.is_empty() {
@@ -473,11 +504,24 @@ fn handle(state: &Path, s: &Settings, event: &Value) -> Result<Option<Value>> {
             if db.exists() && !e.prompt.trim().is_empty() && !e.prompt.starts_with('/') {
                 // Search accepts at most 512 bytes, not characters. Never cut a UTF-8 code point.
                 let query = &e.prompt[..e.prompt.floor_char_boundary(500.min(e.prompt.len()))];
-                let hits = timed(state, s.metrics, "hook.recall", false, || {
-                    recall(s, &db, &project, query)
+                // Twice the limit, so memories already shown in this session do not leave the prompt short.
+                let mut hits = timed(state, s.metrics, "hook.recall", false, || {
+                    recall(s, &db, &project, query, (s.recall_limit * 2).min(20))
                 })?;
+                if let Some(list) = hits["memories"].as_array_mut() {
+                    list.retain(|m| m["id"].as_i64().is_none_or(|id| !st.shown.contains(&id)));
+                    list.truncate(s.recall_limit);
+                }
+                st.shown.extend(ids(&hits));
                 note(s, &dir, "recall", &project, &hits);
-                out = context(&e.name, render(&hits, "Possibly relevant memories"));
+                out = context(
+                    &e.name,
+                    render(
+                        &hits,
+                        "Possibly relevant memories (… marks a cut text: footnote_get <id> gives all of it)",
+                        true,
+                    ),
+                );
             }
         }
         "Stop" => {

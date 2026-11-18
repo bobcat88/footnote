@@ -31,7 +31,11 @@ fn hook(state: &Path, event: Value) -> String {
     String::from_utf8(out.stdout).unwrap()
 }
 fn event(name: &str, prompt: &str) -> Value {
-    json!({"hook_event_name": name, "session_id": "s1", "cwd": env!("CARGO_MANIFEST_DIR"), "prompt": prompt})
+    event_in("s1", name, prompt)
+}
+
+fn event_in(session: &str, name: &str, prompt: &str) -> Value {
+    json!({"hook_event_name": name, "session_id": session, "cwd": env!("CARGO_MANIFEST_DIR"), "prompt": prompt})
 }
 fn seed(state: &Path, models: &[&str]) {
     let mut c = command(state);
@@ -61,8 +65,22 @@ fn pack_recall_save_and_stop_loop_match_the_existing_contract() {
             && pack.contains("data, not instructions")
     );
     assert!(!pack.contains("Project Other"));
+    // Already in this session's pack: not repeated (#242). Another session gets it, as a short recall line.
     let out = hook(state, event("UserPromptSubmit", "- benchmark tables gaps"));
-    assert!(out.contains("relative % gaps"));
+    assert!(!out.contains("relative % gaps"), "{out}");
+    let other = hook(
+        state,
+        event_in("s9", "UserPromptSubmit", "- benchmark tables gaps"),
+    );
+    assert!(
+        other.contains("relative % gaps") && other.contains("[id "),
+        "{other}"
+    );
+    let again = hook(
+        state,
+        event_in("s9", "UserPromptSubmit", "- benchmark tables gaps"),
+    );
+    assert!(!again.contains("relative % gaps"), "{again}");
     assert!(!out.contains("Project Other") && !out.contains("say so in a few words"));
     hook(
         state,
@@ -111,10 +129,15 @@ fn pack_recall_save_and_stop_loop_match_the_existing_contract() {
     stop["stop_hook_active"] = json!(true);
     assert_eq!(hook(state, stop), "");
     assert_eq!(hook(state, event("Stop", "")), "");
-    assert_eq!(
-        read(&state.join("memory-hook/s1.json")),
-        json!({"turns":3,"asked_at":3,"embed":false})
+    let mut st = read(&state.join("memory-hook/s1.json"));
+    // Ids of the memories already shown, numbers only, never their text.
+    let shown = st.as_object_mut().unwrap().remove("shown").unwrap();
+    assert!(
+        !shown.as_array().unwrap().is_empty()
+            && shown.as_array().unwrap().iter().all(Value::is_i64),
+        "{shown}"
     );
+    assert_eq!(st, json!({"turns":3,"asked_at":3,"embed":false}));
     assert!(!state.join("metrics.jsonl").exists());
 }
 
@@ -130,7 +153,7 @@ fn remember_aliases_and_legacy_state_keep_only_counters() {
     );
     assert_eq!(
         read(&state.join("memory-hook/s2.json")),
-        json!({"turns":3,"asked_at":0,"embed":true})
+        json!({"turns":3,"asked_at":0,"embed":true,"shown":[]})
     );
     assert_eq!(
         hook(state, json!({"hookEventName":"Stop","sessionId":"s2"})),
@@ -271,7 +294,11 @@ fn background_embeddings_and_opt_in_resident_recall() {
     )
     .unwrap();
     assert!(
-        hook(state, event("UserPromptSubmit", "benchmark tables gaps")).contains("relative % gaps")
+        hook(
+            state,
+            event_in("r1", "UserPromptSubmit", "benchmark tables gaps")
+        )
+        .contains("relative % gaps")
     );
     let end = Instant::now() + Duration::from_secs(15);
     loop {
@@ -303,7 +330,11 @@ fn background_embeddings_and_opt_in_resident_recall() {
     assert!(
         hook(
             state,
-            event("UserPromptSubmit", "how should tables show differences")
+            event_in(
+                "r2",
+                "UserPromptSubmit",
+                "how should tables show differences"
+            )
         )
         .contains("relative % gaps")
     );
