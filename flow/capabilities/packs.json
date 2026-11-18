@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "packs": {
+    "systems": ["ship-rust-tool", "rust-performance", "sqlite-sql-performance", "ci-release-engineering"],
+    "desktop": ["ship-desktop-app", "tauri-desktop-app", "react-app-performance", "ci-release-engineering"],
+    "intelligence": ["build-llm-rag-feature", "llm-rag-quality", "python-performance", "rust-performance"],
+    "data": ["deliver-data-analysis", "python-performance", "backtesting-rigor"],
+    "automation": ["build-automation", "web-scraping-automation", "python-performance", "google-apps-script"],
+    "linux": ["nix-hyprland-desktop"],
+    "web": ["ship-client-website", "website-launch-checklist", "react-app-performance"]
+  },
+  "ui_skills": ["ship-desktop-app", "ship-client-website", "tauri-desktop-app", "react-app-performance", "website-launch-checklist"],
+  "measurement_skills": ["rust-performance", "python-performance", "sqlite-sql-performance", "tauri-desktop-app", "react-app-performance"],
+  "external_ui_dependencies": ["project PRODUCT.md and DESIGN.md", "ui-ux-qloop", "impeccable", "unslop", "browser automation and accessibility tooling required by QLoop"]
+}

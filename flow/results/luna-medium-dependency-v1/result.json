@@ -1,0 +1,192 @@
+{
+  "study": "luna-medium-dependency-v1",
+  "model": "gpt-6-luna",
+  "order": [
+    "flow",
+    "footnote_only",
+    "skills",
+    "footnote",
+    "baseline"
+  ],
+  "limitations": [
+    "One synthetic multi-module task, one run per arm",
+    "Serial randomized order; cache and run variance prevent causal ranking",
+    "Common parent preparation excluded from child usage; not production setup cost",
+    "Measurement-only adapter; no predictions or dollar billing claims",
+    "Shared checkout with prompt isolation, not a security sandbox",
+    "Worker time excludes parent preparation and external acceptance scheduling",
+    "TTFT and internal repair rounds unknown",
+    "Cached tokens are a subset of input, not an additional token category",
+    "No production Usage attribution; no billing or subscription conversion"
+  ],
+  "confirmation": false,
+  "arms": {
+    "flow": {
+      "accepted": true,
+      "independent_exit_code": 0,
+      "existing_exit_code": 0,
+      "immutable_inputs_unchanged": true,
+      "delivery_attempts": 1,
+      "delivery_reruns": 0,
+      "internal_repairs": null,
+      "model_calls": 8,
+      "usage": {
+        "input_tokens": 303344,
+        "cached_input_tokens": 262016,
+        "output_tokens": 1943,
+        "uncached_input_tokens": 41328,
+        "total_tokens": 305287
+      },
+      "worker_seconds": 47.591,
+      "native_seconds": 46.996,
+      "host_start_delay_ms": 140.0,
+      "runtime_usage_reconciled": true,
+      "artifacts": {
+        "intervals.py": "66d67f743269d7739985d6112cd489a243dadfda221e90b40fa8390553f32ffe",
+        "availability.py": "0670fd099a793facbd4d90b8268cbc8402a86b6e61a566d3f035432fefb9312e",
+        "billing.py": "11b037812780057f6b3356c8a8ecd8c98a7949da78294b3d0fb634bbaa57170b",
+        "api.py": "ce81f19987609a5a0a91d2ca130bebe43de18cd3ddaeb9dea5fb7cbca6d6ce1b",
+        "cli.py": "15979617266c3b218733dee40ec733b7ee859ba78579db842a84b7cd939970da",
+        "test_migration.py": "f13d38da09088ec43aeffbd3cb35b587691fa036e35010fd391f5a4f790a0d45",
+        "delivery.txt": "01f2cf1239b6000ccb3e192ebc6e42179e2494c0841d33ac96ca2dd13267dd7b"
+      },
+      "thread_link": "[Luna dependency: Flow](t3-thread://v2/a5281679-5d70-4763-82f3-7e65048c13f8/thread:delegated-task:command%3Amcp%3Ab6a2c40d-62e3-4d50-b7ef-95ff33950796%3Adelegate-task%3A89ecfb22-abae-476c-a3e1-b8d855949be5)",
+      "requested_limit_exceeded": false
+    },
+    "footnote_only": {
+      "accepted": true,
+      "independent_exit_code": 0,
+      "existing_exit_code": 0,
+      "immutable_inputs_unchanged": true,
+      "delivery_attempts": 1,
+      "delivery_reruns": 0,
+      "internal_repairs": null,
+      "model_calls": 10,
+      "usage": {
+        "input_tokens": 363326,
+        "cached_input_tokens": 323840,
+        "output_tokens": 2055,
+        "uncached_input_tokens": 39486,
+        "total_tokens": 365381
+      },
+      "worker_seconds": 50.709,
+      "native_seconds": 49.808,
+      "host_start_delay_ms": 174.0,
+      "runtime_usage_reconciled": true,
+      "artifacts": {
+        "intervals.py": "117707aa3617740b44aceb3eff6c4cf523ea3dd760795c3fbca47af04ade85ec",
+        "availability.py": "4030356251686afd272a740d9fe21bc720978e4705096bd283e605f35531a828",
+        "billing.py": "11b037812780057f6b3356c8a8ecd8c98a7949da78294b3d0fb634bbaa57170b",
+        "api.py": "e631f6311067a5b167cba06a813c5090ba95c51efe544cbcede3cdf2b8550ad8",
+        "cli.py": "15979617266c3b218733dee40ec733b7ee859ba78579db842a84b7cd939970da",
+        "test_migration.py": "df7832f576457c487fad2bec5d1887e86f225306adcddcd10887280e0d532325",
+        "delivery.txt": "c15339e00598027741d9e1a3cb52258103dab6c8538080f7f46019015d6e675b"
+      },
+      "thread_link": "[Luna dependency: Footnote only](t3-thread://v2/a5281679-5d70-4763-82f3-7e65048c13f8/thread:delegated-task:command%3Amcp%3Ab6a2c40d-62e3-4d50-b7ef-95ff33950796%3Adelegate-task%3A9dd5a217-dbba-46eb-b09f-aa330bae8a3d)",
+      "requested_limit_exceeded": false
+    },
+    "skills": {
+      "accepted": true,
+      "independent_exit_code": 0,
+      "existing_exit_code": 0,
+      "immutable_inputs_unchanged": true,
+      "delivery_attempts": 1,
+      "delivery_reruns": 0,
+      "internal_repairs": null,
+      "model_calls": 11,
+      "usage": {
+        "input_tokens": 404684,
+        "cached_input_tokens": 364416,
+        "output_tokens": 2888,
+        "uncached_input_tokens": 40268,
+        "total_tokens": 407572
+      },
+      "worker_seconds": 66.823,
+      "native_seconds": 66.252,
+      "host_start_delay_ms": 160.0,
+      "runtime_usage_reconciled": true,
+      "artifacts": {
+        "intervals.py": "a1d783f565aa1747ddd600621ae23bd98120d046cde74d7802a2960458b4ffa7",
+        "availability.py": "3c0b481521700591cd7a69bff206a88f729af5942f23d06e4e1134e6e141da3f",
+        "billing.py": "11b037812780057f6b3356c8a8ecd8c98a7949da78294b3d0fb634bbaa57170b",
+        "api.py": "cf2d124379e6ff0a45af88e3b1286061decabc22bbe2393e013bb16c8a574d59",
+        "cli.py": "15979617266c3b218733dee40ec733b7ee859ba78579db842a84b7cd939970da",
+        "test_migration.py": "aca017cffd19f96ae491cea4574880f96ded23bb39044da78a1aecc58231b470",
+        "delivery.txt": "d99d2c8f5d4d5ea17a3bf826575d1efb3cc53a8c6938b8891d3c393cb352afe8"
+      },
+      "thread_link": "[Luna dependency: skills](t3-thread://v2/a5281679-5d70-4763-82f3-7e65048c13f8/thread:delegated-task:command%3Amcp%3Ab6a2c40d-62e3-4d50-b7ef-95ff33950796%3Adelegate-task%3Ae668e9a7-085a-419c-b7ae-81f2b6179e67)",
+      "requested_limit_exceeded": false
+    },
+    "footnote": {
+      "accepted": false,
+      "independent_exit_code": 0,
+      "existing_exit_code": 0,
+      "immutable_inputs_unchanged": true,
+      "delivery_attempts": 1,
+      "delivery_reruns": 0,
+      "internal_repairs": null,
+      "model_calls": 8,
+      "usage": {
+        "input_tokens": 296596,
+        "cached_input_tokens": 256256,
+        "output_tokens": 2389,
+        "uncached_input_tokens": 40340,
+        "total_tokens": 298985
+      },
+      "worker_seconds": 53.26,
+      "native_seconds": 52.673,
+      "host_start_delay_ms": 164.0,
+      "runtime_usage_reconciled": true,
+      "artifacts": {
+        "intervals.py": "54008426909637a5c15d3ce3d5919c14fcdf67737494f7b4d3b2dcba8a65cdc7",
+        "availability.py": "8428653beec9116cd7881a9b2ea8f32c288272deeb2c87a7ee376098feee0e84",
+        "billing.py": "afa1bafc2964c216d38ce59f3ec20620d0772fe42d54a61afbf43272eb7a41ef",
+        "api.py": "ac22356a18bf371d59b48e51d455330011fdf99d0ed15e11ed7dd02bca28b377",
+        "cli.py": "9916c30c4cc767ad99c755295de5592f3b676a946af5be3be7ab699a88140af1",
+        "test_migration.py": "aecd7749e98e3cd8ea5a707952d2c12d7aeeaeae2f77ff3f3b7b3a219fe83d04",
+        "delivery.txt": "d033f847e2d83c9254fc451678a2cd138da1c789216404aa44558618db2becc9"
+      },
+      "thread_link": "[Luna dependency: Footnote and skills](t3-thread://v2/a5281679-5d70-4763-82f3-7e65048c13f8/thread:delegated-task:command%3Amcp%3Ab6a2c40d-62e3-4d50-b7ef-95ff33950796%3Adelegate-task%3Ac3e6d415-e56d-4e57-a296-f8875540c119)",
+      "requested_limit_exceeded": false,
+      "contract_audit": "Functional checks pass; test_migration.py imports unavailable pytest, violating standard-library-only requirement."
+    },
+    "baseline": {
+      "accepted": false,
+      "independent_exit_code": 0,
+      "existing_exit_code": 0,
+      "immutable_inputs_unchanged": true,
+      "delivery_attempts": 1,
+      "delivery_reruns": 0,
+      "internal_repairs": null,
+      "model_calls": 8,
+      "usage": {
+        "input_tokens": 280830,
+        "cached_input_tokens": 243328,
+        "output_tokens": 1333,
+        "uncached_input_tokens": 37502,
+        "total_tokens": 282163
+      },
+      "worker_seconds": 38.565,
+      "native_seconds": 38.045,
+      "host_start_delay_ms": 146.0,
+      "runtime_usage_reconciled": true,
+      "artifacts": {
+        "intervals.py": "ab30377eca5ec2c359f29b948c8e4a55aba4482b2f93270cc8422c69ee1b20c9",
+        "availability.py": "c0d0f9fd5ce23355d827b5a2939bd043cdf9d51c2316510d6e55be71d09a901c",
+        "billing.py": "11b037812780057f6b3356c8a8ecd8c98a7949da78294b3d0fb634bbaa57170b",
+        "api.py": "e631f6311067a5b167cba06a813c5090ba95c51efe544cbcede3cdf2b8550ad8",
+        "cli.py": "15979617266c3b218733dee40ec733b7ee859ba78579db842a84b7cd939970da"
+      },
+      "thread_link": "[Luna dependency: baseline](t3-thread://v2/a5281679-5d70-4763-82f3-7e65048c13f8/thread:delegated-task:command%3Amcp%3Ab6a2c40d-62e3-4d50-b7ef-95ff33950796%3Adelegate-task%3Af01af142-d8f9-4f46-9867-25c4616a571f)",
+      "requested_limit_exceeded": false,
+      "contract_audit": "Functional checks pass; regression tests and delivery notes missing after unconfirmed patch result."
+    }
+  },
+  "aggregate_usage": {
+    "input_tokens": 1648780,
+    "cached_input_tokens": 1449856,
+    "output_tokens": 10608,
+    "uncached_input_tokens": 198924,
+    "total_tokens": 1659388
+  }
+}

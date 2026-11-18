@@ -1,0 +1,9 @@
+{
+  "text": "For flow-interval-proof merge_intervals, merge only strict overlaps (start < previous end); touching half-open intervals retain separate billing boundaries. Validate list/tuple pairs and integer endpoints excluding booleans before sorting a copy, so malformed inputs raise ValueError and the original input stays unchanged.",
+  "evidence": ["intervals.py", "test_intervals.py"],
+  "context_used": [
+    "Footnote Code: merge_intervals, intervals.py lines 1-8",
+    "Footnote Memory: id=1, scope=flow-interval-proof, observed_at=2026-11-17",
+    "Footnote Library: id=1, interval-contract.txt line 1, contract v1"
+  ]
+}

@@ -1,0 +1,3 @@
+# Keep exact bytes on every platform: skills/pack-manifest.json hashes each skill file, and Flow records checker hashes.
+/skills/** text eol=lf
+/flow/** text eol=lf

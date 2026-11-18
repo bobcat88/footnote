@@ -1,0 +1,67 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Luna results</title></head><body>
+<div id="luna-results">
+<style>
+#luna-results{--fg:var(--foreground,#1d1d1f);--mute:var(--muted-foreground,#6e6e73);--track:var(--secondary,#ececf0);--c1:var(--chart-1,#3b6fd8);--c2:var(--chart-2,#9db7ee);--c3:var(--chart-3,#e08a2c);
+  color:var(--fg);font-family:var(--font-sans,system-ui,sans-serif);display:grid;gap:28px;max-width:860px}
+@media(prefers-color-scheme:dark){#luna-results{--fg:var(--foreground,#f2f2f5);--mute:var(--muted-foreground,#a1a1aa);--track:var(--secondary,#2a2a30);--c2:#4d6aa8}}
+#luna-results h2{font-weight:500;margin:0}
+#luna-results h3{font-weight:500;margin:0 0 4px}
+#luna-results p,#luna-results .desc{color:var(--mute);margin:0}
+#luna-results .desc{font-size:.9em;margin-bottom:10px}
+#luna-results section{display:grid;gap:8px}
+#luna-results .row{display:grid;grid-template-columns:150px minmax(40px,1fr) 190px;gap:10px;align-items:center}
+#luna-results .bar{display:flex;height:20px;background:var(--track);border-radius:4px;overflow:hidden}
+#luna-results .bar span{height:100%}
+#luna-results .val{font-variant-numeric:tabular-nums;white-space:nowrap}
+#luna-results .val small{color:var(--mute)}
+#luna-results .legend{display:flex;gap:16px;font-size:.9em;color:var(--mute)}
+#luna-results .legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px}
+@media(max-width:560px){#luna-results .row{grid-template-columns:105px minmax(30px,1fr);}#luna-results .val{grid-column:2}}
+</style>
+<h2>GPT‑6 Luna · medium reasoning</h2>
+<div id="lr-body"></div>
+<p>One run per setup, different cache states: directional only, not a ranking. Percentages compare with the baseline of the same task. Token counts are not billed costs; cached input is part of input.</p>
+<script>
+(() => {
+  const tasks = [
+    {name:'L1 · Local change', note:'All five passed 6 independent checks.', rows:[
+      ['Baseline',51.334,38068,278528,2002,''],['Skills',41.083,38491,283776,1597,''],['Footnote only',45.425,38455,283520,1801,''],
+      ['Footnote + skills',31.482,37929,104064,1284,''],['Flow prototype',37.392,39703,218240,1499,'']]},
+    {name:'L2 · Downstream dependencies', note:'All five code candidates passed 14 checks. * Baseline delivery incomplete (no tests, no notes); † Footnote + skills used pytest, which the task forbade.', rows:[
+      ['Baseline *',38.565,37502,243328,1333,''],['Skills',66.823,40268,364416,2888,''],['Footnote only',50.709,39486,323840,2055,''],
+      ['Footnote + skills †',53.26,40340,256256,2389,''],['Flow prototype',47.591,41328,262016,1943,'']]},
+  ];
+  const fmt = n => n.toLocaleString('en-US');
+  const vs = (v, b, less, more) => { if (v === b) return '0%'; const p = Math.round((v / b - 1) * 100); return p === 0 ? '≈ same' : Math.abs(p) + '% ' + (p < 0 ? less : more); };
+  const el = (t, c, h) => { const e = document.createElement(t); if (c) e.className = c; if (h != null) e.innerHTML = h; return e; };
+  const body = document.getElementById('lr-body');
+  for (const t of tasks) {
+    const wrap = el('div'); wrap.style.cssText = 'display:grid;gap:22px';
+    wrap.append(el('h3', '', t.name), el('p', '', t.note));
+    const base = t.rows[0];
+    const maxS = Math.max(...t.rows.map(r => r[1]));
+    const tot = r => r[2] + r[3] + r[4];
+    const maxT = Math.max(...t.rows.map(tot));
+    const time = el('section'); time.append(el('div', 'desc', 'Worker time, seconds (requested to finished; setup and external checks excluded)'));
+    const tok = el('section'); tok.append(el('div', 'desc', 'Total tokens'));
+    const lg = el('div', 'legend', '<span><i style="background:var(--c1)"></i>Uncached input</span><span><i style="background:var(--c2)"></i>Cached input</span><span><i style="background:var(--c3)"></i>Output</span>');
+    tok.append(lg);
+    for (const r of t.rows) {
+      const s = Math.round(r[1]), sb = Math.round(base[1]);
+      const tr = el('div', 'row'); tr.append(el('span', '', r[0]));
+      const b = el('div', 'bar'); const f = el('span'); f.style.cssText = `width:${r[1] / maxS * 100}%;background:var(--c1)`; b.append(f); tr.append(b);
+      tr.append(el('span', 'val', `${s} s <small>(${vs(s, sb, 'faster', 'slower')})</small>`));
+      tr.setAttribute('aria-label', `${r[0]}: ${s} seconds`); time.append(tr);
+      const kr = el('div', 'row'); kr.append(el('span', '', r[0]));
+      const kb = el('div', 'bar');
+      [[r[2], 'var(--c1)'], [r[3], 'var(--c2)'], [r[4], 'var(--c3)']].forEach(([v, c]) => { const p = el('span'); p.style.cssText = `width:${v / maxT * 100}%;background:${c}`; kb.append(p); });
+      kr.append(kb, el('span', 'val', `${fmt(tot(r))} <small>(${vs(tot(r), tot(base), 'fewer', 'more')})</small>`));
+      kr.setAttribute('aria-label', `${r[0]}: ${fmt(tot(r))} tokens`); tok.append(kr);
+    }
+    wrap.append(time, tok); body.append(wrap);
+  }
+})();
+</script>
+</div>
+</body></html>

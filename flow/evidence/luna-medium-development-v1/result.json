@@ -1,0 +1,217 @@
+{
+  "study": "luna-medium-development-v1",
+  "model": "gpt-6-luna",
+  "reasoning_effort": "medium",
+  "order": [
+    "flow",
+    "footnote",
+    "baseline",
+    "skills"
+  ],
+  "arms": {
+    "flow": {
+      "accepted": true,
+      "independent_checks": 6,
+      "delivery_attempts": 1,
+      "delivery_reruns": 0,
+      "internal_repair_rounds": null,
+      "usage": {
+        "input_tokens": 257943,
+        "cached_input_tokens": 218240,
+        "output_tokens": 1499,
+        "uncached_input_tokens": 39703,
+        "total_tokens": 259442
+      },
+      "model_calls": 7,
+      "tool_calls": 6,
+      "requested_limit_exceeded": false,
+      "worker_seconds": 37.392,
+      "native_task_seconds": 36.835,
+      "host_start_delay_ms": 139.0,
+      "independent_check_ms": 67.3831,
+      "accepted_at": "2026-11-17T19:03:25.793952+00:00",
+      "submission_to_acceptance_seconds": 318.546952,
+      "prepare_ms": 1953.1222,
+      "artifacts": {
+        "intervals.py": "fd14455027281f2d91ead65b1ded51f1128e3db274aac76703393db5c7231ad3",
+        "test_intervals.py": "41122899710104865208444b994e676b63a9d7914c46724fe88408ee9ebca1ca",
+        "delivery.txt": "611d48740a748aa0c51ac71e1b9852e3f68b5b56ed94c9a9175b3f715b8b3c3c"
+      },
+      "runtime_session_id": "01a1eadf-a337-78a1-9b26-8d946f28774b",
+      "runtime_usage_reconciled": true,
+      "measurement_capture_complete_claim": false,
+      "t3_run": {
+        "runId": "run:thread:thread%3Adelegated-task%3Acommand%253Amcp%253Ab6a2c40d-62e3-4d50-b7ef-95ff33950796%253Adelegate-task%253A35c6e29e-2a72-4b0f-8f89-d33bacf86cd3:ordinal:1",
+        "ordinal": 1,
+        "status": "completed",
+        "providerInstanceId": "codex",
+        "model": "gpt-6-luna",
+        "executedModel": "gpt-6-luna",
+        "requestedAt": "2026-11-17T18:58:07.247Z",
+        "startedAt": "2026-11-17T18:58:07.386Z",
+        "completedAt": "2026-11-17T18:58:44.639Z"
+      },
+      "thread_link": "[Luna medium: Flow calibration](t3-thread://v2/a5281679-5d70-4763-82f3-7e65048c13f8/thread:delegated-task:command%3Amcp%3Ab6a2c40d-62e3-4d50-b7ef-95ff33950796%3Adelegate-task%3A35c6e29e-2a72-4b0f-8f89-d33bacf86cd3)"
+    },
+    "footnote": {
+      "accepted": true,
+      "independent_checks": 6,
+      "delivery_attempts": 1,
+      "delivery_reruns": 0,
+      "internal_repair_rounds": null,
+      "usage": {
+        "input_tokens": 141993,
+        "cached_input_tokens": 104064,
+        "output_tokens": 1284,
+        "uncached_input_tokens": 37929,
+        "total_tokens": 143277
+      },
+      "model_calls": 4,
+      "tool_calls": 3,
+      "requested_limit_exceeded": false,
+      "worker_seconds": 31.482,
+      "native_task_seconds": 30.969,
+      "host_start_delay_ms": 152.0,
+      "independent_check_ms": 66.7467,
+      "accepted_at": "2026-11-17T19:03:25.883881+00:00",
+      "submission_to_acceptance_seconds": 270.205881,
+      "prepare_ms": 2089.0167,
+      "artifacts": {
+        "intervals.py": "4f1544f020bc854c030dbd61eb8f7dbae6e8e07535c623960ace5d7bdf36046a",
+        "test_intervals.py": "cb706c566ff21ee74188ad1652a33e2d6b258243b68551d50917b6a299b33d72",
+        "delivery.txt": "67f46b924d0acab221cb852e923f65de0a99dd2b3766fc67fb63abf704457868"
+      },
+      "runtime_session_id": "01a1eae0-6061-7292-953b-d7f86b19aa81",
+      "runtime_usage_reconciled": true,
+      "measurement_capture_complete_claim": false,
+      "t3_run": {
+        "runId": "run:thread:thread%3Adelegated-task%3Acommand%253Amcp%253Ab6a2c40d-62e3-4d50-b7ef-95ff33950796%253Adelegate-task%253A220baeda-e9d7-4f26-9f27-1f293a3595ed:ordinal:1",
+        "ordinal": 1,
+        "status": "completed",
+        "providerInstanceId": "codex",
+        "model": "gpt-6-luna",
+        "executedModel": "gpt-6-luna",
+        "requestedAt": "2026-11-17T18:58:55.678Z",
+        "startedAt": "2026-11-17T18:58:55.830Z",
+        "completedAt": "2026-11-17T18:59:27.160Z"
+      },
+      "thread_link": "[Luna medium: Footnote calibration](t3-thread://v2/a5281679-5d70-4763-82f3-7e65048c13f8/thread:delegated-task:command%3Amcp%3Ab6a2c40d-62e3-4d50-b7ef-95ff33950796%3Adelegate-task%3A220baeda-e9d7-4f26-9f27-1f293a3595ed)"
+    },
+    "baseline": {
+      "accepted": true,
+      "independent_checks": 6,
+      "delivery_attempts": 1,
+      "delivery_reruns": 0,
+      "internal_repair_rounds": null,
+      "usage": {
+        "input_tokens": 316596,
+        "cached_input_tokens": 278528,
+        "output_tokens": 2002,
+        "uncached_input_tokens": 38068,
+        "total_tokens": 318598
+      },
+      "model_calls": 9,
+      "tool_calls": 8,
+      "requested_limit_exceeded": true,
+      "worker_seconds": 51.334,
+      "native_task_seconds": 50.693,
+      "host_start_delay_ms": 294.0,
+      "independent_check_ms": 66.4458,
+      "accepted_at": "2026-11-17T19:03:25.954700+00:00",
+      "submission_to_acceptance_seconds": 227.7547,
+      "prepare_ms": 1574.989,
+      "artifacts": {
+        "intervals.py": "9cc9fa945512b13a654aa24cb6ef8e0b923c62353be562c2545cffe8da77f7b1",
+        "test_intervals.py": "f7f79268a870f0b82bf1760323952e55c9ad07f75bf515cafad8c1c7c3c54dcc",
+        "delivery.txt": "ba1e013bad8579bed1b9cf20ebf02058ee0e61b0e8bab140587d87b4bc14e526"
+      },
+      "runtime_session_id": "01a1eae1-06f8-7f13-b4ae-fff66c6cbb21",
+      "runtime_usage_reconciled": true,
+      "measurement_capture_complete_claim": false,
+      "t3_run": {
+        "runId": "run:thread:thread%3Adelegated-task%3Acommand%253Amcp%253Ab6a2c40d-62e3-4d50-b7ef-95ff33950796%253Adelegate-task%253A070b59d0-ab42-49e4-933a-79288a5f4e1e:ordinal:1",
+        "ordinal": 1,
+        "status": "completed",
+        "providerInstanceId": "codex",
+        "model": "gpt-6-luna",
+        "executedModel": "gpt-6-luna",
+        "requestedAt": "2026-11-17T18:59:38.200Z",
+        "startedAt": "2026-11-17T18:59:38.494Z",
+        "completedAt": "2026-11-17T19:00:29.534Z"
+      },
+      "thread_link": "[Luna medium: baseline calibration](t3-thread://v2/a5281679-5d70-4763-82f3-7e65048c13f8/thread:delegated-task:command%3Amcp%3Ab6a2c40d-62e3-4d50-b7ef-95ff33950796%3Adelegate-task%3A070b59d0-ab42-49e4-933a-79288a5f4e1e)"
+    },
+    "skills": {
+      "accepted": true,
+      "independent_checks": 6,
+      "delivery_attempts": 1,
+      "delivery_reruns": 0,
+      "internal_repair_rounds": null,
+      "usage": {
+        "input_tokens": 322267,
+        "cached_input_tokens": 283776,
+        "output_tokens": 1597,
+        "uncached_input_tokens": 38491,
+        "total_tokens": 323864
+      },
+      "model_calls": 9,
+      "tool_calls": 8,
+      "requested_limit_exceeded": true,
+      "worker_seconds": 41.083,
+      "native_task_seconds": 40.449,
+      "host_start_delay_ms": 267.0,
+      "independent_check_ms": 69.7126,
+      "accepted_at": "2026-11-17T19:03:26.027666+00:00",
+      "submission_to_acceptance_seconds": 164.966666,
+      "prepare_ms": 1610.6495,
+      "artifacts": {
+        "intervals.py": "d9911696b3e103fe245c60bf1687d54f0e6b5cb52fb737c03af91ca53f1017c9",
+        "test_intervals.py": "81a996533fb11c506d8f564070f3ea23d590b77a75338b18fc2edb7cd62d673e",
+        "delivery.txt": "204497bcfd4fd3c75dc4220de5648ffec15e45740c732aba4d154597750e49ac"
+      },
+      "runtime_session_id": "01a1eae1-fc8a-7e21-9481-0536ea6d7222",
+      "runtime_usage_reconciled": true,
+      "measurement_capture_complete_claim": false,
+      "t3_run": {
+        "runId": "run:thread:thread%3Adelegated-task%3Acommand%253Amcp%253Ab6a2c40d-62e3-4d50-b7ef-95ff33950796%253Adelegate-task%253Abf25248c-7888-43d4-b51a-87fd9f37d4f3:ordinal:1",
+        "ordinal": 1,
+        "status": "completed",
+        "providerInstanceId": "codex",
+        "model": "gpt-6-luna",
+        "executedModel": "gpt-6-luna",
+        "requestedAt": "2026-11-17T19:00:41.061Z",
+        "startedAt": "2026-11-17T19:00:41.328Z",
+        "completedAt": "2026-11-17T19:01:22.144Z"
+      },
+      "thread_link": "[Luna medium: skills calibration](t3-thread://v2/a5281679-5d70-4763-82f3-7e65048c13f8/thread:delegated-task:command%3Amcp%3Ab6a2c40d-62e3-4d50-b7ef-95ff33950796%3Adelegate-task%3Abf25248c-7888-43d4-b51a-87fd9f37d4f3)"
+    }
+  },
+  "confirmation": false,
+  "limits": {
+    "maximum_runs": 4,
+    "maximum_delivery_attempts_per_run": 1,
+    "requested_model_responses_per_run": 8,
+    "hard_token_cap": null
+  },
+  "limitations": [
+    "One synthetic task, one repetition per arm",
+    "Current Flow prototype, not completed production integration",
+    "Common parent preparation cost recorded separately",
+    "No price estimate or dollar billing claim",
+    "Serial fixed-seed order, cache states differ, no causal ranking",
+    "Independent acceptance occurred after the whole batch; acceptance delay includes host scheduling",
+    "Elapsed comparisons use requested-to-terminal worker time, not full delivery acceptance",
+    "No true TTFT, price/bill or production Usage attribution",
+    "Internal local edit/check repair count not instrumented; delivery reruns are zero",
+    "Prompt isolation in shared checkout, not a security sandbox",
+    "All arms inherit the common T3 runtime instruction context",
+    "Footnote context contains the original contract; join_touching is a new common prompt requirement"
+  ],
+  "aggregate_usage": {
+    "input_tokens": 1038799,
+    "cached_input_tokens": 884608,
+    "output_tokens": 6382,
+    "uncached_input_tokens": 154191,
+    "total_tokens": 1045181
+  }
+}

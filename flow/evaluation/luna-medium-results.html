@@ -1,0 +1,30 @@
+<div id="luna-medium-results">
+  <h2>GPT‑6 Luna · medium reasoning</h2>
+  <p>One task per arm · Footnote-only added afterward · all passed 6 independent checks · zero delivery reruns</p>
+  <section id="luna-times" data-viz-composition>
+    <div data-viz-container></div>
+    <script type="application/json" data-viz-chart>
+      {"id":"luna-times","title":"Worker time","description":"Requested to terminal, seconds. Parent preparation and external checks excluded. One sample per arm.","height":240,"spec":{"type":"horizontalBar","y":"Stack","x":"Seconds","xLabel":"Seconds","showValues":true,"showLegend":false},"columns":["Stack","Seconds"],"rows":[["Baseline",51.334],["Skills",41.083],["Footnote only",45.425],["Skills + Footnote",31.482],["Flow prototype",37.392]]}
+    </script>
+  </section>
+  <section id="luna-tokens" data-viz-composition>
+    <div data-viz-container></div>
+    <script type="application/json" data-viz-chart>
+      {"id":"luna-tokens","title":"Actual runtime tokens","description":"Cached input is part of input. All calls included. These are token counts, not billed costs.","height":260,"spec":{"type":"horizontalStackedBar","y":"Stack","x":["Uncached input","Cached input","Output"],"xLabel":"Tokens","showLegend":true},"columns":["Stack","Uncached input","Cached input","Output"],"rows":[["Baseline",38068,278528,2002],["Skills",38491,283776,1597],["Footnote only",38455,283520,1801],["Skills + Footnote",37929,104064,1284],["Flow prototype",39703,218240,1499]]}
+    </script>
+  </section>
+  <p>Development calibration · different cache states · production Flow and stronger-model comparison remain untested</p>
+</div>
+<style>
+  #luna-medium-results { display: grid; gap: 12px; }
+  #luna-medium-results h2 { font-weight: 500; }
+  #luna-medium-results p { color: var(--muted-foreground); }
+</style>
+<script type="module">
+  import { mountChart } from "https://persistent.oaistatic.com/plugins/visualize/charts/1.2.3/element.js";
+  const root = document.getElementById("luna-medium-results");
+  for (const section of root.querySelectorAll("[data-viz-composition]")) {
+    const config = JSON.parse(section.querySelector("[data-viz-chart]").textContent);
+    mountChart(section.querySelector("[data-viz-container]"), config);
+  }
+</script>

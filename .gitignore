@@ -38,3 +38,7 @@ site-packages/
 /.design-studio/
 /design/qloop/
 /design/demos/
+
+# Flow: benchmark builds, matrix cells and run state are local outputs. Recorded results the docs cite live in flow/results/.
+/flow/build/
+/flow/.runtime/
