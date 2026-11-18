@@ -367,7 +367,11 @@ fn write(
         }
     }
     let (mut ids, mut file_ids) = (HashMap::<&str, i64>::new(), Vec::new());
-    for d in docs {
+    // Each file in `tests/` is its own crate, and rust-analyzer names its items without the file (`demo 0.1.0 run().`), so
+    // two test files with a `fn run` define the same symbol (#197). Each definition is kept, per file, and a reference goes to
+    // the one in its own file first.
+    let mut own = HashMap::<(usize, &str), i64>::new();
+    for (di, d) in docs.iter().enumerate() {
         let sha = std::fs::read(root.join(&d.path))
             .map(|b| footnote_core::hash(&b))
             .unwrap_or_default();
@@ -382,9 +386,15 @@ fn write(
             .iter()
             .filter(|o| o.roles & scip::DEFINITION != 0 && !o.symbol.starts_with("local "))
         {
-            if ids.contains_key(o.symbol.as_str()) {
+            if own.contains_key(&(di, o.symbol.as_str())) {
                 continue;
             }
+            // Already defined in another file: stored again under a name that carries this file.
+            let scip = if ids.contains_key(o.symbol.as_str()) {
+                format!("{} @{}", o.symbol, d.path)
+            } else {
+                o.symbol.clone()
+            };
             let (display, signature) = names.get(o.symbol.as_str()).copied().unwrap_or(("", ""));
             let name = if display.is_empty() {
                 short_name(&o.symbol)
@@ -394,9 +404,11 @@ fn write(
             let end = o.enclosing.unwrap_or(o.range)[2];
             tx.execute(
                 "INSERT INTO symbols(scip, name, kind, signature, file_id, line, end_line) VALUES(?1,?2,?3,?4,?5,?6,?7)",
-                params![o.symbol, name, kind(&o.symbol), signature, file, o.range[0] + 1, end + 1],
+                params![scip, name, kind(&o.symbol), signature, file, o.range[0] + 1, end + 1],
             )?;
-            ids.insert(&o.symbol, tx.last_insert_rowid());
+            let id = tx.last_insert_rowid();
+            ids.entry(&o.symbol).or_insert(id);
+            own.insert((di, &o.symbol), id);
         }
     }
     let mut refs = 0;
@@ -423,7 +435,10 @@ fn write(
                 .iter()
                 .filter(|o| o.roles & scip::DEFINITION == 0)
             {
-                let Some(&target) = ids.get(o.symbol.as_str()) else {
+                let Some(&target) = own
+                    .get(&(i, o.symbol.as_str()))
+                    .or_else(|| ids.get(o.symbol.as_str()))
+                else {
                     // A reference into another package (not a bare path to it): kept as a count for the architecture map.
                     if let Some((pkg, ver)) = package(&o.symbol)
                         .filter(|p| !ours.contains(p.0) && kind(&o.symbol) != "module")
@@ -436,7 +451,7 @@ fn write(
                     .iter()
                     .filter(|(_, e)| contains(*e, o.range))
                     .min_by_key(|(_, e)| (e[2] - e[0], e[3] - e[1]))
-                    .and_then(|(s, _)| ids.get(s).copied());
+                    .and_then(|(s, _)| own.get(&(i, *s)).or_else(|| ids.get(s)).copied());
                 add.execute(params![target, file, o.range[0] + 1, caller, origin])?;
                 refs += 1;
             }

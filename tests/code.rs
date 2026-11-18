@@ -346,3 +346,65 @@ fn impact_walks_callers_level_by_level_and_lists_tests_apart() {
     let one = run(&["code-impact", "helper", "--root", root, "--depth", "1"]);
     assert_eq!(names(&one, "callers"), [("greet".to_string(), 1)], "{one}");
 }
+
+/// Two integration tests, each with its own `fn run`: rust-analyzer names both `demo 0.1.0 run().`, and each must keep its
+/// own caller (#197), not have every call pinned to the first file.
+#[test]
+fn integration_test_helpers_with_one_name_keep_their_own_callers() {
+    if std::process::Command::new("rust-analyzer")
+        .arg("--version")
+        .output()
+        .is_err()
+    {
+        eprintln!("rust-analyzer not installed: skipped");
+        return;
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let (state, project) = (dir.path().join("state"), dir.path().join("demo"));
+    fs::create_dir_all(project.join("src")).unwrap();
+    fs::create_dir_all(project.join("tests")).unwrap();
+    fs::write(
+        project.join("Cargo.toml"),
+        "[package]\nname = \"demo\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+    )
+    .unwrap();
+    fs::write(
+        project.join("src/lib.rs"),
+        "pub fn api() -> u32 {\n    1\n}\n",
+    )
+    .unwrap();
+    for t in ["first", "second"] {
+        fs::write(
+            project.join(format!("tests/{t}.rs")),
+            // Called through a `let`: rust-analyzer records no reference inside macro arguments (`assert_eq!(run(), 1)`).
+            format!("fn run() -> u32 {{\n    demo::api()\n}}\n\n#[test]\nfn {t}() {{\n    let v = run();\n    assert_eq!(v, 1);\n}}\n"),
+        )
+        .unwrap();
+    }
+    let root = project.to_str().unwrap();
+    footnote(&state, &["code-index", root]);
+    let found = footnote(&state, &["code", "run", "--root", root]);
+    let mut pairs: Vec<(String, String)> = found["symbols"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|s| {
+            (
+                s["path"].as_str().unwrap_or_default().replace('\\', "/"),
+                s["callers"][0]["name"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .to_string(),
+            )
+        })
+        .collect();
+    pairs.sort();
+    assert_eq!(
+        pairs,
+        [
+            ("tests/first.rs".to_string(), "first".to_string()),
+            ("tests/second.rs".to_string(), "second".to_string())
+        ],
+        "{found}"
+    );
+}
