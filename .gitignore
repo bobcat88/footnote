@@ -32,3 +32,9 @@ site-packages/
 .scratch/
 *.log
 *.tmp
+
+# Design work folders: studio directions, QLoop passes and demos are local working files, not source.
+# Decisions that matter are recorded in DESIGN.md; the product site (design/site/) stays tracked.
+/.design-studio/
+/design/qloop/
+/design/demos/

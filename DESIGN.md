@@ -6,7 +6,7 @@ Last reviewed: 2026-11-14 · Direction locked by Johan in the Design Studio on 2
 Footnote is transparent for your team: set it up, and what comes into focus is your company's data and knowledge. The page shows that literally: data flowing in the background, liquid glass that brings part of it into focus, and the product answering with its sources.
 
 ## 1. Tokens source
-Hand-written, then tuned and locked in the Design Studio on 2026-11-14 (base direction D2 "Afterglow"). Contrast values measured by the studio at the lock. Studio page: https://claude.ai/artifact/9nnqR2T6Z78NUwADRSXWxB; work files in `.design-studio/`.
+Hand-written, then tuned and locked in the Design Studio on 2026-11-14 (base direction D2 "Afterglow"). Contrast values measured by the studio at the lock. Studio page: https://claude.ai/artifact/9nnqR2T6Z78NUwADRSXWxB; work files in `.design-studio/` (local only, not in git).
 
 ## 2. References
 | # | Product or source | URL | Date viewed | Evidence type | Borrowed | Rejected and why |
