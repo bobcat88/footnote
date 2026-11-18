@@ -188,6 +188,7 @@ fn parse(root: &Path, project: &str) -> anyhow::Result<(Vec<Document>, usize, Ve
     let mut defs: Vec<Def> = Vec::new();
     let mut calls: Vec<Call> = Vec::new();
     let mut imports: Vec<HashMap<String, String>> = vec![HashMap::new(); files.len()]; // file -> bound name -> module
+    let mut top_imports: Vec<HashSet<String>> = vec![HashSet::new(); files.len()];
     let mut compiled: HashMap<Lang, (Language, Query, Query)> = HashMap::new();
     // Rust struct field types, (struct, field) -> types: one step of a receiver chain (`self.store.save()`).
     let mut fields: HashMap<(String, String), Vec<(String, usize)>> = HashMap::new();
@@ -197,10 +198,11 @@ fn parse(root: &Path, project: &str) -> anyhow::Result<(Vec<Document>, usize, Ve
         if !compiled.contains_key(l) {
             let (lang, tags, imp) = grammar(*l);
             // The grammar's tags query plus calls it leaves out: Rust path calls (`a::f()`), measured as the biggest gap.
-            let tags = if *l == Lang::Rust {
-                format!("{tags}\n{RUST_PATH_CALLS}")
-            } else {
-                tags.to_string()
+            // TypeScript's own query holds only TS-only items; functions, classes and calls come from the JavaScript one (#216).
+            let tags = match l {
+                Lang::Rust => format!("{tags}\n{RUST_PATH_CALLS}"),
+                Lang::Ts | Lang::Tsx => format!("{}\n{tags}", tree_sitter_javascript::TAGS_QUERY),
+                _ => tags.to_string(),
             };
             let (Ok(t), Ok(q)) = (Query::new(&lang, &tags), Query::new(&lang, imp)) else {
                 continue;
@@ -250,15 +252,39 @@ fn parse(root: &Path, project: &str) -> anyhow::Result<(Vec<Document>, usize, Ve
                     .next()
                     .unwrap_or("")
                     .trim();
-                let (owner, ret) = if *l == Lang::Rust && kind == "function" {
+                let (owner, ret) = if kind == "function" && !matches!(l, Lang::Java | Lang::Go) {
+                    // The `impl`, trait or class whose body holds this function (a Python decorator wraps it once).
                     let owner = node
                         .parent()
-                        .filter(|p| p.kind() == "declaration_list")
+                        .and_then(|p| match p.kind() {
+                            "decorated_definition" => p.parent(),
+                            _ => Some(p),
+                        })
+                        .filter(|p| {
+                            matches!(
+                                p.kind(),
+                                "declaration_list"
+                                    | "block"
+                                    | "class_body"
+                                    | "interface_body"
+                                    | "object_type"
+                            )
+                        })
                         .and_then(|p| p.parent())
-                        .and_then(|p| owner_name(&p, src));
+                        .and_then(|p| owner_name(&p, src))
+                        // `{ getPath: () => .. }` and `Deno.upgradeWebSocket = () => ..` bind no name: a member of no
+                        // known type, so a bare call never reaches them (hono, 18 Nov 2026).
+                        .or_else(|| {
+                            let member = node.kind() == "pair"
+                                || node
+                                    .child_by_field_name("left")
+                                    .is_some_and(|x| x.kind() == "member_expression");
+                            member.then(String::new)
+                        });
                     let ret = node
                         .child_by_field_name("return_type")
                         .and_then(|r| r.utf8_text(src).ok())
+                        .map(|r| r.trim_start_matches(':').trim())
                         .map(|r| owner.as_deref().map_or(r.to_string(), |o| swap_self(r, o)));
                     (owner, ret)
                 } else {
@@ -275,27 +301,40 @@ fn parse(root: &Path, project: &str) -> anyhow::Result<(Vec<Document>, usize, Ve
                     ret,
                 });
             } else if node.kind() != "macro_invocation" {
+                // The JavaScript query tags `obj.f(x)` on its arguments; the call is their parent.
+                let node = if node.kind() == "arguments" {
+                    node.parent().unwrap_or(node)
+                } else {
+                    node
+                };
                 // A Rust macro (`env!`, `write!`) is not a call to a function of that name.
                 let (qualifier, member) = qualifier(&node, &n, src);
-                let recv = if *l == Lang::Rust && member {
-                    node.child_by_field_name("function")
-                        .and_then(|f| f.child_by_field_name("value"))
-                        .and_then(|v| receiver(v, src, 0))
-                        .and_then(|(b, s)| {
-                            // `Self` and `self` mean the impl the call sits in.
-                            let o = impl_owner(&node, src);
-                            let fix = |t: String| match &o {
-                                Some(o) => Some(swap_self(&t, o)),
-                                None => (!has_word(&t, "Self")).then_some(t),
-                            };
-                            Some((
-                                match b {
-                                    Base::Type(t) => Base::Type(fix(t)?),
-                                    Base::Static(t, f) => Base::Static(fix(t)?, f),
-                                },
-                                s,
-                            ))
-                        })
+                let f = node.child_by_field_name("function");
+                let recv = if member {
+                    match l {
+                        Lang::Rust => f
+                            .and_then(|f| f.child_by_field_name("value"))
+                            .and_then(|v| receiver(v, src, 0)),
+                        Lang::Python | Lang::Ts | Lang::Tsx | Lang::Js => f
+                            .and_then(|f| f.child_by_field_name("object"))
+                            .and_then(|v| receiver_dyn(v, src, 0)),
+                        _ => None,
+                    }
+                    .and_then(|(b, s)| {
+                        // `Self` and `self` mean the impl the call sits in.
+                        let o = impl_owner(&node, src);
+                        let fix = |t: String| match &o {
+                            Some(o) => Some(swap_self(&t, o)),
+                            None => (!has_word(&t, "Self")).then_some(t),
+                        };
+                        Some((
+                            match b {
+                                Base::Type(t) => Base::Type(fix(t)?),
+                                Base::Static(t, f) => Base::Static(fix(t)?, f),
+                            },
+                            s,
+                        ))
+                    })
                 } else {
                     None
                 };
@@ -326,12 +365,29 @@ fn parse(root: &Path, project: &str) -> anyhow::Result<(Vec<Document>, usize, Ve
                 }
             }
         }
+        if matches!(l, Lang::Python | Lang::Ts | Lang::Tsx | Lang::Js) {
+            for (s, f, t) in class_fields(tree.root_node(), src) {
+                let e = fields.entry((s, f)).or_default();
+                if !e.contains(&(t.clone(), i)) {
+                    e.push((t, i));
+                }
+            }
+        }
         let mut cur = QueryCursor::new();
         let mut it = cur.matches(imp, tree.root_node(), src.as_slice());
         while let Some(m) = it.next() {
             for c in m.captures() {
+                // At the top of the file: the import (or Rust's `use` around its argument) sits right under the root.
+                let mut p = c.node.parent();
+                while let Some(x) = p.filter(|x| x.kind() == "use_declaration") {
+                    p = x.parent();
+                }
+                let top = p.is_some_and(|x| x.parent().is_none());
                 if let Ok(text) = c.node.utf8_text(src) {
                     for (bound, module) in bindings(*l, text) {
+                        if top {
+                            top_imports[i].insert(bound.clone());
+                        }
                         imports[i].insert(bound, module);
                     }
                 }
@@ -373,13 +429,20 @@ fn parse(root: &Path, project: &str) -> anyhow::Result<(Vec<Document>, usize, Ve
                 m
             });
     let owner = |ty: &str, file: usize| {
+        let rust = files[file].1 == Lang::Rust;
         // Qualified types need module resolution; stripping their path could bind a dependency to our own type.
-        if ty.contains("::") {
+        let owner = if rust {
+            if ty.contains("::") {
+                return None;
+            }
+            head(ty)
+        } else {
+            head_dyn(ty)?
+        };
+        // Imported type identity is not established by this table, except a TypeScript or Python class imported from
+        // the project's own module: its name is checked unique below.
+        if imports[file].get(&owner).is_some_and(|m| rust || !local(m)) {
             return None;
-        }
-        let owner = head(ty);
-        if imports[file].contains_key(&owner) {
-            return None; // imported type identity is not established by this table
         }
         // Equal short names in different modules are distinct types. Never combine their method tables.
         let types = by_name.get(owner.as_str())?;
@@ -437,7 +500,17 @@ fn parse(root: &Path, project: &str) -> anyhow::Result<(Vec<Document>, usize, Ve
                 files[defs[d].file]
                     .0
                     .split('/')
-                    .any(|seg| seg.split('.').next() == Some(last))
+                    .enumerate()
+                    // A folder by its name, the file by its exact stem: `./hono` is not `hono.test.ts` (hono).
+                    .any(|(i, seg)| {
+                        let file = i + 1 == files[defs[d].file].0.split('/').count();
+                        Some(last)
+                            == if file {
+                                seg.rsplit_once('.').map(|s| s.0)
+                            } else {
+                                Some(seg)
+                            }
+                    })
             })
             .collect()
     };
@@ -490,13 +563,16 @@ fn parse(root: &Path, project: &str) -> anyhow::Result<(Vec<Document>, usize, Ve
             // A bare Rust call (`write_help(..)`) never reaches a method; clap's `Command::write_help` caught this.
             .filter(|&d| !(c.qualifier.is_empty() && defs[d].owner.is_some()))
             .collect();
-        let via = if c.qualifier.is_empty() {
+        let bare = c.qualifier.is_empty() && !c.member;
+        let via = if c.member && c.qualifier.is_empty() {
+            None // called on a computed value (`new Hono().get()`): never through an import (hono, 18 Nov 2026)
+        } else if c.qualifier.is_empty() {
             imports[c.file].get(&c.name)
         } else {
             imports[c.file].get(&c.qualifier)
         };
         // A name the calling item binds itself (a closure in a `let`, a parameter) is not a project function.
-        if c.qualifier.is_empty() && binds_locally(&files[c.file].2, &defs, c) {
+        if bare && binds_locally(&files[c.file].2, &defs, c) {
             continue;
         }
         let rust = files[c.file].1 == Lang::Rust;
@@ -532,7 +608,10 @@ fn parse(root: &Path, project: &str) -> anyhow::Result<(Vec<Document>, usize, Ve
         let target: Option<(usize, &str)> = if let Some(d) = typed {
             Some((d, "receiver_type"))
         } else if !same.is_empty()
-            && (c.qualifier.is_empty() || ["self", "this", "Self"].contains(&c.qualifier.as_str()))
+            // A name imported at the top of the file wins over a same-file definition of it (hono's
+            // `Deno.upgradeWebSocket = ...` in a test). Only the top: `use super::f` inside `mod tests` must not hide `f`.
+            && ((bare && !top_imports[c.file].contains(&c.name))
+                || ["self", "this", "Self"].contains(&c.qualifier.as_str()))
         {
             Some((same[0], "same_file"))
         } else if let Some(module) = via {
@@ -560,6 +639,23 @@ fn parse(root: &Path, project: &str) -> anyhow::Result<(Vec<Document>, usize, Ve
                     } else {
                         inside
                     }
+                }
+                // A relative JavaScript or TypeScript import names one file: `./websocket` beside the importer, as a file
+                // or a folder's index; `adapter/bun/` must not reach `helper/websocket/` (hono, 18 Nov 2026).
+                None if module.starts_with('.')
+                    && matches!(files[c.file].1, Lang::Ts | Lang::Tsx | Lang::Js) =>
+                {
+                    let base = relative(&files[c.file].0, module);
+                    cands
+                        .iter()
+                        .copied()
+                        .filter(|&x| {
+                            let p = &files[defs[x].file].0;
+                            let stem = p.rsplit_once('.').map_or(p.as_str(), |s| s.0);
+                            base.as_deref()
+                                .is_some_and(|b| stem == b || stem == format!("{b}/index"))
+                        })
+                        .collect()
                 }
                 None => in_module(cands, module),
             };
@@ -661,7 +757,12 @@ fn binds_locally(src: &[u8], defs: &[Def], c: &Call) -> bool {
 fn owner_name(item: &Node, src: &[u8]) -> Option<String> {
     let field = match item.kind() {
         "impl_item" => "type",
-        "trait_item" => "name",
+        "trait_item"
+        | "class_definition"
+        | "class_declaration"
+        | "abstract_class_declaration"
+        | "class"
+        | "interface_declaration" => "name",
         _ => return None,
     };
     Some(head(item.child_by_field_name(field)?.utf8_text(src).ok()?))
@@ -750,7 +851,8 @@ fn generic_arg(t: &str) -> Option<&str> {
 fn unwrap_ty(t: &str) -> Option<String> {
     let s = t.trim().trim_start_matches('&').trim_start();
     let name = s.split('<').next()?.rsplit("::").next()?.trim();
-    ["Result", "Option"]
+    // `Promise`: what TypeScript's `await` leaves.
+    ["Result", "Option", "Promise"]
         .contains(&name)
         .then(|| generic_arg(s).map(str::to_string))
         .flatten()
@@ -865,6 +967,321 @@ fn declared(e: Node, src: &[u8], depth: u8) -> Option<(Base, Vec<Step>)> {
     None
 }
 
+/// A TypeScript or Python type's own class: `Store | null`, `Optional[Store]`, `"Store"` -> `Store`. Arrays, unions of
+/// classes and qualified names (`models.Store`) give up; `list[Store]` comes out as `list`, which no project class owns.
+fn head_dyn(t: &str) -> Option<String> {
+    let t = t
+        .trim()
+        .trim_start_matches(':')
+        .trim()
+        .trim_matches(['"', '\'']);
+    let t = t
+        .strip_prefix("Optional[")
+        .and_then(|x| x.strip_suffix(']'))
+        .unwrap_or(t);
+    let parts: Vec<&str> = t
+        .split('|')
+        .map(str::trim)
+        .filter(|p| !["None", "null", "undefined"].contains(p))
+        .collect();
+    let [one] = parts[..] else { return None };
+    let name = one.split(['<', '[']).next()?.trim();
+    (!one.contains("[]") && !name.is_empty() && name.chars().all(is_ident))
+        .then(|| name.to_string())
+}
+
+/// The class a TypeScript or Python value builds: `new Store()` or `Store()`. `None`/`null` add nothing; any other value is
+/// `?`, so a field assigned it stays ambiguous.
+fn value_type(v: Node, src: &[u8]) -> Option<String> {
+    let callee = match v.kind() {
+        "call" => v.child_by_field_name("function"),
+        "new_expression" => v.child_by_field_name("constructor"),
+        "none" | "null" | "undefined" => return None,
+        _ => None,
+    };
+    Some(
+        callee
+            .filter(|c| c.kind() == "identifier")
+            .and_then(|c| c.utf8_text(src).ok())
+            .unwrap_or("?")
+            .to_string(),
+    )
+}
+
+/// TypeScript and Python field types as (class, field, type): annotated fields, `self.x = T()` and `this.x = new T()` in any
+/// method, class-level `x = T()`, and TypeScript constructor parameter properties.
+fn class_fields(root: Node, src: &[u8]) -> Vec<(String, String, String)> {
+    let text = |n: Node| n.utf8_text(src).unwrap_or("").to_string();
+    let mut out = Vec::new();
+    // An explicit stack: a recursive walk could overflow on very deep expressions.
+    let mut stack = vec![(root, String::new())];
+    while let Some((n, outer)) = stack.pop() {
+        let cls = owner_name(&n, src).unwrap_or(outer);
+        let found = if cls.is_empty() {
+            None
+        } else {
+            match n.kind() {
+                "assignment" | "assignment_expression" => {
+                    n.child_by_field_name("left").and_then(|l| {
+                        let field = match l.kind() {
+                            "attribute" | "member_expression" => {
+                                let o = l.child_by_field_name("object")?;
+                                if !matches!(text(o).as_str(), "self" | "this") {
+                                    return None;
+                                }
+                                l.child_by_field_name("attribute")
+                                    .or_else(|| l.child_by_field_name("property"))?
+                            }
+                            // Python class-level `x: T` or `x = T()`.
+                            "identifier"
+                                if n.parent()
+                                    .and_then(|p| p.parent())
+                                    .and_then(|b| b.parent())
+                                    .is_some_and(|c| c.kind() == "class_definition") =>
+                            {
+                                l
+                            }
+                            _ => return None,
+                        };
+                        let ty = match n.child_by_field_name("type") {
+                            Some(t) => text(t),
+                            None => value_type(n.child_by_field_name("right")?, src)?,
+                        };
+                        Some((text(field), ty))
+                    })
+                }
+                "public_field_definition" => n.child_by_field_name("name").and_then(|f| {
+                    let ty = match n.child_by_field_name("type") {
+                        Some(t) => text(t),
+                        None => value_type(n.child_by_field_name("value")?, src)?,
+                    };
+                    Some((text(f), ty))
+                }),
+                // `constructor(private store: Store)`
+                "required_parameter" | "optional_parameter" => {
+                    let mut c = n.walk();
+                    let property = n
+                        .children(&mut c)
+                        .any(|k| k.kind() == "accessibility_modifier" || k.kind() == "readonly");
+                    property
+                        .then(|| {
+                            Some((
+                                text(n.child_by_field_name("pattern")?),
+                                text(n.child_by_field_name("type")?),
+                            ))
+                        })
+                        .flatten()
+                }
+                _ => None,
+            }
+        };
+        if let Some((f, t)) = found {
+            out.push((cls.clone(), f, t.trim_start_matches(':').trim().to_string()));
+        }
+        let mut c = n.walk();
+        for k in n.children(&mut c) {
+            stack.push((k, cls.clone()));
+        }
+    }
+    out
+}
+
+/// Trace a TypeScript, JavaScript or Python receiver to a written type: `this`/`self`, an annotated or constructed local,
+/// an annotated parameter, `new T()` or `T()`, followed by fields, method calls and `await`. Anything else gives up.
+fn receiver_dyn(e: Node, src: &[u8], depth: u8) -> Option<(Base, Vec<Step>)> {
+    if depth > 12 {
+        return None;
+    }
+    let text = |n: Node| n.utf8_text(src).ok().map(str::to_string);
+    let then = |inner: Node, step: Step| {
+        let (b, mut s) = receiver_dyn(inner, src, depth + 1)?;
+        s.push(step);
+        Some((b, s))
+    };
+    let member = |m: Node| {
+        let name = m
+            .child_by_field_name("property")
+            .or_else(|| m.child_by_field_name("attribute"))?;
+        text(name)
+    };
+    match e.kind() {
+        "this" => Some((Base::Type("Self".into()), vec![])),
+        "identifier" if text(e)? == "self" => Some((Base::Type("Self".into()), vec![])),
+        "identifier" => declared_dyn(e, src, depth),
+        "member_expression" | "attribute" => {
+            then(e.child_by_field_name("object")?, Step::Field(member(e)?))
+        }
+        "call_expression" | "call" => {
+            let f = e.child_by_field_name("function")?;
+            match f.kind() {
+                "member_expression" | "attribute" => {
+                    then(f.child_by_field_name("object")?, Step::Call(member(f)?))
+                }
+                // Python `Store(...)`: a constructor when `Store` is a project class (the method tables check it).
+                "identifier" if e.kind() == "call" => Some((Base::Type(text(f)?), vec![])),
+                _ => None,
+            }
+        }
+        "new_expression" => {
+            let c = e
+                .child_by_field_name("constructor")
+                .filter(|c| c.kind() == "identifier")?;
+            Some((Base::Type(text(c)?), vec![]))
+        }
+        "await_expression" => then(e.named_child(0)?, Step::Try),
+        "await" | "parenthesized_expression" | "non_null_expression" => {
+            receiver_dyn(e.named_child(0)?, src, depth + 1)
+        }
+        _ => None,
+    }
+}
+
+/// Where a TypeScript or Python variable gets its type before `e`: the nearest declaration or assignment in an enclosing
+/// block, or an annotated parameter. A rebinding in between, a loop, `with`, `except` or comprehension variable gives up.
+fn declared_dyn(e: Node, src: &[u8], depth: u8) -> Option<(Base, Vec<Step>)> {
+    let name = e.utf8_text(src).ok()?;
+    let text = |n: Node| n.utf8_text(src).unwrap_or("");
+    let mut child = e;
+    while let Some(p) = child.parent() {
+        match p.kind() {
+            "block" | "module" | "statement_block" | "program" => {
+                let mut c = p.walk();
+                let before: Vec<Node> = p
+                    .named_children(&mut c)
+                    .take_while(|k| k.end_byte() <= child.start_byte())
+                    .collect();
+                for s in before.iter().rev() {
+                    if let Some((ty, value)) = binding(*s, name, src) {
+                        return match ty {
+                            Some(t) => Some((Base::Type(t), vec![])),
+                            None => receiver_dyn(value?, src, depth + 1),
+                        };
+                    }
+                    if rebinds(text(*s), name) {
+                        return None;
+                    }
+                }
+            }
+            "function_definition"
+            | "function_declaration"
+            | "function_expression"
+            | "function"
+            | "method_definition"
+            | "arrow_function"
+            | "lambda" => {
+                let params = p
+                    .child_by_field_name("parameters")
+                    .or_else(|| p.child_by_field_name("parameter"));
+                if params.is_some_and(|x| has_word(text(x), name)) {
+                    return param_type(params?, name, src).map(|t| (Base::Type(t), vec![]));
+                }
+                // Python: a name assigned anywhere in a function is that function's own, never an outer one.
+                if p.kind() == "function_definition" && rebinds(text(p), name) {
+                    return None;
+                }
+            }
+            // Python comprehensions bind their variable after the expression that uses it.
+            "list_comprehension"
+            | "set_comprehension"
+            | "dictionary_comprehension"
+            | "generator_expression" => {
+                let mut c = p.walk();
+                if p.named_children(&mut c)
+                    .any(|k| k.kind() == "for_in_clause" && has_word(text(k), name))
+                {
+                    return None;
+                }
+            }
+            "for_statement" | "for_in_statement" | "with_statement" | "except_clause"
+            | "catch_clause"
+                if has_word(
+                    &String::from_utf8_lossy(&src[p.start_byte()..child.start_byte()]),
+                    name,
+                ) =>
+            {
+                return None;
+            }
+            _ => {}
+        }
+        child = p;
+    }
+    None
+}
+
+/// A statement that declares `name` directly: `x = v`, `x: T = v` (Python), `const x: T = v` (TypeScript). Gives the
+/// written type, or the value to trace.
+fn binding<'a>(s: Node<'a>, name: &str, src: &[u8]) -> Option<(Option<String>, Option<Node<'a>>)> {
+    let decl = |d: Node<'a>, value: &str| {
+        let ty = d
+            .child_by_field_name("type")
+            .and_then(|t| t.utf8_text(src).ok())
+            .map(|t| t.trim_start_matches(':').trim().to_string());
+        (ty, d.child_by_field_name(value))
+    };
+    match s.kind() {
+        "expression_statement" => {
+            let a = s.named_child(0).filter(|a| a.kind() == "assignment")?;
+            let left = a.child_by_field_name("left")?;
+            (left.kind() == "identifier" && left.utf8_text(src).ok()? == name)
+                .then(|| decl(a, "right"))
+        }
+        "lexical_declaration" | "variable_declaration" => {
+            let mut c = s.walk();
+            let d = s.named_children(&mut c).find(|d| {
+                d.kind() == "variable_declarator"
+                    && d.child_by_field_name("name")
+                        .and_then(|n| n.utf8_text(src).ok())
+                        == Some(name)
+            })?;
+            Some(decl(d, "value"))
+        }
+        _ => None,
+    }
+}
+
+/// The annotation of parameter `name`, if it has one.
+fn param_type(params: Node, name: &str, src: &[u8]) -> Option<String> {
+    let text = |n: Option<Node>| n.and_then(|n| n.utf8_text(src).ok());
+    let mut c = params.walk();
+    let p = params.named_children(&mut c).find(|p| {
+        let n = p
+            .child_by_field_name("name")
+            .or_else(|| p.child_by_field_name("pattern"))
+            .or_else(|| {
+                (p.kind() == "typed_parameter")
+                    .then(|| p.named_child(0))
+                    .flatten()
+            })
+            .or(Some(*p));
+        text(n) == Some(name)
+    })?;
+    Some(
+        text(p.child_by_field_name("type"))?
+            .trim_start_matches(':')
+            .trim()
+            .to_string(),
+    )
+}
+
+/// Whether `t` may assign `name`: `name =` (not `==`), `name +=`, `name:`, `for name`, `as name`, `let/const/var name`.
+fn rebinds(t: &str, name: &str) -> bool {
+    word_at(t, name).into_iter().any(|i| {
+        let after = t[i + name.len()..].trim_start();
+        let before = t[..i].trim_end();
+        (after.starts_with('=') && !after.starts_with("=="))
+            || after.starts_with(':')
+            || after
+                .strip_prefix(['+', '-', '*', '/', '|', '&', '%'])
+                .is_some_and(|r| r.starts_with('='))
+            || after.starts_with(',')
+            || [
+                "for", "as", "let", "const", "var", "def", "class", "import", ",",
+            ]
+            .iter()
+            .any(|w| before.ends_with(w))
+    })
+}
+
 /// The project's files, relative with `/`: what git tracks or would track (so `.gitignore` is honoured), or, outside a git
 /// repository or without git, a walk that skips dependency and build folders.
 pub(crate) fn candidates(root: &Path) -> Vec<String> {
@@ -904,6 +1321,26 @@ pub(crate) fn candidates(root: &Path) -> Vec<String> {
         .collect()
 }
 
+/// The project path a relative import points at, without extension: `relative("src/a/b.ts", "../c.js")` is `src/c`.
+fn relative(from: &str, module: &str) -> Option<String> {
+    let mut parts: Vec<&str> = from.split('/').collect();
+    parts.pop(); // the importing file itself
+    let module = ["js", "mjs", "cjs", "jsx", "ts", "mts", "cts", "tsx"]
+        .iter()
+        .find_map(|e| module.strip_suffix(&format!(".{e}")))
+        .unwrap_or(module);
+    for seg in module.split('/') {
+        match seg {
+            "." | "" => {}
+            ".." => {
+                parts.pop()?;
+            }
+            s => parts.push(s),
+        }
+    }
+    Some(parts.join("/"))
+}
+
 fn first(m: &str) -> &str {
     m.split(['/', '.', ':'])
         .find(|s| !s.is_empty())
@@ -929,6 +1366,10 @@ fn qualifier(call: &Node, name: &Node, src: &[u8]) -> (String, bool) {
         return (String::new(), false);
     };
     let member = rest.ends_with('.') || rest.ends_with("?.") || rest.ends_with("->");
+    // A computed receiver (`new Hono().get()`, `f()?.g()`, `a[0].f()`) has no name to resolve through.
+    if member && rest.contains([')', ']']) {
+        return (String::new(), true);
+    }
     (
         last_word(rest.trim_end_matches(['.', ':', '?', '!', '-', '>'])),
         member,
@@ -1117,6 +1558,9 @@ mod tests {
             [("Repo".into(), "com.acme.store.Repo".into())]
         );
         assert_eq!(package_of(Lang::Ts, "@scope/pkg/sub"), "@scope/pkg");
+        assert_eq!(relative("src/a/b.ts", "../c.js").as_deref(), Some("src/c"));
+        assert_eq!(relative("main.ts", "./ws").as_deref(), Some("ws"));
+        assert_eq!(relative("main.ts", "../out"), None); // outside the project
         assert_eq!(
             package_of(Lang::Go, "github.com/acme/kit/log"),
             "github.com/acme/kit"
@@ -1162,6 +1606,71 @@ mod tests {
         ); // outside package
         assert!(!refs.iter().any(|s| s.contains("/load:"))); // two `load`, neither imported: no link
         assert_eq!(resolved, 2);
+    }
+
+    #[test]
+    fn typescript_files_get_definitions_and_calls() {
+        let t = tempfile::tempdir().unwrap();
+        std::fs::write(
+            t.path().join("a.ts"),
+            "export class Store {\n  save(x: number): void {\n    this.flush(x);\n  }\n  flush(x: number) {}\n}\nfunction run(s: Store) {\n  helper(1);\n  other.flush(2);\n}\nconst helper = (n: number) => n;\n",
+        )
+        .unwrap();
+        let (_, _, rules) = parse(t.path(), "demo").unwrap();
+        assert_eq!(
+            rules,
+            [
+                "a.ts\t3\tflush\ta.ts\treceiver_type",
+                "a.ts\t8\thelper\ta.ts\tsame_file"
+            ],
+            "{rules:?}"
+        ); // `other.flush(2)` is a call on a value of unknown type: no link
+    }
+
+    #[test]
+    fn python_and_typescript_method_calls_link_through_the_receiver_type() {
+        let t = tempfile::tempdir().unwrap();
+        let w = |p: &str, s: &str| std::fs::write(t.path().join(p), s).unwrap();
+        w(
+            "store.py",
+            "class Db:\n    def run(self):\n        pass\n\nclass Store:\n    def __init__(self):\n        self.db = Db()\n\n    def save(self) -> \"Db\":\n        self.db.run()\n        return self.db\n",
+        );
+        w(
+            "other.py",
+            "class Other:\n    def save(self):\n        pass\n\n    def run(self):\n        pass\n",
+        );
+        w(
+            "main.py",
+            "from store import Store\n\ndef main(o: Other, u):\n    s = Store()\n    s.save().run()\n    o.run()\n    u.save()\n    for s in []:\n        s.save()\n    v = [x.save() for x in []]\n",
+        );
+        w(
+            "app.ts",
+            "class Repo {\n  find(): Item { return new Item(); }\n}\nclass Item {\n  open() {}\n}\nclass Svc {\n  constructor(private repo: Repo) {}\n  async load(): Promise<Item> { return this.repo.find(); }\n  async go(r: Repo | null) {\n    this.repo.find().open();\n    (await this.load()).open();\n    const i = new Item();\n    i.open();\n    let j = r;\n    j.find();\n    for (const k of []) { k.open(); }\n  }\n}\n",
+        );
+        let (_, _, rules) = parse(t.path(), "demo").unwrap();
+        let mut typed: Vec<&str> = rules
+            .iter()
+            .map(String::as_str)
+            .filter(|l| l.ends_with("receiver_type"))
+            .collect();
+        typed.sort();
+        assert_eq!(
+            typed,
+            [
+                "app.ts\t11\tfind\tapp.ts\treceiver_type",
+                "app.ts\t11\topen\tapp.ts\treceiver_type",
+                "app.ts\t12\tload\tapp.ts\treceiver_type",
+                "app.ts\t12\topen\tapp.ts\treceiver_type",
+                "app.ts\t14\topen\tapp.ts\treceiver_type",
+                "app.ts\t16\tfind\tapp.ts\treceiver_type",
+                "app.ts\t9\tfind\tapp.ts\treceiver_type",
+                "main.py\t5\trun\tstore.py\treceiver_type",
+                "main.py\t5\tsave\tstore.py\treceiver_type",
+                "main.py\t6\trun\tother.py\treceiver_type",
+                "store.py\t10\trun\tstore.py\treceiver_type",
+            ],
+            "{rules:?}"
+        ); // `u.save()` (no annotation), loop and comprehension variables: no link
     }
 
     #[test]

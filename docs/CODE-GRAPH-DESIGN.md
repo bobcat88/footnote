@@ -337,3 +337,11 @@ agent configurations, so only `init` was run, on a `git archive` copy of the rep
   diagrams (nested boxes with titles and descriptions, labelled relationships, clean automatic layout, drill-down from one level
   to the next). Used as a reference only: Footnote draws its own, and takes no code unless it is reviewed and credited. The
   redraw goes through the design studio and QLoop before it ships.
+
+**TypeScript and Python measured (18 November 2026, #216).** Scored like Rust (#214, #215) on 10 of Johan's projects and 6
+held-out online ones (hono, nest, zustand; click, httpx, rich). TypeScript had no parser graph until now: its tags query must
+be combined with the JavaScript one. Receiver typing was ported (class method tables, field types from annotations and
+constructors, typed locals and parameters, `await`, `Optional`). On held-out code, 6 of 13,449 comparable links conflict with
+the compiler; receiver typing adds 1,814 Python and 2,153 TypeScript links there with none. Analyzed precision per rule is 0.95
+to 1.00, except held-out Python imports (0.79) where the compiler resolves the package to its installed copy or misses
+re-exports. Details: `bench/experiments/CODE-TS-PY-PRECISION-2026-11-18.md`.

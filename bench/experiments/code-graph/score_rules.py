@@ -17,9 +17,11 @@ comp = {
     (a.replace("\\", "/"), l, n, b.replace("\\", "/"))
     for a, l, n, b in c.execute(
         """SELECT rf.path, r.line, s.name, sf.path FROM refs r JOIN files rf ON rf.id = r.file_id
-           JOIN symbols s ON s.id = r.symbol_id JOIN files sf ON sf.id = s.file_id WHERE s.kind IN ('function','type') AND r.origin = 'compiler'"""
+           JOIN symbols s ON s.id = r.symbol_id JOIN files sf ON sf.id = s.file_id WHERE r.origin = 'compiler'"""
     )
 }
+# Any kind (#216): scip-typescript files `const f = () => ...` as a value and object-literal members as `other`; the parser
+# links calls to both as functions. Name, line and target file must still all match.
 # Each link is classed by what the compiler says at its line (#215): same, links elsewhere, line analyzed but no edge, line not
 # analyzed (code behind a feature the indexer did not enable). Precision on analyzed lines leaves only the last class out.
 lines, named = set(), set()

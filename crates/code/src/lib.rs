@@ -63,11 +63,18 @@ fn kind(symbol: &str) -> &'static str {
 
 /// Last name in a SCIP symbol, for symbols the indexer gave no display name.
 fn short_name(symbol: &str) -> String {
+    // scip-typescript names object-literal members `spawnSession0:`, the name plus a counter per object in the file (#216).
+    // shortcut: a member whose own name ends in a digit loses it, rare; split on the counter if lookups miss such names.
+    if let Some(m) = symbol.strip_suffix(':') {
+        let m = m.trim_end_matches(|c: char| c.is_ascii_digit());
+        return short_name(&format!("{m}."));
+    }
     let mut s = symbol.trim_end_matches(['.', '#', '/']);
     if s.ends_with(')') {
         s = s.rfind('(').map_or(s, |i| &s[..i]); // method disambiguator: `run().`, `run(+1).`
     }
-    s.rsplit(['/', '#', '.', ' '])
+    // `:` too: a member of an inline type is `typeLiteral10:entry_date.` (scip-typescript).
+    s.rsplit(['/', '#', '.', ' ', ':'])
         .next()
         .unwrap_or(s)
         .trim_matches('`')
@@ -153,6 +160,9 @@ fn indexer(root: &Path, out: &Path) -> Result<Indexer> {
             ".".into(),
             "--project-name".into(),
             name.into(),
+            // Without it scip-python asks git for a version and, outside a repository, crashes on the first module (#216).
+            "--project-version".into(),
+            "HEAD".into(),
             "--output".into(),
             out.into(),
         ]);
@@ -773,6 +783,10 @@ mod tests {
         assert_eq!((kind(f), short_name(f).as_str()), ("function", "run"));
         let t = "rust-analyzer cargo footnote 0.1.0 store/Filters#";
         assert_eq!((kind(t), short_name(t).as_str()), ("type", "Filters"));
+        let m = "scip-typescript npm app HEAD src/`ipc.ts`/spawnSession0:";
+        assert_eq!(short_name(m), "spawnSession");
+        let l = "scip-typescript npm app HEAD src/`chart.tsx`/typeLiteral10:entry_date.";
+        assert_eq!(short_name(l), "entry_date");
         assert!(contains([1, 0, 9, 1], [4, 2, 4, 8]) && !contains([1, 0, 3, 1], [4, 2, 4, 8]));
         assert_eq!(
             package("rust-analyzer cargo serde_json 1.0.1 Value#"),
