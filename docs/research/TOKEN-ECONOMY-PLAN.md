@@ -32,6 +32,12 @@ borrowing rule (16 Nov), ideas only, no code copied, and every claim benchmarked
 5. **Cost per accepted task is the only honest metric** (and Johan's own rule for the Flow benchmark, 18 Nov): paired tasks,
    billed cost split into cache write, cache read, uncached input and output, turns, success, with confidence intervals.
 
+6. **Our own pilots agree: the saving is in calls, not in text** (Footnote Flow complexity ladder, Luna medium, one run
+   per arm, RTK, Ponytail and the global configuration on in every arm, so the gaps are what the harness adds on top of them).
+   L1: Footnote plus skills took 4 model calls against 9 for baseline, 31 s against 51 s, 143k tokens against 319k. L2: Flow
+   was the fastest accepted delivery (48 s, 305k tokens) and baseline stopped incomplete. Uncached input was nearly the same in
+   every arm (38k to 41k); the totals moved with the number of calls, each of which resends the cached context. Sources:
+   `LUNA-PILOT.md` and `DEPENDENCY-PILOT.md` in the footnote-framework workspace.
 ## 3. What Footnote builds
 
 Working name: **Footnote Lean** (name to confirm). One Rust layer in the existing binary and hooks, in five parts, ordered by
@@ -76,10 +82,16 @@ measured payoff, each shipped only after it beats the baseline on cost per accep
 - Code-aware extras no shell filter has: a failing test or compiler error is linked to its symbol in the code graph, so the
   agent jumps to the function instead of opening files.
 
-### E. Prove it
+### E. Prove it, and learn when to switch it on
 - Arms on the Flow benchmark (#222 to #227): bare, RTK, Caveman, Ponytail, Footnote Lean, and stacked, on paired tasks,
   reporting cost per accepted delivery with the four-bucket split, turns, re-reads and time to first edit.
 - Activation proof per arm (the hook really ran), and a per-layer share (#227).
+- Run on the existing complexity ladder (#225: four levels, reasoning medium and high, three model tiers) rather than a
+  new benchmark. Its output is an activation table: for each task level and reasoning effort, which layers pay for
+  themselves. A local change may not need the harness; continuity and cross-module work may. No routing is built before
+  that table exists (MODEL-STUDY rule).
+- The headline number is turns and calls per accepted delivery next to cost: the pilots show the harness saves by cutting
+  calls.
 
 ## 4. Not building, and why
 - **An LLM-based compressor or an API proxy** (Headroom's Kompress, RTK's proxy). Headroom's arm cost 48% more; a proxy
