@@ -473,6 +473,8 @@ fn handle(state: &Path, s: &Settings, event: &Value) -> Result<Option<Value>> {
     let mut out = None;
     match e.name.as_str() {
         "SessionStart" => {
+            // Best effort, once per session (#209): a failure must not cost the agent its memory pack.
+            let _ = crate::state::fix_private_dir(state);
             let top = git(&e.cwd, &["rev-parse", "--show-toplevel"]);
             // Best effort: the project list must never cost the agent its memory pack.
             let _ =

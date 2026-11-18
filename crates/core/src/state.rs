@@ -93,6 +93,33 @@ pub fn ensure_private_dir(dir: &Path) -> Result<()> {
     Ok(())
 }
 
+/// An existing state folder may predate the private rule or have been loosened since (#209): make it private again.
+/// Called at session and daemon start, not on every write. Windows: a restricted folder has no inherited entries, so
+/// any `(I)` in its access list means it was never restricted (`(I)` is not translated, unlike account names).
+pub fn fix_private_dir(dir: &Path) -> Result<()> {
+    if !dir.is_dir() {
+        return Ok(());
+    }
+    #[cfg(windows)]
+    {
+        let out = std::process::Command::new("icacls")
+            .arg(dir)
+            .output()
+            .context("run icacls to read the state directory's access list")?;
+        if String::from_utf8_lossy(&out.stdout).contains("(I)") {
+            restrict_to_current_user(dir)?;
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if std::fs::metadata(dir)?.permissions().mode() & 0o077 != 0 {
+            std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700))?;
+        }
+    }
+    Ok(())
+}
+
 #[cfg(windows)]
 fn restrict_to_current_user(dir: &Path) -> Result<()> {
     let user = std::env::var("USERNAME").context("USERNAME is not set")?;
@@ -243,6 +270,23 @@ mod tests {
     }
 
     #[test]
+    fn an_existing_folder_with_inherited_access_is_made_private() {
+        let dir = std::env::temp_dir().join(format!("borg-fix-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap(); // made outside Footnote: inherits the temp folder's access list
+        let acl = |d: &Path| {
+            let o = std::process::Command::new("icacls")
+                .arg(d)
+                .output()
+                .unwrap();
+            String::from_utf8_lossy(&o.stdout).to_string()
+        };
+        assert!(acl(&dir).contains("(I)"));
+        fix_private_dir(&dir).unwrap();
+        assert!(!acl(&dir).contains("(I)"), "{}", acl(&dir));
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
     fn creating_the_same_secret_twice_never_overwrites() {
         let dir = std::env::temp_dir().join(format!("borg-once-{}", std::process::id()));
         ensure_private_dir(&dir).unwrap();
@@ -251,6 +295,19 @@ mod tests {
         assert!(!write_private(&path, b"second").unwrap());
         assert_eq!(std::fs::read(&path).unwrap(), b"first");
         std::fs::remove_dir_all(&dir).ok();
+    }
+}
+
+#[cfg(all(test, unix))]
+mod unix_tests {
+    #[test]
+    fn an_existing_loose_folder_is_made_private() {
+        use std::os::unix::fs::PermissionsExt;
+        let t = tempfile::tempdir().unwrap();
+        std::fs::set_permissions(t.path(), std::fs::Permissions::from_mode(0o755)).unwrap();
+        super::fix_private_dir(t.path()).unwrap();
+        let mode = std::fs::metadata(t.path()).unwrap().permissions().mode();
+        assert_eq!(mode & 0o777, 0o700);
     }
 }
 

@@ -57,6 +57,9 @@ pub fn run(shared: Shared, idle: Option<Duration>) -> Result<()> {
     // killing every other footnote process on the machine.
     if let Ok(state) = crate::state::state_dir() {
         let _ = crate::state::ensure_private_dir(&state);
+        if let Err(e) = crate::state::fix_private_dir(&state) {
+            eprintln!("footnote: the state folder may be readable by others: {e:#}");
+        }
         let _ = std::fs::write(state.join("daemon.pid"), std::process::id().to_string());
     }
     if let Some(idle) = idle {
