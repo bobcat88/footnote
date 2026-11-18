@@ -487,6 +487,8 @@ fn parse(root: &Path, project: &str) -> anyhow::Result<(Vec<Document>, usize, Ve
             .iter()
             .copied()
             .filter(|&d| defs[d].file == c.file)
+            // A bare Rust call (`write_help(..)`) never reaches a method; clap's `Command::write_help` caught this.
+            .filter(|&d| !(c.qualifier.is_empty() && defs[d].owner.is_some()))
             .collect();
         let via = if c.qualifier.is_empty() {
             imports[c.file].get(&c.name)
@@ -497,6 +499,7 @@ fn parse(root: &Path, project: &str) -> anyhow::Result<(Vec<Document>, usize, Ve
         if c.qualifier.is_empty() && binds_locally(&files[c.file].2, &defs, c) {
             continue;
         }
+        let rust = files[c.file].1 == Lang::Rust;
         // `Type::f()` or `Class.f()`: the `f` defined in the file that defines `Type`, when that is one definition.
         let owned_by = |q: &str| -> Option<usize> {
             if q.is_empty() {
@@ -566,8 +569,16 @@ fn parse(root: &Path, project: &str) -> anyhow::Result<(Vec<Document>, usize, Ve
             }
         } else if c.member {
             None // a method on some value: its type is unknown here, and std or a dependency may define it
-        } else if let Some(one) = owned_by(&c.qualifier) {
+        } else if let Some(one) = if rust {
+            // Rust: only a method of that very type. The file rule linked `ByteBuf::default()` (derived) to a neighbour's
+            // `impl Default for Phase` (brotli, 18 Nov 2026).
+            method(&c.qualifier, &c.name, c.file)
+        } else {
+            owned_by(&c.qualifier)
+        } {
             Some((one, "type_path"))
+        } else if rust && owner(&c.qualifier, c.file).is_some() {
+            None // a project type without that method: derived, a trait default, or a trait from a dependency
         } else if !c.qualifier.is_empty() {
             // `footnote_core::hash()`, `store::open()`: the qualifier names a crate (its folder) or a module (its file).
             let home = crates.get(c.qualifier.as_str());
@@ -1151,6 +1162,30 @@ mod tests {
         ); // outside package
         assert!(!refs.iter().any(|s| s.contains("/load:"))); // two `load`, neither imported: no link
         assert_eq!(resolved, 2);
+    }
+
+    #[test]
+    fn a_rust_type_path_links_only_to_that_types_own_method() {
+        let t = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(t.path().join("src")).unwrap();
+        std::fs::write(
+            t.path().join("src/lib.rs"),
+            "#[derive(Default)]\npub struct ByteBuf;\npub struct Phase;\nimpl Default for Phase {\n    fn default() -> Self {\n        Phase\n    }\n}\nfn run() {\n    let a = ByteBuf::default();\n    let b = Phase::default();\n    default();\n}\n",
+        )
+        .unwrap();
+        let (_, _, rules) = parse(t.path(), "demo").unwrap();
+        let typed: Vec<&str> = rules
+            .iter()
+            .map(String::as_str)
+            .filter(|l| l.ends_with("type_path"))
+            .collect();
+        assert_eq!(
+            typed,
+            ["src/lib.rs\t11\tdefault\tsrc/lib.rs\ttype_path"],
+            "{rules:?}"
+        );
+        // A bare `default()` is not `Phase::default`: no link.
+        assert!(!rules.iter().any(|l| l.contains("\t12\t")), "{rules:?}");
     }
 
     #[test]
