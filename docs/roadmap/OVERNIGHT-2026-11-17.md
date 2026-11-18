@@ -20,7 +20,7 @@ untouched, Arkea-Next-Desktop untouched. If an item is blocked, write why in its
 ## 3. Launcher, first screen (largest; P1 M3, DESIGN.md section 11)
 - `apps/launcher`: Tauri 2 + React + Tailwind, as P1-PLAN says. npm packages installed with `--ignore-scripts` and their scripts
   read first (`@tauri-apps/cli` 2.12.5 has no install script, checked 16 Nov). Fonts self-hosted.
-- Overview screen from the locked mock (`.design-studio/launcher/chosen/index.html`): sidebar, three product cards, projects
+- Overview screen from the locked mock (`.design-studio/launcher/chosen/index.html`, local only, not in the repository): sidebar, three product cards, projects
   table, agents table, activity column, Enterprise group muted, support link; data from `footnote status`, `projects`,
   `activity`, `models list` called as a child process. Mini mode and the Code views come later.
 - Done when: `cargo tauri dev` opens the window on Windows with real data, QLoop UI gates G1 to G8 pass on screenshots at

@@ -73,7 +73,7 @@ Concept A, "the lens numeral": the word **Footnote** is the family; a small glas
 | Footnote Memory | wireframe brain: M1 plain, or M2 with connected nodes | open, not chosen |
 | Footnote Code | `{x}` (Johan) | chosen, drawing provisional |
 
-Sketches: `.design-studio/logo/index.html` (concepts A, B, C), `.design-studio/logo/v2.html` (marks). Still to do: final SVG geometry, a still version for places without motion, an app icon (concept B, the focus tile, is the candidate), and a pass by someone with real logo skills.
+`.design-studio/` is a local working folder, ignored by git: its files are on the designer's machine, not in the repository. Sketches: `.design-studio/logo/index.html` (concepts A, B, C), `.design-studio/logo/v2.html` (marks). Still to do: final SVG geometry, a still version for places without motion, an app icon (concept B, the focus tile, is the candidate), and a pass by someone with real logo skills.
 
 ## 8. Motion (WIP)
 - Level: lively, with meaning. Durations 160 to 320 ms, ease-out, transform and opacity only.

@@ -3,7 +3,7 @@
 The desktop window over the `footnote` engine (Tauri 2 + React). It holds no data of its own: each screen runs read-only engine
 commands (`status`, `projects`, `activity`, `models list`, `code`, `code-map`) as a child process, through one Tauri command
 with an allowlist (`src-tauri/src/main.rs`). Design: [DESIGN.md](../../DESIGN.md) section 11; composition reference
-`.design-studio/launcher/chosen/index.html`.
+`.design-studio/launcher/chosen/index.html` (a local design folder, ignored by git, not in the repository).
 
 ## Build and run (Windows; Linux and macOS untested)
 

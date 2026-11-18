@@ -10,7 +10,7 @@ Each hit comes back with the file, the line, the content hash and whether the fi
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-A8281C)](LICENSE)
 [![Rust](https://img.shields.io/badge/built%20with-Rust-1B1915)](Cargo.toml)
 [![MCP](https://img.shields.io/badge/protocol-MCP%20stdio-1B1915)](#connect-your-agent)
-[![Offline](https://img.shields.io/badge/network-none-2F6B3A)](#security-model)
+[![Network](https://img.shields.io/badge/network-only%20when%20asked-2F6B3A)](#security-model)
 
 [Install](#install) · [Proof](#proof) · [How it works](#how-it-works) · [Connect your agent](#connect-your-agent) · [Security](#security-model) · [Reproduce](#reproduce-every-number)
 
@@ -37,7 +37,7 @@ An agent that remembers is only useful if it can tell you where it read somethin
 Footnote is a single Rust binary that indexes Markdown, text and PDF on your machine and serves them to your agent over MCP.
 
 - **Cited.** Every hit is bound to the exact bytes it came from. If the file changed, the hit says `stale`. If it is gone, it says `missing_or_unreadable`.
-- **Local.** One SQLite file, one search index, embeddings computed inside the binary on your CPU. No account, no cloud, no telemetry, no network calls.
+- **Local.** One SQLite file, one search index, embeddings computed inside the binary on your CPU. No account, no cloud, no telemetry. The network is used only by two commands you run: `footnote models install` (hash-checked model download) and `footnote crawl` (a documentation site you name).
 - **Your documents are read-only for agents.** An agent can recall and fetch. It cannot write to your corpus; it can only add to its own memory database. Every call is appended to a tamper-evident audit log.
 - **French and English.** Built and measured for mixed-language work, not as an afterthought.
 
@@ -241,10 +241,10 @@ Footnote is built on the assumption that retrieved text may contain instructions
 
 - **Untrusted by default.** Every retrieved passage is labelled as data. Nothing in a document can make the server do anything.
 - **Read-only documents.** No MCP tool can write to a document corpus. The only write tools add or retire agent memories, and they refuse any database that holds documents before touching it. Proposals are refused and logged.
-- **No network.** The tool opens no outbound connection. The only download is the explicit, hash-checked model provisioning script you run yourself.
+- **Network only when asked.** Search, memory and the MCP tools open no outbound connection. Two commands you run do: `footnote models install` downloads a model and checks its hash, and `footnote crawl <url>` fetches pages of that one site (same host, under the start path, http or https; robots.txt rules and `Crawl-delay` honoured; at most `--max-pages`, 1000 by default; up to 8 requests in flight, starting at 2 and halving on 429, 503 or timeouts; 30 s per request).
 - **Private state.** The audit log, its MAC key and the daemon token live in a user-only folder created on first use.
 - **Authenticated daemon.** The shared daemon listens on a local socket only, with a mutual HMAC handshake; agents never see the token.
-- **Tamper-evident audit.** Every call is appended to a hash-chained, MAC-signed log. `footnote audit verify --file <audit.jsonl> --mac-key <audit.key>` verifies it offline.
+- **Tamper-evident audit.** Every call is appended to a hash-chained, MAC-signed log. `footnote audit verify --file <audit.jsonl> --mac-key <audit.key>` verifies it offline. A chain proves that no entry was changed or removed in the middle; it cannot show that the newest entries were cut off the end. To catch that, keep a copy of the last verified entry (or its hash) somewhere the agent cannot write.
 - **Bounded everything.** Query length, result counts, text sizes, helper output size and timeouts are capped; the PDF helper runs with a scrubbed environment.
 - **Verified models.** Model files are hashed against the manifest every time a process loads a model, and loaded from the bytes that were hashed.
 
