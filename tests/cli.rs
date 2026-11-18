@@ -1,3 +1,4 @@
+mod support;
 use assert_cmd::Command;
 use serde_json::Value;
 use std::fs;
@@ -48,6 +49,9 @@ fn indexes_heading_and_returns_exact_provenance_without_modifying_original() {
 
 #[test]
 fn binary_extraction_preserves_page_provenance_and_failed_files_are_not_success() {
+    if !(support::extraction()) {
+        return;
+    }
     let t = tempfile::tempdir_in(
         std::env::var("TMPDIR").unwrap_or_else(|_| std::env::temp_dir().to_string_lossy().into()),
     )

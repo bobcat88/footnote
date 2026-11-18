@@ -1,3 +1,4 @@
+mod support;
 use assert_cmd::Command;
 use serde_json::Value;
 use std::{fs, path::Path};
@@ -15,6 +16,9 @@ fn run(db: &Path, args: &[&str]) -> Value {
 }
 #[test]
 fn local_embeddings_retrieve_bilingual_paraphrase_and_search_is_read_only() {
+    if !(support::model("minilm")) {
+        return;
+    }
     let t = tempfile::tempdir_in(
         std::env::var("TMPDIR").unwrap_or_else(|_| std::env::temp_dir().to_string_lossy().into()),
     )

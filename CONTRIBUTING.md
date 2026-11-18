@@ -7,7 +7,8 @@ Thanks for looking. Footnote is small on purpose, and every claim in it has a re
 ```bash
 cargo fmt --check
 cargo clippy --all-targets
-cargo test                        # needs the models: python tools/provision_embeddings.py minilm e5-small
+cargo test                        # passes on a fresh checkout; tests needing models, .venv or indexers skip and say why
+python scripts/setup_tests.py     # prepares all of it: .venv, the test models, and reports the code indexers on PATH
 ```
 
 All three must pass. Tests that need a model are in `tests/hybrid*.rs`; they use the models under `artifacts/models/`.

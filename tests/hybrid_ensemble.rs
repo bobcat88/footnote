@@ -1,3 +1,4 @@
+mod support;
 use assert_cmd::Command;
 use serde_json::Value;
 use std::{fs, path::Path};
@@ -16,6 +17,9 @@ fn run(db: &Path, args: &[&str], scan_limit: Option<&str>) -> Value {
 
 #[test]
 fn two_models_blend_and_both_search_strategies_find_the_right_note() {
+    if !(support::model("minilm") && support::model("e5-small")) {
+        return;
+    }
     let t = tempfile::tempdir_in(
         std::env::var("TMPDIR").unwrap_or_else(|_| std::env::temp_dir().to_string_lossy().into()),
     )

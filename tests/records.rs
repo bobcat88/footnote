@@ -1,3 +1,4 @@
+mod support;
 use assert_cmd::Command;
 use serde_json::{Value, json};
 use std::{fs, path::Path};
@@ -11,6 +12,9 @@ fn run(db: &Path, args: &[&str]) -> Value {
 }
 #[test]
 fn contributions_require_hashed_evidence_and_revision_checked_validation() {
+    if !(support::model("minilm")) {
+        return;
+    }
     let t = tempfile::tempdir_in(
         std::env::var("TMPDIR").unwrap_or_else(|_| std::env::temp_dir().to_string_lossy().into()),
     )

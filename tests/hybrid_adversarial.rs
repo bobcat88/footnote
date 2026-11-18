@@ -1,3 +1,4 @@
+mod support;
 use assert_cmd::Command;
 use serde_json::Value;
 use std::{fs, path::Path};
@@ -12,6 +13,9 @@ fn run(db: &Path, args: &[&str]) -> Value {
 const MODEL: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/artifacts/models/minilm");
 #[test]
 fn zero_norm_derived_vectors_are_refused_instead_of_ranked() {
+    if !(support::model("minilm")) {
+        return;
+    }
     let t = tempfile::tempdir_in(
         std::env::var("TMPDIR").unwrap_or_else(|_| std::env::temp_dir().to_string_lossy().into()),
     )
@@ -40,6 +44,9 @@ fn zero_norm_derived_vectors_are_refused_instead_of_ranked() {
 }
 #[test]
 fn changes_deletions_duplicates_and_missing_index_do_not_reuse_stale_vectors() {
+    if !(support::model("minilm")) {
+        return;
+    }
     let t = tempfile::tempdir_in(
         std::env::var("TMPDIR").unwrap_or_else(|_| std::env::temp_dir().to_string_lossy().into()),
     )
@@ -102,6 +109,9 @@ fn changes_deletions_duplicates_and_missing_index_do_not_reuse_stale_vectors() {
 
 #[test]
 fn corrupt_model_rebuild_rolls_back() {
+    if !(support::model("minilm")) {
+        return;
+    }
     let t = tempfile::tempdir_in(
         std::env::var("TMPDIR").unwrap_or_else(|_| std::env::temp_dir().to_string_lossy().into()),
     )
@@ -144,6 +154,9 @@ fn corrupt_model_rebuild_rolls_back() {
 /// text it encodes (any chunk, any id, any file), never across models, and never for text that changed.
 #[test]
 fn a_new_version_reembeds_only_changed_text_and_never_across_models() {
+    if !(support::model("minilm") && support::model("e5-small")) {
+        return;
+    }
     let t = tempfile::tempdir().unwrap();
     let root = t.path().join("docs");
     fs::create_dir(&root).unwrap();
@@ -206,6 +219,9 @@ fn a_new_version_reembeds_only_changed_text_and_never_across_models() {
 /// converts their signatures without embedding anything again.
 #[test]
 fn vectors_signed_the_old_way_stay_in_use_and_convert_without_reembedding() {
+    if !(support::model("minilm")) {
+        return;
+    }
     let t = tempfile::tempdir().unwrap();
     let root = t.path().join("notes");
     fs::create_dir(&root).unwrap();
