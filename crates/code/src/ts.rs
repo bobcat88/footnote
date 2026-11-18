@@ -856,7 +856,7 @@ fn declared(e: Node, src: &[u8], depth: u8) -> Option<(Base, Vec<Step>)> {
 
 /// The project's files, relative with `/`: what git tracks or would track (so `.gitignore` is honoured), or, outside a git
 /// repository or without git, a walk that skips dependency and build folders.
-fn candidates(root: &Path) -> Vec<String> {
+pub(crate) fn candidates(root: &Path) -> Vec<String> {
     let git = std::process::Command::new("git")
         .args(["ls-files", "-co", "--exclude-standard", "-z"])
         .current_dir(root)

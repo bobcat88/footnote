@@ -187,11 +187,17 @@ pub fn index(root: &Path, db: &Path) -> Result<Value> {
         || "project".into(),
         |n| n.to_string_lossy().replace(' ', "_"),
     );
-    let (name, mut docs, origin, upgrade) = match precise(root, &scip_file) {
-        Ok((name, docs)) => (name, docs, "compiler", None),
+    let (name, mut docs, origin, upgrade, report) = match precise(root, &scip_file) {
+        Ok((name, docs, report)) => (name, docs, "compiler", None, report),
         Err(e) => {
             let (docs, _) = ts::index(root, &project)?;
-            ("tree-sitter", docs, "resolved", Some(format!("{e:#}")))
+            (
+                "tree-sitter".into(),
+                docs,
+                "resolved",
+                Some(format!("{e:#}")),
+                vec![],
+            )
         }
     };
     // A mixed project: the precise indexer reads one language; the parser adds every other file, its links graded `resolved`.
@@ -214,11 +220,95 @@ pub fn index(root: &Path, db: &Path) -> Result<Value> {
     if let Some(u) = upgrade {
         out["upgrade"] = json!(u);
     }
+    if !report.is_empty() {
+        out["roots"] = json!(report);
+    }
     Ok(out)
 }
 
-/// The precise pass: run the project's compiler indexer and read its SCIP output.
-fn precise(root: &Path, scip_file: &Path) -> Result<(&'static str, Vec<scip::Document>)> {
+/// Where compiler indexers run: the root when it has a marker file, plus every top-level Rust project in a subfolder (a Tauri
+/// app's `src-tauri`, `crates/<name>`), so a project whose Rust is not at the top still gets a compiler graph (#218).
+fn roots(root: &Path) -> Vec<String> {
+    const VENDORED: &[&str] = &[
+        "vendor",
+        "third_party",
+        "dependencies",
+        "node_modules",
+        "target",
+    ];
+    let mut cargo: Vec<String> = ts::candidates(root)
+        .into_iter()
+        .filter_map(|p| {
+            Some(
+                p.strip_suffix("Cargo.toml")?
+                    .trim_end_matches('/')
+                    .to_string(),
+            )
+        })
+        .filter(|d| {
+            d.split('/')
+                .all(|s| !s.starts_with('.') && !VENDORED.contains(&s))
+        })
+        .collect();
+    cargo.sort();
+    let mut out: Vec<String> = Vec::new();
+    for d in cargo {
+        // Keep the topmost folder only: a workspace's member crates are indexed with it.
+        if !out
+            .iter()
+            .any(|o| o.is_empty() || d.starts_with(&format!("{o}/")))
+        {
+            out.push(d);
+        }
+    }
+    if !out.iter().any(String::is_empty) && indexer(root, Path::new("x")).is_ok() {
+        out.insert(0, String::new());
+    }
+    out.truncate(8); // shortcut: 8 roots at most, each a full compiler run; raise when a monorepo needs more.
+    out
+}
+
+/// The precise pass over every root: each indexer's documents, paths made relative to `root`. Fails only when no root worked.
+fn precise(root: &Path, scip_file: &Path) -> Result<(String, Vec<scip::Document>, Vec<Value>)> {
+    let (mut names, mut docs, mut report, mut first_err) =
+        (Vec::new(), Vec::new(), Vec::new(), None);
+    let all = roots(root);
+    if all.is_empty() {
+        indexer(root, scip_file)?; // no marker anywhere: its message says which files Footnote looks for
+    }
+    for sub in all {
+        let dir = if sub.is_empty() {
+            root.to_path_buf()
+        } else {
+            root.join(&sub)
+        };
+        match precise_at(&dir, scip_file) {
+            Ok((name, found)) => {
+                report.push(json!({"root": sub, "indexer": name, "files": found.len()}));
+                if !names.contains(&name) {
+                    names.push(name);
+                }
+                docs.extend(found.into_iter().map(|mut d| {
+                    if !sub.is_empty() {
+                        d.path = format!("{sub}/{}", d.path.replace('\\', "/"));
+                    }
+                    d
+                }));
+            }
+            Err(e) => {
+                report.push(json!({"root": sub, "error": format!("{e:#}")}));
+                first_err.get_or_insert(e);
+            }
+        }
+    }
+    if names.is_empty() {
+        return Err(first_err.unwrap_or_else(|| anyhow::anyhow!("no compiler indexer ran")));
+    }
+    Ok((names.join(" + "), docs, report))
+}
+
+/// One compiler indexer run in `root`, its SCIP output read back.
+fn precise_at(root: &Path, scip_file: &Path) -> Result<(&'static str, Vec<scip::Document>)> {
     let ix = indexer(root, scip_file)?;
     let out = std::process::Command::new(ix.program)
         .args(&ix.args)

@@ -178,6 +178,49 @@ fn the_architecture_map_counts_blocks_links_and_outside_packages() {
     assert_eq!(ext["used_by"], serde_json::json!(["crates/b"]), "{map}");
 }
 
+/// A Tauri-style app: TypeScript at the top, Rust in `src-tauri`. The Rust must still get its compiler graph (#218), with paths
+/// relative to the project's top folder.
+#[test]
+fn rust_in_a_subfolder_gets_the_compiler_index() {
+    if std::process::Command::new("rust-analyzer")
+        .arg("--version")
+        .output()
+        .is_err()
+    {
+        eprintln!("rust-analyzer not installed: skipped");
+        return;
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let (state, app) = (dir.path().join("state"), dir.path().join("app"));
+    fs::create_dir_all(app.join("src-tauri/src")).unwrap();
+    fs::write(app.join("tsconfig.json"), "{}").unwrap();
+    fs::write(app.join("main.ts"), "export function hello() {}\n").unwrap();
+    fs::write(
+        app.join("src-tauri/Cargo.toml"),
+        "[package]\nname = \"shell\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+    )
+    .unwrap();
+    fs::write(
+        app.join("src-tauri/src/lib.rs"),
+        "pub fn run() -> u32 {\n    helper()\n}\n\nfn helper() -> u32 {\n    1\n}\n",
+    )
+    .unwrap();
+    let root = app.to_str().unwrap();
+    let built = footnote(&state, &["code-index", root]);
+    assert_eq!(built["origin"], "compiler", "{built}");
+    let rust = built["roots"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["root"] == "src-tauri")
+        .unwrap_or_else(|| panic!("{built}"));
+    assert_eq!(rust["indexer"], "rust-analyzer scip", "{built}");
+    let found = footnote(&state, &["code", "helper", "--root", root]);
+    let helper = &found["symbols"][0];
+    assert_eq!(helper["path"], "src-tauri/src/lib.rs", "{found}");
+    assert_eq!(helper["callers"][0]["name"], "run", "{found}");
+}
+
 /// Without rust-analyzer on PATH, indexing says how to install it instead of a raw "program not found".
 #[test]
 fn a_missing_indexer_falls_back_to_the_parser_and_says_how_to_upgrade() {

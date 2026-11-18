@@ -210,6 +210,8 @@ Footnote Code answers "who calls this, and what does it call" from the compiler'
 | TypeScript, JavaScript | `tsconfig.json` (Footnote never writes one into your project) | `npm install -g @sourcegraph/scip-typescript` |
 | Python | `pyproject.toml`, `setup.py`, `setup.cfg` or `requirements.txt` | `npm install -g @sourcegraph/scip-python` |
 
+Rust in a subfolder (a Tauri app's `src-tauri`, `crates/<name>`) gets its own rust-analyzer run beside the top folder's indexer; folders starting with a dot and vendored copies are skipped, and the answer's `roots` says which indexer read which folder.
+
 On Windows, keep Node.js and npm's global launcher folder on `PATH`. Footnote loads the global Python indexer through Node
 with a temporary compatibility fix for its invalid path-separator regex ([upstream PR #224](https://github.com/sourcegraph/scip-python/pull/224)).
 The installed package is never edited. A fixed upstream regex is left unchanged; the native constructor is restored after
