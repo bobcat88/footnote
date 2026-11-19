@@ -390,6 +390,18 @@ enum Action {
         #[arg(long, default_value_t = 30)]
         limit: usize,
     },
+    /// Footnote Code: calls the graph could not link, in a file (its path) or inside a symbol, each with the project
+    /// definitions sharing the callee's name (where to grep) or none (the callee is outside the project).
+    #[cfg(feature = "code")]
+    CodeUnresolved {
+        /// A file path relative to the root, or the name of the function holding the calls.
+        target: String,
+        /// Project folder indexed with `code-index`.
+        #[arg(long, default_value = ".")]
+        root: PathBuf,
+        #[arg(long, default_value_t = 50)]
+        limit: usize,
+    },
     /// Footnote Code: the impact radius of changing a symbol, its callers up to `depth` levels, the tests that reach it, the
     /// files and blocks affected, and the memories anchored to them.
     #[cfg(feature = "code")]
@@ -583,6 +595,12 @@ fn execute(cli: Cli) -> Result<Value> {
             depth,
             limit,
         } => return code_impact(root, name, *depth, *limit),
+        #[cfg(feature = "code")]
+        Action::CodeUnresolved {
+            target,
+            root,
+            limit,
+        } => return footnote_code::unresolved(&code_db(root)?, target, *limit),
         #[cfg(feature = "code")]
         Action::Code { name, root, limit } => {
             return code_lookup(root, name, *limit, false);
@@ -838,7 +856,8 @@ fn execute(cli: Cli) -> Result<Value> {
         Action::CodeIndex { .. }
         | Action::Code { .. }
         | Action::CodeMap { .. }
-        | Action::CodeImpact { .. } => {
+        | Action::CodeImpact { .. }
+        | Action::CodeUnresolved { .. } => {
             unreachable!("dispatched before the database is opened")
         }
         Action::Audit { .. }
@@ -1010,6 +1029,8 @@ fn action_name(a: &Action) -> &'static str {
         Action::Code { .. } => "code",
         #[cfg(feature = "code")]
         Action::CodeImpact { .. } => "code-impact",
+        #[cfg(feature = "code")]
+        Action::CodeUnresolved { .. } => "code-unresolved",
         #[cfg(feature = "code")]
         Action::CodeMap { .. } => "code-map",
         Action::Options => "options",

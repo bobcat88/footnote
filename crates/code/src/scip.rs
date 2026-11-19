@@ -10,6 +10,16 @@ pub struct Occurrence {
     pub roles: i32,
     /// For a definition, the whole item (a function's body); absent on some references.
     pub enclosing: Option<[i32; 4]>,
+    /// Parser links only: the rule that made it (`receiver_type`, `guess_member_unique`...), stored for guesses.
+    pub rule: &'static str,
+}
+
+/// A call the parser could not resolve: where it is, and the project definitions that share its name (`path:line`).
+#[derive(Debug, Default)]
+pub struct Unresolved {
+    pub line: i32,
+    pub name: String,
+    pub candidates: Vec<String>,
 }
 
 #[derive(Debug, Default)]
@@ -24,6 +34,7 @@ pub struct Document {
     pub path: String,
     pub occurrences: Vec<Occurrence>,
     pub symbols: Vec<Symbol>,
+    pub unresolved: Vec<Unresolved>,
 }
 
 /// Role bit for a definition (`SymbolRole.Definition`).
@@ -31,6 +42,8 @@ pub const DEFINITION: i32 = 1;
 /// Footnote's own flag, not SCIP's: a call the parser found inside macro arguments, which rust-analyzer's index leaves out
 /// (`assert_eq!(run(), 1)`, #197). Merged into a compiler-graded file, its link stays graded `resolved`.
 pub const MACRO_ARG: i32 = 1 << 30;
+/// Footnote's own flag: a lower-tier guess (CODE-GRAPH-DESIGN.md, confidence tiers). Stored apart from `refs`, never read by default.
+pub const GUESS: i32 = 1 << 29;
 
 enum Value<'a> {
     Int(u64),

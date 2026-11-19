@@ -594,10 +594,14 @@ fn dispatch(db: &Path, name: &str, args: &Value) -> Result<Value> {
             if let Some(path) = args["outline"].as_str().filter(|p| !p.is_empty()) {
                 return footnote_code::outline(&app::code_db(&root)?, path);
             }
+            // `unresolved`: calls in a file or function the graph could not link, with candidates to grep.
+            if let Some(target) = args["unresolved"].as_str().filter(|p| !p.is_empty()) {
+                return footnote_code::unresolved(&app::code_db(&root)?, target, 50);
+            }
             let name = args["name"]
                 .as_str()
                 .filter(|n| !n.is_empty() && n.len() <= 200)
-                .context("`name` (or `outline`) is required")?;
+                .context("`name` (or `outline` or `unresolved`) is required")?;
             let limit = match args.get("limit") {
                 None => 30,
                 Some(v) => v
@@ -1184,6 +1188,7 @@ fn tool_definitions() -> Value {
                     "name": {"type": "string", "description": "Symbol name, e.g. a function or type: `lookup`, `Store`"},
                     "body": {"type": "boolean", "description": "Also return each definition's source lines (at most 150)"},
                     "outline": {"type": "string", "description": "Instead of a name: a file path (relative to root) whose definitions to list"},
+                    "unresolved": {"type": "string", "description": "Instead of a name: a file path (relative to root) or a function name whose calls the graph could not link; each comes with the call site and the project definitions sharing the callee's name (grep those), or none when the callee is outside the project"},
                     "root": {"type": "string", "description": "Project folder; default: the server's working folder"},
                     "limit": {"type": "integer", "minimum": 1, "maximum": 100, "default": 30},
                     "impact": {"type": "integer", "minimum": 1, "maximum": 6, "description": "Before changing the symbol: its impact radius instead, callers up to this many levels with each link's grade (compiler or resolved), the tests that reach it, the files and blocks affected, and memories anchored to them. 3 is a good start."}

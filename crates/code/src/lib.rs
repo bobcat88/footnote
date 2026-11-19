@@ -21,6 +21,12 @@ CREATE TABLE refs(symbol_id INTEGER NOT NULL REFERENCES symbols(id), file_id INT
   line INTEGER NOT NULL, caller_id INTEGER REFERENCES symbols(id), origin TEXT NOT NULL);
 CREATE INDEX refs_symbol ON refs(symbol_id);
 CREATE INDEX refs_caller ON refs(caller_id);
+CREATE TABLE guesses(symbol_id INTEGER NOT NULL REFERENCES symbols(id), file_id INTEGER NOT NULL REFERENCES files(id),
+  line INTEGER NOT NULL, caller_id INTEGER REFERENCES symbols(id), rule TEXT NOT NULL);
+CREATE INDEX guesses_symbol ON guesses(symbol_id);
+CREATE TABLE unresolved(file_id INTEGER NOT NULL REFERENCES files(id), line INTEGER NOT NULL, caller_id INTEGER REFERENCES symbols(id),
+  name TEXT NOT NULL, candidates TEXT NOT NULL);
+CREATE INDEX unresolved_name ON unresolved(name);
 CREATE TABLE outside(file_id INTEGER NOT NULL REFERENCES files(id), package TEXT NOT NULL, version TEXT NOT NULL,
   refs INTEGER NOT NULL);";
 
@@ -106,6 +112,7 @@ fn merge_macro_calls(docs: &mut [scip::Document], parsed: &[scip::Document]) {
                 symbol: target.clone(),
                 roles: scip::MACRO_ARG,
                 enclosing: None,
+                ..Default::default()
             });
         }
     }
@@ -258,7 +265,19 @@ pub fn index(root: &Path, db: &Path) -> Result<Value> {
         || "project".into(),
         |n| n.to_string_lossy().replace(' ', "_"),
     );
-    let (name, mut docs, origin, upgrade, report) = match precise(root, &scip_file) {
+    // Opt-in overlay: a SCIP index that is already there (rust-analyzer, scip-typescript, scip-python, scip-java) is read as the
+    // compiler graph instead of running an indexer; the parser still fills the files it does not cover. A bad file is an error.
+    let ready = match std::env::var_os("FOOTNOTE_CODE_SCIP") {
+        Some(f) => {
+            let docs = scip::read(
+                &std::fs::read(&f)
+                    .with_context(|| format!("FOOTNOTE_CODE_SCIP {}", Path::new(&f).display()))?,
+            )?;
+            Ok(("existing SCIP index".to_string(), docs, vec![]))
+        }
+        None => precise(root, &scip_file),
+    };
+    let (name, mut docs, origin, upgrade, report) = match ready {
         Ok((name, docs, report)) => (name, docs, "compiler", None, report),
         Err(e) => {
             let (docs, _) = ts::index(root, &project)?;
@@ -414,7 +433,7 @@ fn write(
     root: &Path,
     docs: &[scip::Document],
     origin: &str,
-    split: usize, // documents from here on come from the parser: their links are esolved`r
+    split: usize, // documents from here on come from the parser: their links are graded `resolved`
 ) -> Result<(usize, usize, usize)> {
     let mut c = Connection::open(db)?;
     c.execute_batch(SCHEMA)?;
@@ -481,6 +500,8 @@ fn write(
     let mut outside: HashMap<(i64, &str, &str), i64> = HashMap::new();
     {
         let mut add = tx.prepare("INSERT INTO refs VALUES(?1, ?2, ?3, ?4, ?5)")?;
+        let mut guess = tx.prepare("INSERT INTO guesses VALUES(?1, ?2, ?3, ?4, ?5)")?;
+        let mut miss = tx.prepare("INSERT INTO unresolved VALUES(?1, ?2, ?3, ?4, ?5)")?;
         for (i, (d, &file)) in docs.iter().zip(&file_ids).enumerate() {
             let origin = if i < split { origin } else { "resolved" };
             // Items of this file that can hold a reference (not the module itself), innermost found by the smallest span.
@@ -516,6 +537,11 @@ fn write(
                     .filter(|(_, e)| contains(*e, o.range))
                     .min_by_key(|(_, e)| (e[2] - e[0], e[3] - e[1]))
                     .and_then(|(s, _)| own.get(&(i, *s)).or_else(|| ids.get(s)).copied());
+                // A lower-tier guess: stored apart, so every default query is unchanged by it.
+                if o.roles & scip::GUESS != 0 {
+                    guess.execute(params![target, file, o.range[0] + 1, caller, o.rule])?;
+                    continue;
+                }
                 // A call inside macro arguments came from the parser: graded `resolved` even in a compiler file (#197).
                 let origin = if o.roles & scip::MACRO_ARG != 0 {
                     "resolved"
@@ -524,6 +550,22 @@ fn write(
                 };
                 add.execute(params![target, file, o.range[0] + 1, caller, origin])?;
                 refs += 1;
+            }
+            // Calls the parser could not resolve, each with the item that holds it (by line) and same-named project definitions.
+            for u in &d.unresolved {
+                let at = u.line - 1;
+                let caller = items
+                    .iter()
+                    .filter(|(_, e)| e[0] <= at && at <= e[2])
+                    .min_by_key(|(_, e)| e[2] - e[0])
+                    .and_then(|(s, _)| own.get(&(i, *s)).or_else(|| ids.get(s)).copied());
+                miss.execute(params![
+                    file,
+                    u.line,
+                    caller,
+                    u.name,
+                    u.candidates.join(",")
+                ])?;
             }
         }
     }
@@ -617,14 +659,20 @@ pub fn lookup(db: &Path, name: &str, limit: usize) -> Result<Value> {
             [id],
             |r| r.get(0),
         )?;
+        // Lower-tier guesses (graphs built with FOOTNOTE_CODE_GUESSES=1 only): listed apart, each with its rule.
+        let guessed = edges_rule(&c, id, limit);
         paths.push(path.clone());
         paths.extend(
             callers
                 .iter()
                 .filter_map(|v| v["path"].as_str().map(str::to_string)),
         );
-        found.push(json!({"name": name, "kind": kind, "signature": signature, "path": path, "lines": [line, end],
-            "references": references, "callers": callers, "callees": callees}));
+        let mut one = json!({"name": name, "kind": kind, "signature": signature, "path": path, "lines": [line, end],
+            "references": references, "callers": callers, "callees": callees});
+        if !guessed.is_empty() {
+            one["guessed_callers"] = json!(guessed);
+        }
+        found.push(one);
     }
     paths.sort();
     paths.dedup();
@@ -643,6 +691,60 @@ pub fn lookup(db: &Path, name: &str, limit: usize) -> Result<Value> {
         }
     }
     Ok(json!({"root": root, "origin": origin(&c)?, "symbols": found, "stale": stale}))
+}
+
+/// Guessed callers of one symbol (the `guesses` table; empty when the graph was built without guesses or before they existed).
+fn edges_rule(c: &Connection, id: i64, limit: usize) -> Vec<Value> {
+    let Ok(mut q) = c.prepare(
+        "SELECT coalesce(s.name, ''), f.path, g.line, g.rule FROM guesses g JOIN files f ON f.id = g.file_id
+         LEFT JOIN symbols s ON s.id = g.caller_id WHERE g.symbol_id = ?1 ORDER BY f.path, g.line LIMIT ?2",
+    ) else {
+        return vec![];
+    };
+    q.query_map(params![id, limit as i64], |r| {
+        Ok(json!({"name": r.get::<_, String>(0)?, "path": r.get::<_, String>(1)?, "line": r.get::<_, i64>(2)?,
+            "rule": r.get::<_, String>(3)?}))
+    })
+    .map(|rows| rows.flatten().collect())
+    .unwrap_or_default()
+}
+
+/// Calls the parser could not resolve, for a file (its path) or a symbol (the item holding the calls): the call site and the
+/// project definitions with the same name, none when the callee lives outside the project. Where an agent falls back to grep.
+pub fn unresolved(db: &Path, target: &str, limit: usize) -> Result<Value> {
+    let c = Connection::open_with_flags(db, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+        .with_context(|| {
+            format!(
+                "no code graph at {}; run `footnote code-index` first",
+                db.display()
+            )
+        })?;
+    let path = target.replace('\\', "/");
+    let mut q = c
+        .prepare(
+            "SELECT f.path, u.line, u.name, coalesce(s.name, ''), u.candidates FROM unresolved u JOIN files f ON f.id = u.file_id
+             LEFT JOIN symbols s ON s.id = u.caller_id
+             WHERE replace(f.path, '\\', '/') = ?1 OR s.name = ?2 ORDER BY f.path, u.line LIMIT ?3",
+        )
+        .context("this graph has no unresolved-call report; run `footnote code-index` again")?;
+    let total: i64 = c.query_row(
+        "SELECT count(*) FROM unresolved u JOIN files f ON f.id = u.file_id LEFT JOIN symbols s ON s.id = u.caller_id
+         WHERE replace(f.path, '\\', '/') = ?1 OR s.name = ?2",
+        params![path, target],
+        |r| r.get(0),
+    )?;
+    let calls: Vec<Value> = q
+        .query_map(params![path, target, limit as i64], |r| {
+            let cands: String = r.get(4)?;
+            Ok(json!({"path": r.get::<_, String>(0)?, "line": r.get::<_, i64>(1)?, "name": r.get::<_, String>(2)?,
+                "in": r.get::<_, String>(3)?,
+                "candidates": cands.split(',').filter(|x| !x.is_empty()).collect::<Vec<_>>()}))
+        })?
+        .collect::<rusqlite::Result<_>>()?;
+    Ok(
+        json!({"target": target, "origin": origin(&c)?, "total": total, "unresolved": calls,
+        "note": "calls the graph could not link; `candidates` are project definitions with that name (grep them), none means the callee is outside the project"}),
+    )
 }
 
 /// The impact radius of changing `name`: everything that calls it, then what calls those, up to `depth` levels, with the

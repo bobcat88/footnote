@@ -437,3 +437,134 @@ fn integration_test_helpers_with_one_name_keep_their_own_callers() {
         "{found}"
     );
 }
+
+/// Lower tiers and the unresolved-call report: a call on an untyped value is unlinked by default (and reported with the
+/// definitions to grep); with `FOOTNOTE_CODE_GUESSES=1` it is also listed apart as a guess, and the default links do not change.
+#[test]
+fn unresolved_calls_are_reported_and_guesses_stay_apart() {
+    let dir = tempfile::tempdir().unwrap();
+    let project = dir.path().join("proj");
+    fs::create_dir_all(&project).unwrap();
+    fs::write(project.join("requirements.txt"), "").unwrap();
+    fs::write(
+        project.join("store.py"),
+        "class Store:\n    def save(self):\n        return 1\n",
+    )
+    .unwrap();
+    fs::write(
+        project.join("app.py"),
+        "def run(store):\n    store.save()\n    print(1)\n",
+    )
+    .unwrap();
+    let root = project.to_str().unwrap();
+    let go = |guesses: bool, state: &Path, args: &[&str]| -> Value {
+        let mut c = Command::new(assert_cmd::cargo::cargo_bin!("footnote"));
+        c.env("FOOTNOTE_STATE_DIR", state)
+            .env("FOOTNOTE_POLICY_FILE", dir.path().join("no-policy.json"))
+            .env("PATH", dir.path().join("empty"))
+            .args(args);
+        if guesses {
+            c.env("FOOTNOTE_CODE_GUESSES", "1");
+        }
+        serde_json::from_slice(&c.output().unwrap().stdout).unwrap()
+    };
+    let plain = dir.path().join("plain");
+    go(false, &plain, &["code-index", root]);
+    let save = go(false, &plain, &["code", "save", "--root", root]);
+    assert_eq!(
+        save["symbols"][0]["callers"],
+        serde_json::json!([]),
+        "{save}"
+    );
+    assert!(
+        save["symbols"][0].get("guessed_callers").is_none(),
+        "{save}"
+    );
+    let miss = go(false, &plain, &["code-unresolved", "run", "--root", root]);
+    let calls = miss["unresolved"].as_array().unwrap();
+    let find = |n: &str| {
+        calls
+            .iter()
+            .find(|c| c["name"] == n)
+            .unwrap_or_else(|| panic!("{miss}"))
+    };
+    assert_eq!(
+        find("save")["candidates"],
+        serde_json::json!(["store.py:2"]),
+        "{miss}"
+    );
+    assert_eq!(find("print")["candidates"], serde_json::json!([]), "{miss}");
+
+    let tiered = dir.path().join("tiered");
+    go(true, &tiered, &["code-index", root]);
+    let save = go(true, &tiered, &["code", "save", "--root", root]);
+    assert_eq!(
+        save["symbols"][0]["callers"],
+        serde_json::json!([]),
+        "{save}"
+    );
+    assert_eq!(
+        save["symbols"][0]["guessed_callers"][0]["name"], "run",
+        "{save}"
+    );
+    assert_eq!(
+        save["symbols"][0]["guessed_callers"][0]["rule"], "guess_receiver_name",
+        "{save}"
+    );
+}
+
+/// Opt-in overlay: an index that already exists (here from rust-analyzer, run by the test) is read as the compiler graph with no
+/// indexer on PATH; without the variable the same project falls back to the parser.
+#[test]
+fn an_existing_scip_index_is_the_compiler_graph_when_asked() {
+    let probe = std::process::Command::new("rust-analyzer")
+        .arg("--version")
+        .output();
+    if probe.is_err() {
+        eprintln!("rust-analyzer not installed: skipped");
+        return;
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let project = dir.path().join("demo");
+    fs::create_dir_all(project.join("src")).unwrap();
+    fs::write(
+        project.join("Cargo.toml"),
+        "[package]\nname = \"demo\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+    )
+    .unwrap();
+    fs::write(
+        project.join("src/lib.rs"),
+        "pub fn run() -> u32 {\n    helper()\n}\n\nfn helper() -> u32 {\n    1\n}\n",
+    )
+    .unwrap();
+    let index = dir.path().join("ready.scip");
+    let made = std::process::Command::new("rust-analyzer")
+        .args(["scip"])
+        .arg(&project)
+        .arg("--output")
+        .arg(&index)
+        .output()
+        .unwrap();
+    assert!(made.status.success(), "{made:?}");
+    let run = |scip: bool| -> Value {
+        let mut c = Command::new(assert_cmd::cargo::cargo_bin!("footnote"));
+        c.env(
+            "FOOTNOTE_STATE_DIR",
+            dir.path().join(format!("state{scip}")),
+        )
+        .env("FOOTNOTE_POLICY_FILE", dir.path().join("no-policy.json"))
+        .env("PATH", dir.path().join("empty"))
+        .args(["code-index", project.to_str().unwrap()]);
+        if scip {
+            c.env("FOOTNOTE_CODE_SCIP", &index);
+        }
+        serde_json::from_slice(&c.output().unwrap().stdout).unwrap()
+    };
+    let with = run(true);
+    assert_eq!(
+        (with["origin"].as_str(), with["indexer"].as_str()),
+        (Some("compiler"), Some("existing SCIP index")),
+        "{with}"
+    );
+    assert_eq!(run(false)["origin"], "resolved");
+}

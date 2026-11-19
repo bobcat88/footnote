@@ -432,3 +432,18 @@ analyzed lines 0.954 to 0.950, no conflicts; Python 1,814 to 1,855 links, 1,711 
 links became receiver links). Recall over every compiler reference in the covered files (not calls only): TypeScript 0.0969 to
 0.0992 (+156), Python 0.1775 to 0.1776 (+5). Small gains: most inherited calls in these projects were already same-file links.
 Next: receivers through generics.
+
+**Confidence tiers, unresolved-call report, existing-index overlay (#298, 19 November 2026).** Full tables and the failed attempts:
+`bench/experiments/CODE-TIERS-2026-11-19.md`. The default tier is byte-identical to before on every scored project (the rule tsv
+of old and new binaries compared). New, all opt-in or additive:
+- **Tier `guess_receiver_name`** (`FOOTNOTE_CODE_GUESSES=1` at `code-index`; own table, shown as `guessed_callers` with its rule):
+  `store.save()` links to `Store.save` when the receiver is named like a project type that has the method. Precision on analyzed
+  lines 0.95 Python, 0.84 TypeScript, 0.93 / 0.97 / 0.98 on gson / jsoup / commons-lang (javac); recall gain +0.10 Python, +0.05
+  TypeScript, +0.03 / +0.05 / +0.06 Java. Below the default's precision, so never default.
+- **Tried and removed:** a method name defined once in the project (precision 0.04 to 0.61), a bare name defined once in another
+  file (0.00 to 0.65). Single-implementation interface dispatch cannot be scored against a static compiler graph.
+- **`footnote code-unresolved <file|function>` / MCP `unresolved`:** the calls the graph did not link, with the project definitions
+  that share the callee's name to grep, or none.
+- **`FOOTNOTE_CODE_SCIP=<file>`:** read an existing SCIP index as the compiler graph. The compiler was already the top tier.
+- **Miss buckets:** a method on a value of unknown type is the largest real one (51% Python, 54% TypeScript of missed calls).
+  TypeScript recall is now scored without `<constructor>`/`<get>`/`<set>` references, which are not calls.

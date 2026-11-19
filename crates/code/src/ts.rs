@@ -3,7 +3,7 @@
 //! the same file, through the file's imports (a project module or an outside package), or to a name defined once in the
 //! project. An ambiguous call gets no link: precision over recall. Links made here are graded `resolved`, not `compiler`.
 //! The output has the same shape as a SCIP index, so the graph, lookups and the map need nothing new.
-use crate::scip::{DEFINITION, Document, MACRO_ARG, Occurrence, Symbol};
+use crate::scip::{DEFINITION, Document, GUESS, MACRO_ARG, Occurrence, Symbol, Unresolved};
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use streaming_iterator::StreamingIterator;
@@ -201,6 +201,7 @@ pub fn index(root: &Path, project: &str) -> anyhow::Result<(Vec<Document>, usize
 }
 
 fn parse(root: &Path, project: &str) -> anyhow::Result<(Vec<Document>, usize, Vec<String>)> {
+    let guesses = std::env::var_os("FOOTNOTE_CODE_GUESSES").is_some_and(|v| v == "1");
     let mut files: Vec<(String, Lang, Vec<u8>)> = Vec::new();
     let all = candidates(root);
     // Rust workspace crates by the name code uses (`footnote_core`) -> their folder (`crates/core/`).
@@ -711,6 +712,7 @@ fn parse(root: &Path, project: &str) -> anyhow::Result<(Vec<Document>, usize, Ve
             path: p.clone(),
             occurrences: vec![],
             symbols: vec![],
+            unresolved: vec![],
         })
         .collect();
     for d in &defs {
@@ -725,6 +727,7 @@ fn parse(root: &Path, project: &str) -> anyhow::Result<(Vec<Document>, usize, Ve
             symbol: s,
             roles: DEFINITION,
             enclosing: Some(d.span),
+            ..Default::default()
         });
     }
     let mut resolved = 0;
@@ -821,6 +824,7 @@ fn parse(root: &Path, project: &str) -> anyhow::Result<(Vec<Document>, usize, Ve
                     symbol: format!("treesitter pkg {pkg} . {}.", c.name),
                     roles: 0,
                     enclosing: None,
+                    ..Default::default()
                 });
                 continue;
             }
@@ -898,6 +902,7 @@ fn parse(root: &Path, project: &str) -> anyhow::Result<(Vec<Document>, usize, Ve
                 symbol: sym(&defs[t]),
                 roles: if c.in_macro { MACRO_ARG } else { 0 },
                 enclosing: None,
+                ..Default::default()
             });
             rules.push(format!(
                 "{}\t{}\t{}\t{}\t{rule}",
@@ -907,6 +912,56 @@ fn parse(root: &Path, project: &str) -> anyhow::Result<(Vec<Document>, usize, Ve
                 files[defs[t].file].0
             ));
             resolved += 1;
+        } else {
+            // Lower tiers (opt-in, FOOTNOTE_CODE_GUESSES=1): kept apart from the links above, so the default graph is unchanged.
+            let by_receiver_name = || {
+                // `store.save()`: a receiver named like a project type (`Store`, `my_store` -> `MyStore`), when that type has the method.
+                let ty: String = c
+                    .qualifier
+                    .split('_')
+                    .map(|w| {
+                        let mut ch = w.chars();
+                        ch.next()
+                            .map(|f| f.to_uppercase().chain(ch).collect::<String>())
+                            .unwrap_or_default()
+                    })
+                    .collect();
+                (c.member && !ty.is_empty() && c.qualifier.chars().all(is_ident))
+                    .then(|| method(&ty, &c.name, c.file, c.args))
+                    .flatten()
+            };
+            // Tried and dropped (19 Nov 2026): a name defined once in the project (member 0.04 to 0.69, bare 0.0 to 0.65 precision).
+            let guess: Option<(usize, &'static str)> = if guesses {
+                by_receiver_name().map(|d| (d, "guess_receiver_name"))
+            } else {
+                None
+            };
+            if let Some((t, rule)) = guess {
+                docs[c.file].occurrences.push(Occurrence {
+                    range: c.range,
+                    symbol: sym(&defs[t]),
+                    roles: GUESS,
+                    enclosing: None,
+                    rule,
+                });
+                rules.push(format!(
+                    "{}	{}	{}	{}	{rule}",
+                    files[c.file].0,
+                    c.range[0] + 1,
+                    c.name,
+                    files[defs[t].file].0
+                ));
+            }
+            // The report: where the call is and which project definitions share its name, so an agent knows where to grep.
+            docs[c.file].unresolved.push(Unresolved {
+                line: c.range[0] + 1,
+                name: c.name.clone(),
+                candidates: cands
+                    .iter()
+                    .take(5)
+                    .map(|&d| format!("{}:{}", files[defs[d].file].0, defs[d].range[0] + 1))
+                    .collect(),
+            });
         }
     }
     Ok((docs, resolved, rules))
