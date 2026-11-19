@@ -1,0 +1,318 @@
+description: Footnote development set for Sphinx-built documentation (#106), written 19 Nov 2026 by Claude from the sites'
+  page lists before any system ran on these libraries. Tuning allowed; the sealed Flask and Python set is written after dev
+  is closed.
+entries:
+- vars:
+    library: django
+    query: how do I create a custom management command
+    intent: api-lookup
+    qrels:
+    - url: https://docs.djangoproject.com/en/5.2/howto/custom-management-commands/
+      grade: 3
+- vars:
+    library: django
+    query: difference between select_related and prefetch_related
+    intent: comparison
+    qrels:
+    - url: https://docs.djangoproject.com/en/5.2/ref/models/querysets/
+      grade: 3
+    - url: https://docs.djangoproject.com/en/5.2/topics/db/optimization/
+      grade: 2
+- vars:
+    library: django
+    query: make two columns unique together on a model
+    intent: api-lookup
+    qrels:
+    - url: https://docs.djangoproject.com/en/5.2/ref/models/options/
+      grade: 3
+    - url: https://docs.djangoproject.com/en/5.2/topics/db/models/
+      grade: 2
+- vars:
+    library: django
+    query: write a data migration to fill a new column
+    intent: conceptual
+    qrels:
+    - url: https://docs.djangoproject.com/en/5.2/topics/migrations/
+      grade: 3
+    - url: https://docs.djangoproject.com/en/5.2/howto/writing-migrations/
+      grade: 3
+- vars:
+    library: django
+    query: restrict a view to logged-in users
+    intent: api-lookup
+    qrels:
+    - url: https://docs.djangoproject.com/en/5.2/topics/auth/default/
+      grade: 3
+- vars:
+    library: django
+    query: split a long list of results into pages
+    intent: api-lookup
+    qrels:
+    - url: https://docs.djangoproject.com/en/5.2/topics/pagination/
+      grade: 3
+- vars:
+    library: django
+    query: send an email with an attachment
+    intent: api-lookup
+    qrels:
+    - url: https://docs.djangoproject.com/en/5.2/topics/email/
+      grade: 3
+- vars:
+    library: django
+    query: 403 forbidden CSRF verification failed
+    intent: troubleshooting
+    qrels:
+    - url: https://docs.djangoproject.com/en/5.2/ref/csrf/
+      grade: 3
+- vars:
+    library: django
+    query: cache pages with Redis or memcached
+    intent: api-lookup
+    qrels:
+    - url: https://docs.djangoproject.com/en/5.2/topics/cache/
+      grade: 3
+- vars:
+    library: django
+    query: what happens to uploaded files that are too big for memory
+    intent: conceptual
+    qrels:
+    - url: https://docs.djangoproject.com/en/5.2/topics/http/file-uploads/
+      grade: 3
+    - url: https://docs.djangoproject.com/en/5.2/topics/files/
+      grade: 2
+- vars:
+    library: django
+    query: serve the project with an ASGI server
+    intent: api-lookup
+    qrels:
+    - url: https://docs.djangoproject.com/en/5.2/howto/deployment/asgi/
+      grade: 3
+    - url: https://docs.djangoproject.com/en/5.2/topics/async/
+      grade: 2
+- vars:
+    library: django
+    query: template tag that takes a variable argument
+    intent: api-lookup
+    qrels:
+    - url: https://docs.djangoproject.com/en/5.2/howto/custom-template-tags/
+      grade: 3
+- vars:
+    library: django
+    query: settings to review before deploying to production
+    intent: conceptual
+    qrels:
+    - url: https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
+      grade: 3
+    - url: https://docs.djangoproject.com/en/5.2/ref/settings/
+      grade: 2
+- vars:
+    library: django
+    query: validate one form field against another
+    intent: api-lookup
+    qrels:
+    - url: https://docs.djangoproject.com/en/5.2/ref/forms/validation/
+      grade: 3
+    - url: https://docs.djangoproject.com/en/5.2/topics/forms/
+      grade: 2
+- vars:
+    library: django
+    query: keep session data in cookies or the database
+    intent: api-lookup
+    qrels:
+    - url: https://docs.djangoproject.com/en/5.2/topics/http/sessions/
+      grade: 3
+- vars:
+    library: django
+    query: combine conditions with OR in a queryset filter
+    intent: api-lookup
+    qrels:
+    - url: https://docs.djangoproject.com/en/5.2/topics/db/queries/
+      grade: 3
+    - url: https://docs.djangoproject.com/en/5.2/ref/models/querysets/
+      grade: 2
+- vars:
+    library: jinja
+    query: escape HTML automatically in templates
+    intent: api-lookup
+    qrels:
+    - url: https://jinja.palletsprojects.com/en/stable/api/
+      grade: 3
+    - url: https://jinja.palletsprojects.com/en/stable/templates/
+      grade: 2
+- vars:
+    library: jinja
+    query: register my own filter
+    intent: api-lookup
+    qrels:
+    - url: https://jinja.palletsprojects.com/en/stable/api/
+      grade: 3
+- vars:
+    library: jinja
+    query: which built-in filters exist, such as join and default
+    intent: api-lookup
+    qrels:
+    - url: https://jinja.palletsprojects.com/en/stable/templates/
+      grade: 3
+- vars:
+    library: jinja
+    query: extend a base template and override a block
+    intent: conceptual
+    qrels:
+    - url: https://jinja.palletsprojects.com/en/stable/templates/
+      grade: 3
+- vars:
+    library: jinja
+    query: add a new tag with an extension
+    intent: api-lookup
+    qrels:
+    - url: https://jinja.palletsprojects.com/en/stable/extensions/
+      grade: 3
+- vars:
+    library: jinja
+    query: render templates written by untrusted users
+    intent: conceptual
+    qrels:
+    - url: https://jinja.palletsprojects.com/en/stable/sandbox/
+      grade: 3
+- vars:
+    library: jinja
+    query: get Python objects back instead of strings from a render
+    intent: api-lookup
+    qrels:
+    - url: https://jinja.palletsprojects.com/en/stable/nativetypes/
+      grade: 3
+- vars:
+    library: jinja
+    query: moving from Django templates to Jinja
+    intent: comparison
+    qrels:
+    - url: https://jinja.palletsprojects.com/en/stable/switching/
+      grade: 3
+- vars:
+    library: jinja
+    query: load templates from a folder or a Python package
+    intent: api-lookup
+    qrels:
+    - url: https://jinja.palletsprojects.com/en/stable/api/
+      grade: 3
+- vars:
+    library: jinja
+    query: raise an error when a variable is undefined
+    intent: troubleshooting
+    qrels:
+    - url: https://jinja.palletsprojects.com/en/stable/api/
+      grade: 3
+- vars:
+    library: jinja
+    query: translate template text with gettext
+    intent: api-lookup
+    qrels:
+    - url: https://jinja.palletsprojects.com/en/stable/extensions/
+      grade: 3
+    - url: https://jinja.palletsprojects.com/en/stable/integration/
+      grade: 2
+- vars:
+    library: jinja
+    query: alternate row colours in a loop
+    intent: api-lookup
+    qrels:
+    - url: https://jinja.palletsprojects.com/en/stable/tricks/
+      grade: 3
+    - url: https://jinja.palletsprojects.com/en/stable/templates/
+      grade: 2
+- vars:
+    library: sphinx
+    query: document Python code from docstrings automatically
+    intent: api-lookup
+    qrels:
+    - url: https://www.sphinx-doc.org/en/master/usage/extensions/autodoc.html
+      grade: 3
+    - url: https://www.sphinx-doc.org/en/master/tutorial/automatic-doc-generation.html
+      grade: 2
+- vars:
+    library: sphinx
+    query: link to another project's documentation
+    intent: api-lookup
+    qrels:
+    - url: https://www.sphinx-doc.org/en/master/usage/extensions/intersphinx.html
+      grade: 3
+- vars:
+    library: sphinx
+    query: write the docs in Markdown instead of reStructuredText
+    intent: conceptual
+    qrels:
+    - url: https://www.sphinx-doc.org/en/master/usage/markdown.html
+      grade: 3
+- vars:
+    library: sphinx
+    query: change the HTML theme of my documentation
+    intent: api-lookup
+    qrels:
+    - url: https://www.sphinx-doc.org/en/master/usage/theming.html
+      grade: 3
+    - url: https://www.sphinx-doc.org/en/master/development/html_themes/index.html
+      grade: 2
+- vars:
+    library: sphinx
+    query: cross-reference a section or a function
+    intent: api-lookup
+    qrels:
+    - url: https://www.sphinx-doc.org/en/master/usage/referencing.html
+      grade: 3
+- vars:
+    library: sphinx
+    query: translate documentation into other languages
+    intent: conceptual
+    qrels:
+    - url: https://www.sphinx-doc.org/en/master/usage/advanced/intl.html
+      grade: 3
+- vars:
+    library: sphinx
+    query: build a PDF through LaTeX
+    intent: api-lookup
+    qrels:
+    - url: https://www.sphinx-doc.org/en/master/latex.html
+      grade: 3
+    - url: https://www.sphinx-doc.org/en/master/usage/builders/index.html
+      grade: 2
+- vars:
+    library: sphinx
+    query: write an extension that adds a directive
+    intent: api-lookup
+    qrels:
+    - url: https://www.sphinx-doc.org/en/master/extdev/index.html
+      grade: 3
+    - url: https://www.sphinx-doc.org/en/master/development/tutorials/index.html
+      grade: 2
+- vars:
+    library: sphinx
+    query: note and warning boxes in a page
+    intent: api-lookup
+    qrels:
+    - url: https://www.sphinx-doc.org/en/master/usage/restructuredtext/directives.html
+      grade: 3
+- vars:
+    library: sphinx
+    query: set the project name, version and extensions in conf.py
+    intent: api-lookup
+    qrels:
+    - url: https://www.sphinx-doc.org/en/master/usage/configuration.html
+      grade: 3
+    - url: https://www.sphinx-doc.org/en/master/tutorial/getting-started.html
+      grade: 2
+- vars:
+    library: sphinx
+    query: install Sphinx with pip
+    intent: api-lookup
+    qrels:
+    - url: https://www.sphinx-doc.org/en/master/usage/installation.html
+      grade: 3
+- vars:
+    library: sphinx
+    query: inline roles like ref and doc
+    intent: api-lookup
+    qrels:
+    - url: https://www.sphinx-doc.org/en/master/usage/restructuredtext/roles.html
+      grade: 3
+    - url: https://www.sphinx-doc.org/en/master/usage/referencing.html
+      grade: 2
