@@ -364,3 +364,22 @@ repository, where git applies `.gitignore`, holds 806 code files and takes 1.9 s
 Graphify review: Apache-2.0 (Graphify-Labs/graphify, PyPI `graphifyy`), `graphify update` builds the code graph with no LLM
 and no network, its only processes are `git ls-files` and `git config`, query logging is off by default; installed from wheels
 into a throwaway environment and run on scratch copies only. Scripts in `bench/experiments/code-graph/`: `graphify_to_tsv.py` and `cbm_to_tsv.py` export each tool's call edges, `score_three.py` scores the three.
+
+**Does Footnote Code cover codebase-memory-mcp's uses? (19 November 2026, #114).** Tool by tool, for the uses agents had:
+
+| codebase-memory-mcp tool | Footnote Code | Covered |
+|---|---|---|
+| `search_graph` (find a symbol) | `footnote_code name` (definitions, signature, place) | yes |
+| `trace_path` (who calls, what it calls) | `footnote_code name` callers and callees; `impact` for several levels with grades | yes |
+| `get_code_snippet` | `footnote_code name` with `body` (#260) | yes |
+| `get_file_outline` | `footnote_code outline` (#260) | yes |
+| `get_architecture` | `footnote code-map` (blocks, links, outside packages) and the launcher's map | yes |
+| `detect_changes` / `index_status` | `stale` in every answer; `code-index` rebuild | yes |
+| `search_code` (text search) | none; agents' own Grep does it | no need |
+| `query_graph` (Cypher) | none | not used by agents here |
+| `manage_adr` | Footnote Memory (decisions as memories, anchored to code) | different, covered |
+
+Measured against the compiler graph on the same five projects, Footnote's parser is faster (0.3 to 1.7 s against about 4 s), finds
+more correct links (1.2 to 3 times) and conflicts far less (0 to 0.1% against 0 to 7.4%), and codebase-memory-mcp aborted on
+the largest project (section above). Recommendation: switch. Removing codebase-memory-mcp from the agents' MCP configuration
+(Claude Code, Codex) is Johan's step; it also drops its tool definitions from every session.
