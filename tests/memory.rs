@@ -251,6 +251,29 @@ fn agents_can_remember_over_mcp_but_never_into_a_corpus() {
         texts(&run(&memory, &["memory-pack"], None)),
         ["Prefers French answers."]
     );
+    // Each memory says who wrote it (#207): an agent over MCP, or a person at the command line.
+    run(
+        &memory,
+        &["remember"],
+        Some(json!([mem("Uses Rust.", "fact", "global", "2026-11-14")])),
+    );
+    let pack = run(&memory, &["memory-pack"], None);
+    let origins: Vec<(&str, &str)> = pack["memories"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|m| {
+            (
+                m["text"].as_str().unwrap(),
+                m["origin"].as_str().unwrap_or(""),
+            )
+        })
+        .collect();
+    assert!(
+        origins.contains(&("Prefers French answers.", "mcp"))
+            && origins.contains(&("Uses Rust.", "cli")),
+        "{pack}"
+    );
 
     let root = t.path().join("notes");
     fs::create_dir(&root).unwrap();

@@ -563,7 +563,7 @@ fn dispatch(db: &Path, name: &str, args: &Value) -> Result<Value> {
             } else {
                 model_args(db, args)?
             };
-            crate::memory::remember(&mut memory_db(db)?, &args["memories"], &models)
+            crate::memory::remember(&mut memory_db(db)?, &args["memories"], &models, "mcp")
         }
         #[cfg(feature = "memory")]
         "footnote_forget" => crate::memory::forget(&mut memory_db(db)?, int_arg(args, "id")?),

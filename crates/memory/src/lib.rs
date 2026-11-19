@@ -195,6 +195,20 @@ fn has_tags(c: &Connection) -> Result<bool> {
     )?)
 }
 
+/// Who wrote each memory (#207): `mcp` (an agent through the MCP tools) or `cli` (a person at the command line). Kept in its
+/// own table, created on first write, so older databases need no migration and simply show no origin.
+const ORIGINS: &str = "CREATE TABLE IF NOT EXISTS memory_origin(source_id INTEGER PRIMARY KEY REFERENCES sources(id),origin TEXT NOT NULL)";
+
+/// The origin of the memory behind a chunk id, if recorded.
+fn origin_of(c: &Connection, chunk: i64) -> Option<String> {
+    c.query_row(
+        "SELECT o.origin FROM memory_origin o JOIN chunks c ON c.source_id=o.source_id WHERE c.id=?1",
+        [chunk],
+        |r| r.get(0),
+    )
+    .ok()
+}
+
 /// Tags of the memory behind a chunk id (empty when the database has none).
 fn tags_of(c: &Connection, chunk: i64) -> Result<Vec<String>> {
     if !has_tags(c)? {
@@ -349,7 +363,13 @@ fn retire(c: &Connection, source: i64, status: &str) -> Result<()> {
 
 /// Store a batch of memories. Each item: `text`, `kind`, `scope` ("global" or a project name), `observed_at` (YYYY-MM-DD),
 /// optional `session`, optional `supersedes` (id of the memory it replaces, which is kept as history but no longer returned).
-pub fn remember(c: &mut Connection, items: &Value, models: &[PathBuf]) -> Result<Value> {
+/// `origin`: `mcp` or `cli`, recorded with each memory (#207).
+pub fn remember(
+    c: &mut Connection,
+    items: &Value,
+    models: &[PathBuf],
+    origin: &str,
+) -> Result<Value> {
     let items = items
         .as_array()
         .filter(|a| !a.is_empty() && a.len() <= MAX_BATCH)
@@ -362,6 +382,7 @@ pub fn remember(c: &mut Connection, items: &Value, models: &[PathBuf]) -> Result
     let tx = c.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
     tx.execute_batch(TAGS)?;
     tx.execute_batch(ANCHORS)?;
+    tx.execute_batch(ORIGINS)?;
     let (mut stored, mut duplicates) = (Vec::new(), 0);
     for m in items {
         let text = field(m, "text", MAX_TEXT)?
@@ -418,6 +439,10 @@ pub fn remember(c: &mut Connection, items: &Value, models: &[PathBuf]) -> Result
         for a in &anchors {
             tx.execute("INSERT INTO memory_anchors VALUES(?1,?2)", params![id, a])?;
         }
+        tx.execute(
+            "INSERT OR REPLACE INTO memory_origin VALUES(?1,?2)",
+            params![id, origin],
+        )?;
         // The heading carries kind, scope and date: every hit shows them, and the model can tell an old fact from a new one.
         footnote_search::store::add_chunk(
             &tx,
@@ -505,7 +530,8 @@ pub fn pack(c: &Connection, project: Option<&str>, max_chars: usize) -> Result<V
     ))?;
     let (mut out, mut used) = (Vec::new(), 0);
     for v in s.query_map([p], row)? {
-        let v = v?;
+        let mut v = v?;
+        v["origin"] = json!(origin_of(c, v["id"].as_i64().unwrap_or(0)));
         let n = v["text"].as_str().map_or(0, |t| t.chars().count());
         if used + n > max_chars {
             continue; // a shorter one further down may still fit
@@ -565,7 +591,7 @@ pub fn recall(
         if sc != "global" && Some(sc.as_str()) != project {
             continue;
         }
-        out.push(json!({"id": id, "kind": kind, "scope": sc, "observed_at": date, "tags": tags_of(c, id)?, "text": hit["text"], "score": hit.get("fusion_score")}));
+        out.push(json!({"id": id, "kind": kind, "scope": sc, "observed_at": date, "tags": tags_of(c, id)?, "origin": origin_of(c, id), "text": hit["text"], "score": hit.get("fusion_score")}));
         if out.len() >= limit {
             break;
         }
@@ -645,6 +671,7 @@ pub fn list(
         .collect::<rusqlite::Result<_>>()?;
     for m in &mut memories {
         m["tags"] = json!(tags_of(c, m["id"].as_i64().unwrap_or(0))?);
+        m["origin"] = json!(origin_of(c, m["id"].as_i64().unwrap_or(0)));
     }
     let scopes: Vec<Value> = c
         .prepare(&format!(

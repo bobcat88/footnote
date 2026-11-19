@@ -256,11 +256,15 @@ fn render(v: &Value, title: &str, short: bool) -> String {
         .flatten()
         .map(|m| {
             let text = m["text"].as_str().unwrap_or_default();
+            // Who wrote it (#207): `mcp` is an agent, `cli` a person; older memories have no origin.
+            let by = m["origin"]
+                .as_str()
+                .map_or(String::new(), |o| format!(" · {o}"));
             if short {
                 let cut = text.char_indices().nth(200).map_or(text.len(), |(i, _)| i);
                 let more = if cut < text.len() { "…" } else { "" };
                 format!(
-                    "- [id {} · {} · {}] {}{more}",
+                    "- [id {} · {} · {}{by}] {}{more}",
                     m["id"],
                     m["kind"].as_str().unwrap_or_default(),
                     m["observed_at"].as_str().unwrap_or_default(),
@@ -268,7 +272,7 @@ fn render(v: &Value, title: &str, short: bool) -> String {
                 )
             } else {
                 format!(
-                    "- [{} · {} · {} · id {}] {}",
+                    "- [{} · {} · {} · id {}{by}] {}",
                     m["kind"].as_str().unwrap_or_default(),
                     m["scope"].as_str().unwrap_or_default(),
                     m["observed_at"].as_str().unwrap_or_default(),

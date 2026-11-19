@@ -173,7 +173,7 @@ pub fn run(action: &PersonalAction) -> Result<()> {
             let input = read_input(512 * 1024)?;
             let items = serde_json::from_slice(&input).context("invalid memory JSON")?;
             let mut c = personal_store::open_existing(store, true)?;
-            let receipt = footnote_memory::remember(&mut c, &items, &[])?;
+            let receipt = footnote_memory::remember(&mut c, &items, &[], "cli")?;
             println!("{receipt}");
         }
         PersonalAction::Recall {
