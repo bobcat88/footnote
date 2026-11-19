@@ -3,7 +3,7 @@
 //! the same file, through the file's imports (a project module or an outside package), or to a name defined once in the
 //! project. An ambiguous call gets no link: precision over recall. Links made here are graded `resolved`, not `compiler`.
 //! The output has the same shape as a SCIP index, so the graph, lookups and the map need nothing new.
-use crate::scip::{DEFINITION, Document, Occurrence, Symbol};
+use crate::scip::{DEFINITION, Document, MACRO_ARG, Occurrence, Symbol};
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use streaming_iterator::StreamingIterator;
@@ -139,6 +139,44 @@ struct Call {
     recv: Option<(Base, Vec<Step>)>,
     file: usize,
     range: [i32; 4],
+    /// Found inside a Rust macro's arguments: linked with `scip::MACRO_ARG`, so a compiler graph can take it (#197).
+    in_macro: bool,
+}
+
+/// Calls inside a Rust macro's token tree: an identifier right before a `(..)` group, bare (`run(..)`) or after a path
+/// (`store::open(..)`, qualifier `store`). Method calls (`.f(..)`) are left out: no receiver type is known there.
+fn macro_calls<'a>(mac: Node<'a>, src: &[u8]) -> Vec<(Node<'a>, String)> {
+    let mut out = Vec::new();
+    let mut c = mac.walk();
+    let mut stack: Vec<Node> = mac
+        .children(&mut c)
+        .filter(|k| k.kind() == "token_tree")
+        .collect();
+    while let Some(tree) = stack.pop() {
+        let mut c = tree.walk();
+        let kids: Vec<Node> = tree.children(&mut c).collect();
+        for (i, k) in kids.iter().enumerate() {
+            if k.kind() == "token_tree" {
+                stack.push(*k);
+                continue;
+            }
+            let next_is_args = kids.get(i + 1).is_some_and(|n| {
+                n.kind() == "token_tree" && n.utf8_text(src).is_ok_and(|t| t.starts_with('('))
+            });
+            if k.kind() != "identifier" || !next_is_args {
+                continue;
+            }
+            let prev = |back: usize| i.checked_sub(back).and_then(|j| kids.get(j));
+            let prev_text =
+                |back: usize| prev(back).and_then(|n| n.utf8_text(src).ok()).unwrap_or("");
+            match prev_text(1) {
+                "." => {}
+                "::" => out.push((*k, prev_text(2).to_string())),
+                _ => out.push((*k, String::new())),
+            }
+        }
+    }
+    out
 }
 
 fn range(n: &Node) -> [i32; 4] {
@@ -345,7 +383,21 @@ fn parse(root: &Path, project: &str) -> anyhow::Result<(Vec<Document>, usize, Ve
                     recv,
                     file: i,
                     range: range(&n),
+                    in_macro: false,
                 });
+            } else if *l == Lang::Rust {
+                // A macro's arguments are an unparsed token tree: `f(..)` and `a::f(..)` inside them are calls (#197).
+                for (name, qualifier) in macro_calls(node, src) {
+                    calls.push(Call {
+                        name: name.utf8_text(src).unwrap_or_default().into(),
+                        qualifier,
+                        member: false,
+                        recv: None,
+                        file: i,
+                        range: range(&name),
+                        in_macro: true,
+                    });
+                }
             }
         }
         if let (Lang::Rust, Some(q)) = (l, &rust_fields) {
@@ -715,7 +767,7 @@ fn parse(root: &Path, project: &str) -> anyhow::Result<(Vec<Document>, usize, Ve
             docs[c.file].occurrences.push(Occurrence {
                 range: c.range,
                 symbol: sym(&defs[t]),
-                roles: 0,
+                roles: if c.in_macro { MACRO_ARG } else { 0 },
                 enclosing: None,
             });
             rules.push(format!(
@@ -1623,6 +1675,33 @@ mod tests {
         ); // outside package
         assert!(!refs.iter().any(|s| s.contains("/load:"))); // two `load`, neither imported: no link
         assert_eq!(resolved, 2);
+    }
+
+    #[test]
+    fn rust_calls_inside_macro_arguments_are_found() {
+        let t = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(t.path().join("src")).unwrap();
+        std::fs::write(
+            t.path().join("src/lib.rs"),
+            "mod store;\nfn helper() -> u32 { 1 }\nfn run(x: Vec<u32>) {\n    assert_eq!(helper(), 1);\n    println!(\"{}\", store::open());\n    println!(\"{}\", x.len());\n}\n",
+        )
+        .unwrap();
+        std::fs::write(
+            t.path().join("src/store.rs"),
+            "pub fn open() -> u32 { 2 }\n",
+        )
+        .unwrap();
+        let (_, _, rules) = parse(t.path(), "demo").unwrap();
+        let mut found: Vec<&str> = rules.iter().map(String::as_str).collect();
+        found.sort();
+        assert_eq!(
+            found,
+            [
+                "src/lib.rs\t4\thelper\tsrc/lib.rs\tsame_file",
+                "src/lib.rs\t5\topen\tsrc/store.rs\tmodule_path"
+            ],
+            "{rules:?}"
+        ); // `x.len()` is a method on an unknown type: left out
     }
 
     #[test]

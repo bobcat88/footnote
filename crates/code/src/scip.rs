@@ -28,6 +28,9 @@ pub struct Document {
 
 /// Role bit for a definition (`SymbolRole.Definition`).
 pub const DEFINITION: i32 = 1;
+/// Footnote's own flag, not SCIP's: a call the parser found inside macro arguments, which rust-analyzer's index leaves out
+/// (`assert_eq!(run(), 1)`, #197). Merged into a compiler-graded file, its link stays graded `resolved`.
+pub const MACRO_ARG: i32 = 1 << 30;
 
 enum Value<'a> {
     Int(u64),

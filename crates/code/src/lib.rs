@@ -61,6 +61,67 @@ fn kind(symbol: &str) -> &'static str {
     }
 }
 
+/// Calls inside macro arguments, which rust-analyzer's index leaves out (#197): the parser's link, moved onto the compiler's
+/// own definition (same file, line and name) and kept graded `resolved` through `scip::MACRO_ARG`.
+fn merge_macro_calls(docs: &mut [scip::Document], parsed: &[scip::Document]) {
+    let norm = |p: &str| p.replace('\\', "/");
+    let mut defs: HashMap<(String, i32, String), String> = HashMap::new();
+    for d in docs.iter() {
+        for o in d
+            .occurrences
+            .iter()
+            .filter(|o| o.roles & scip::DEFINITION != 0 && !o.symbol.starts_with("local "))
+        {
+            defs.entry((norm(&d.path), o.range[0], short_name(&o.symbol)))
+                .or_insert_with(|| o.symbol.clone());
+        }
+    }
+    let at: HashMap<String, usize> = docs
+        .iter()
+        .enumerate()
+        .map(|(i, d)| (norm(&d.path), i))
+        .collect();
+    for p in parsed {
+        let Some(&i) = at.get(&norm(&p.path)) else {
+            continue;
+        };
+        for o in p
+            .occurrences
+            .iter()
+            .filter(|o| o.roles & scip::MACRO_ARG != 0)
+        {
+            let Some(target) = treesitter_target(&o.symbol).and_then(|k| defs.get(&k)) else {
+                continue;
+            };
+            let doc = &mut docs[i];
+            if doc
+                .occurrences
+                .iter()
+                .any(|x| x.range[0] == o.range[0] && &x.symbol == target)
+            {
+                continue; // the compiler has this one already
+            }
+            doc.occurrences.push(scip::Occurrence {
+                range: o.range,
+                symbol: target.clone(),
+                roles: scip::MACRO_ARG,
+                enclosing: None,
+            });
+        }
+    }
+}
+
+/// `treesitter local <project> . <path>/<name>:<line><suffix>` -> (path, line, name).
+fn treesitter_target(s: &str) -> Option<(String, i32, String)> {
+    let (path, tail) = s.split_once(" . ")?.1.rsplit_once('/')?;
+    let (name, line) = tail.split_once(':')?;
+    let line = line
+        .trim_end_matches(|c: char| !c.is_ascii_digit())
+        .parse()
+        .ok()?;
+    Some((path.to_string(), line, name.to_string()))
+}
+
 /// Last name in a SCIP symbol, for symbols the indexer gave no display name.
 fn short_name(symbol: &str) -> String {
     // scip-typescript names object-literal members `spawnSession0:`, the name plus a counter per object in the file (#216).
@@ -216,7 +277,10 @@ pub fn index(root: &Path, db: &Path) -> Result<Value> {
         let covered: std::collections::HashSet<String> =
             docs.iter().map(|d| d.path.replace('\\', "/")).collect();
         if let Ok((extra, _)) = ts::index(root, &project) {
-            docs.extend(extra.into_iter().filter(|d| !covered.contains(&d.path)));
+            let (inside, outside): (Vec<_>, Vec<_>) =
+                extra.into_iter().partition(|d| covered.contains(&d.path));
+            merge_macro_calls(&mut docs, &inside);
+            docs.extend(outside);
         }
     }
     let also_parsed = docs.len() - split;
@@ -452,6 +516,12 @@ fn write(
                     .filter(|(_, e)| contains(*e, o.range))
                     .min_by_key(|(_, e)| (e[2] - e[0], e[3] - e[1]))
                     .and_then(|(s, _)| own.get(&(i, *s)).or_else(|| ids.get(s)).copied());
+                // A call inside macro arguments came from the parser: graded `resolved` even in a compiler file (#197).
+                let origin = if o.roles & scip::MACRO_ARG != 0 {
+                    "resolved"
+                } else {
+                    origin
+                };
                 add.execute(params![target, file, o.range[0] + 1, caller, origin])?;
                 refs += 1;
             }

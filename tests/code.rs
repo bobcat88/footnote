@@ -403,6 +403,12 @@ fn integration_test_helpers_with_one_name_keep_their_own_callers() {
         )
         .unwrap();
     }
+    // A third test calls its helper only inside `assert_eq!`, which rust-analyzer's index leaves out: the parser fills it.
+    fs::write(
+        project.join("tests/third.rs"),
+        "fn run() -> u32 {\n    demo::api()\n}\n\n#[test]\nfn third() {\n    assert_eq!(run(), 1);\n}\n",
+    )
+    .unwrap();
     let root = project.to_str().unwrap();
     footnote(&state, &["code-index", root]);
     let found = footnote(&state, &["code", "run", "--root", root]);
@@ -425,7 +431,8 @@ fn integration_test_helpers_with_one_name_keep_their_own_callers() {
         pairs,
         [
             ("tests/first.rs".to_string(), "first".to_string()),
-            ("tests/second.rs".to_string(), "second".to_string())
+            ("tests/second.rs".to_string(), "second".to_string()),
+            ("tests/third.rs".to_string(), "third".to_string())
         ],
         "{found}"
     );
