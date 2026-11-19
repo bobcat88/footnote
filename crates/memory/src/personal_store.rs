@@ -17,6 +17,7 @@ const MARKER: &str = "ready";
 trait Keys {
     fn insert(&self, key: &[u8; 32]) -> Result<[u8; 16]>;
     fn load(&self, id: &[u8; 16]) -> Result<Option<Zeroizing<[u8; 32]>>>;
+    fn delete(&self, id: &[u8; 16]) -> Result<()>;
 }
 
 struct WindowsKeys;
@@ -27,6 +28,73 @@ impl Keys for WindowsKeys {
     fn load(&self, id: &[u8; 16]) -> Result<Option<Zeroizing<[u8; 32]>>> {
         windows_keystore::load(&windows_keystore::KeyId::from_bytes(*id))
     }
+    fn delete(&self, id: &[u8; 16]) -> Result<()> {
+        windows_keystore::delete(&windows_keystore::KeyId::from_bytes(*id))
+    }
+}
+
+/// The files a store creation writes. An unfinished store holding only these may be cleaned up; anything else is kept.
+const OWN: &[&str] = &[
+    KEY_ID,
+    DB,
+    "memory.db-wal",
+    "memory.db-shm",
+    "memory.db-journal",
+];
+
+/// Remove what an unfinished creation wrote, then the folder if it is empty. Best effort: a leftover file stays visible.
+fn remove_partial(dir: &Path) {
+    for name in OWN {
+        let p = dir.join(name);
+        let _ = fs::remove_file(&p).or_else(|_| fs::remove_dir(&p));
+    }
+    let _ = fs::remove_dir(dir);
+}
+
+/// A creation that crashed between writing its key and its `ready` marker (#131): no marker, only files creation writes, none
+/// touched for two minutes (so a creation still running in another process is left alone). Its key is deleted from the
+/// credential store and the folder removed, so the next attempt starts clean. A completed store is never touched.
+fn abandon_unfinished(dir: &Path, keys: &impl Keys) -> Result<()> {
+    if !dir.is_dir() || dir.join(MARKER).exists() {
+        return Ok(());
+    }
+    let recent = std::time::SystemTime::now() - std::time::Duration::from_secs(120);
+    for e in fs::read_dir(dir)? {
+        let e = e?;
+        let name = e.file_name().to_string_lossy().into_owned();
+        if !OWN.contains(&name.as_str()) {
+            bail!(
+                "{} is an unfinished personal store holding other files ({name}); remove it yourself",
+                dir.display()
+            );
+        }
+        if e.metadata()?.modified()? > recent {
+            bail!(
+                "{} is being created by another process; try again in two minutes",
+                dir.display()
+            );
+        }
+    }
+    if let Ok(id) = read_exact_file::<16>(&dir.join(KEY_ID)) {
+        keys.delete(&id)?;
+    }
+    remove_partial(dir);
+    Ok(())
+}
+
+/// Run the steps after a key was written; on failure, delete the key and the partial folder (#131).
+fn finish_or_undo(
+    dir: &Path,
+    keys: &impl Keys,
+    id: [u8; 16],
+    steps: impl FnOnce() -> Result<()>,
+) -> Result<()> {
+    let done = steps();
+    if done.is_err() {
+        let _ = keys.delete(&id);
+        remove_partial(dir);
+    }
+    done
 }
 
 fn write_new(path: &Path, contents: &[u8]) -> Result<()> {
@@ -59,13 +127,19 @@ pub fn create_new(dir: &Path) -> Result<Zeroizing<String>> {
 
 fn create_new_with(dir: &Path, keys: &impl Keys) -> Result<Zeroizing<String>> {
     footnote_core::no_links(dir)?;
+    abandon_unfinished(dir, keys)?;
     fs::create_dir(dir).context("create new personal store directory")?;
     let key = recovery::generate()?;
-    let id = keys.insert(&key)?;
-    write_new(&dir.join(KEY_ID), &id)?;
-    let c = footnote_search::store::open_encrypted(&dir.join(DB), true, &key)?;
-    drop(c);
-    write_new(&dir.join(MARKER), READY)?;
+    let id = keys.insert(&key).inspect_err(|_| remove_partial(dir))?;
+    finish_or_undo(dir, keys, id, || {
+        write_new(&dir.join(KEY_ID), &id)?;
+        drop(footnote_search::store::open_encrypted(
+            &dir.join(DB),
+            true,
+            &key,
+        )?);
+        write_new(&dir.join(MARKER), READY)
+    })?;
     Ok(recovery::encode(&key))
 }
 
@@ -101,12 +175,15 @@ fn restore_new_with(
         backup, false, &key,
     )?);
     footnote_core::no_links(dir)?;
+    abandon_unfinished(dir, keys)?;
     fs::create_dir(dir).context("create new personal store directory")?;
-    footnote_search::store::copy_encrypted(backup, &dir.join(DB), &key)?;
-    let id = keys.insert(&key)?;
-    write_new(&dir.join(KEY_ID), &id)?;
-    write_new(&dir.join(MARKER), READY)?;
-    Ok(())
+    footnote_search::store::copy_encrypted(backup, &dir.join(DB), &key)
+        .inspect_err(|_| remove_partial(dir))?;
+    let id = keys.insert(&key).inspect_err(|_| remove_partial(dir))?;
+    finish_or_undo(dir, keys, id, || {
+        write_new(&dir.join(KEY_ID), &id)?;
+        write_new(&dir.join(MARKER), READY)
+    })
 }
 
 fn open_existing_with(dir: &Path, write: bool, keys: &impl Keys) -> Result<Connection> {
@@ -155,6 +232,77 @@ mod tests {
         fn load(&self, id: &[u8; 16]) -> Result<Option<Zeroizing<[u8; 32]>>> {
             Ok(self.0.borrow().get(id).copied().map(Zeroizing::new))
         }
+        fn delete(&self, id: &[u8; 16]) -> Result<()> {
+            self.0.borrow_mut().remove(id);
+            Ok(())
+        }
+    }
+
+    /// Writes the key, then breaks the next step: the database path becomes a folder, so opening it fails.
+    struct BreakAfterInsert<'a>(&'a FixtureKeys, &'a Path);
+    impl Keys for BreakAfterInsert<'_> {
+        fn insert(&self, key: &[u8; 32]) -> Result<[u8; 16]> {
+            fs::create_dir(self.1.join(DB)).unwrap();
+            self.0.insert(key)
+        }
+        fn load(&self, id: &[u8; 16]) -> Result<Option<Zeroizing<[u8; 32]>>> {
+            self.0.load(id)
+        }
+        fn delete(&self, id: &[u8; 16]) -> Result<()> {
+            self.0.delete(id)
+        }
+    }
+
+    #[test]
+    fn a_failed_creation_leaves_no_credential_and_no_folder() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().join("personal");
+        let keys = FixtureKeys::default();
+        assert!(create_new_with(&dir, &BreakAfterInsert(&keys, &dir)).is_err());
+        assert!(keys.0.borrow().is_empty(), "the written key was deleted");
+        assert!(!dir.exists(), "the partial folder was removed");
+        assert!(create_new_with(&dir, &keys).is_ok(), "a retry starts clean");
+    }
+
+    #[test]
+    fn a_crashed_creation_is_cleaned_up_by_the_next_attempt_only_when_safe() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().join("personal");
+        let keys = FixtureKeys::default();
+        let orphan = keys.insert(&[7; 32]).unwrap();
+        fs::create_dir(&dir).unwrap();
+        // A crash after the key and its id were written, before the database and the ready marker.
+        fs::write(dir.join(KEY_ID), orphan).unwrap();
+        let recent = create_new_with(&dir, &keys).unwrap_err().to_string();
+        assert!(recent.contains("another process"), "{recent}"); // could still be running elsewhere
+        let old = std::time::SystemTime::now() - std::time::Duration::from_secs(3600);
+        fs::File::options()
+            .write(true)
+            .open(dir.join(KEY_ID))
+            .unwrap()
+            .set_modified(old)
+            .unwrap();
+        fs::write(tmp.path().join("other"), "").unwrap();
+        create_new_with(&dir, &keys).unwrap();
+        // The fixture store reuses one id: the orphan's key is gone, replaced by the new store's.
+        assert_ne!(
+            *keys.load(&orphan).unwrap().unwrap(),
+            [7; 32],
+            "the orphaned key was deleted"
+        );
+        assert!(dir.join(MARKER).exists());
+
+        // An unfinished folder holding anything else is never cleaned up.
+        let other = tmp.path().join("kept");
+        fs::create_dir(&other).unwrap();
+        fs::write(other.join("notes.md"), "mine").unwrap();
+        assert!(
+            create_new_with(&other, &keys)
+                .unwrap_err()
+                .to_string()
+                .contains("other files")
+        );
+        assert_eq!(fs::read_to_string(other.join("notes.md")).unwrap(), "mine");
     }
 
     #[test]
@@ -215,6 +363,9 @@ mod tests {
                 bail!("fixture store unavailable")
             }
             fn load(&self, _: &[u8; 16]) -> Result<Option<Zeroizing<[u8; 32]>>> {
+                bail!("fixture store unavailable")
+            }
+            fn delete(&self, _: &[u8; 16]) -> Result<()> {
                 bail!("fixture store unavailable")
             }
         }

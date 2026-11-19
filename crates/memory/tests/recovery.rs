@@ -89,7 +89,7 @@ fn encrypted_restore_preserves_memory_and_recall() {
     let key = recovery::generate().unwrap();
     let mut c = store::open_encrypted(&source, true, &key).unwrap();
     let item = serde_json::json!([{"text":"Synthetic marmot prefers encrypted backups", "kind":"fact", "scope":"global", "observed_at":"2026-11-16", "tags":["fixture"]}]);
-    footnote_memory::remember(&mut c, &item, &[]).unwrap();
+    footnote_memory::remember(&mut c, &item, &[], "cli").unwrap();
     assert!(!dir.path().join("source.db.tantivy").exists());
     let before = footnote_memory::recall(&c, "marmot backups", None, 10, &[], &[]).unwrap();
     assert_eq!(before["mode"], "lexical_bm25");
@@ -117,7 +117,7 @@ fn encrypted_memory_never_reuses_or_deletes_an_old_disk_index() {
     let index = dir.path().join("same.db.tantivy");
     let mut plain = store::open(&db, true).unwrap();
     let old = serde_json::json!([{"text":"Synthetic orchid", "kind":"fact", "scope":"global", "observed_at":"2026-11-16"}]);
-    footnote_memory::remember(&mut plain, &old, &[]).unwrap();
+    footnote_memory::remember(&mut plain, &old, &[], "cli").unwrap();
     let first = footnote_memory::recall(&plain, "orchid", None, 10, &[], &[]).unwrap();
     assert_eq!(first["memories"][0]["text"], "Synthetic orchid");
     assert!(index.is_dir());
@@ -128,7 +128,7 @@ fn encrypted_memory_never_reuses_or_deletes_an_old_disk_index() {
     std::fs::remove_file(&db).unwrap();
     let mut encrypted = store::open_encrypted(&db, true, &[0x24; 32]).unwrap();
     let new = serde_json::json!([{"text":"Synthetic marmot", "kind":"fact", "scope":"global", "observed_at":"2026-11-16"}]);
-    footnote_memory::remember(&mut encrypted, &new, &[]).unwrap();
+    footnote_memory::remember(&mut encrypted, &new, &[], "cli").unwrap();
     let result = footnote_memory::recall(&encrypted, "marmot", None, 10, &[], &[]).unwrap();
     assert_eq!(result["mode"], "lexical_bm25");
     assert_eq!(result["memories"][0]["text"], "Synthetic marmot");
@@ -141,7 +141,7 @@ fn encrypted_memory_never_reuses_or_deletes_an_old_disk_index() {
     std::fs::remove_file(&db).unwrap();
     let mut replacement = store::open_encrypted(&db, true, &[0x24; 32]).unwrap();
     let newer = serde_json::json!([{"text":"Synthetic kingfisher", "kind":"fact", "scope":"global", "observed_at":"2026-11-16"}]);
-    footnote_memory::remember(&mut replacement, &newer, &[]).unwrap();
+    footnote_memory::remember(&mut replacement, &newer, &[], "cli").unwrap();
     let result = footnote_memory::recall(&replacement, "kingfisher", None, 10, &[], &[]).unwrap();
     assert_eq!(result["memories"][0]["text"], "Synthetic kingfisher");
     assert_eq!(

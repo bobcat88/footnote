@@ -103,16 +103,31 @@ pub fn insert(key: &[u8; 32]) -> Result<KeyId> {
     Ok(id)
 }
 
-#[cfg(test)]
-pub(crate) fn delete_fixture(id: &KeyId) {
+/// Remove a key from the credential store; a key already gone is not an error. Used to undo a store creation that failed
+/// after its key was written, so no orphaned credential is left behind (#131).
+pub(crate) fn delete(id: &KeyId) -> Result<()> {
     let target = id.target();
-    unsafe {
+    // SAFETY: `target` is a NUL-terminated wide string that outlives the call.
+    if unsafe {
         windows_sys::Win32::Security::Credentials::CredDeleteW(
             target.as_ptr(),
             CRED_TYPE_GENERIC,
             0,
         )
-    };
+    } == 0
+    {
+        let e = std::io::Error::last_os_error();
+        // ERROR_NOT_FOUND: nothing to delete.
+        if e.raw_os_error() != Some(1168) {
+            return Err(e).context("cannot delete the Windows credential");
+        }
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+pub(crate) fn delete_fixture(id: &KeyId) {
+    let _ = delete(id);
 }
 
 #[cfg(test)]
@@ -126,6 +141,15 @@ mod tests {
             let target = self.0.target();
             unsafe { CredDeleteW(target.as_ptr(), CRED_TYPE_GENERIC, 0) };
         }
+    }
+
+    #[test]
+    fn deleting_a_key_removes_it_and_a_second_delete_is_not_an_error() {
+        let id = insert(&Zeroizing::new([0x2a; 32])).unwrap();
+        let _cleanup = Cleanup(id);
+        delete(&id).unwrap();
+        assert!(load(&id).unwrap().is_none());
+        delete(&id).unwrap();
     }
 
     #[test]
