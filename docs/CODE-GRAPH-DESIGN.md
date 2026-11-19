@@ -420,3 +420,9 @@ one narrowed candidate. A bare call also links to a method of an enclosing class
 Same javac scoring, precision stays 1.00 everywhere; recall: gson 0.85, jsoup 0.70, commons-lang 0.79, Spring 0.71 (from 0.85,
 0.65, 0.78, 0.63). Next: the same rule on Python and TypeScript against scip-python and scip-typescript, then receivers that go
 through generics.
+
+**Inherited methods in Python and TypeScript (#179, 19 November 2026).** The superclass walk from Java now also reads
+`class A(B)` (Python), `extends` and `implements` (TypeScript, JavaScript) and interface `extends`. A `self.m()` or `this.m()`
+that the class does not define reaches the nearest base that does, across files, and stays unlinked when a base is outside the
+project. Unit-tested only: not yet scored against scip-python and scip-typescript. Next: that scoring, then receivers through
+generics.

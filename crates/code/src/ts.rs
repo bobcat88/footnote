@@ -461,10 +461,13 @@ fn parse(root: &Path, project: &str) -> anyhow::Result<(Vec<Document>, usize, Ve
             } else {
                 class_fields(tree.root_node(), src)
             };
-            if *l == Lang::Java {
-                for (class, sup) in java_supers(tree.root_node(), src) {
-                    supers.entry(class).or_default().push(sup);
-                }
+            let sup = if *l == Lang::Java {
+                java_supers(tree.root_node(), src)
+            } else {
+                class_supers(tree.root_node(), src)
+            };
+            for (class, s) in sup {
+                supers.entry(class).or_default().push(s);
             }
             for (s, f, t) in found {
                 let e = fields.entry((s, f)).or_default();
@@ -1598,6 +1601,51 @@ fn declared_java(e: Node, src: &[u8], depth: u8) -> Option<(Base, Vec<Step>)> {
     None
 }
 
+/// Python, TypeScript and JavaScript inheritance as (class, super): `class A(B)`, `extends B`, `implements C`.
+fn class_supers(root: Node, src: &[u8]) -> Vec<(String, String)> {
+    let mut out = Vec::new();
+    let mut stack = vec![root];
+    while let Some(n) = stack.pop() {
+        if let Some(class) = owner_name(&n, src).filter(|_| n.kind() != "impl_item") {
+            let mut c = n.walk();
+            // Python names its bases by field (an argument list); the others by node kind.
+            let kids = n
+                .children(&mut c)
+                .filter(|k| matches!(k.kind(), "class_heritage" | "extends_type_clause"));
+            for k in n
+                .child_by_field_name("superclasses")
+                .into_iter()
+                .chain(kids)
+            {
+                let mut ids = vec![k];
+                while let Some(x) = ids.pop() {
+                    match x.kind() {
+                        "identifier"
+                        | "type_identifier"
+                        | "attribute"
+                        | "member_expression"
+                        | "nested_type_identifier" => {
+                            if let Ok(t) = x.utf8_text(src) {
+                                out.push((class.clone(), t.to_string()));
+                            }
+                        }
+                        "type_arguments" | "arguments" | "keyword_argument" => {}
+                        // `Generic[T]`: the base, not its parameters.
+                        "subscript" => ids.extend(x.child_by_field_name("value")),
+                        _ => {
+                            let mut c = x.walk();
+                            ids.extend(x.named_children(&mut c));
+                        }
+                    }
+                }
+            }
+        }
+        let mut c = n.walk();
+        stack.extend(n.named_children(&mut c));
+    }
+    out
+}
+
 /// Java inheritance as (class, super): what each class or interface extends or implements, generics dropped.
 fn java_supers(root: Node, src: &[u8]) -> Vec<(String, String)> {
     let mut out = Vec::new();
@@ -2290,6 +2338,62 @@ class Loose extends Elsewhere {
                 "A.java	13	open	A.java	receiver_type",
             ],
             "{rules:?}"
+        );
+    }
+
+    #[test]
+    fn python_and_typescript_calls_reach_inherited_methods() {
+        let t = tempfile::tempdir().unwrap();
+        let w = |p: &str, s: &str| std::fs::write(t.path().join(p), s).unwrap();
+        w(
+            "base.py",
+            "class Base:
+    def open(self):
+        pass
+",
+        );
+        w(
+            "a.py",
+            "from base import Base
+
+class Child(Base):
+    def go(self):
+        self.open()
+
+class Loose(Elsewhere):
+    def go(self):
+        self.open()
+",
+        );
+        w(
+            "base.ts",
+            "export class Root { open() {} }
+export interface Named { name(): string }
+",
+        );
+        w(
+            "b.ts",
+            "import { Root, Named } from './base';
+class Kid extends Root implements Named {
+  name() { return ''; }
+  go() { this.open(); }
+}
+class Wild extends Elsewhere {
+  go() { this.open(); }
+}
+",
+        );
+        let (_, _, rules) = parse(t.path(), "demo").unwrap();
+        let mut got: Vec<&str> = rules.iter().map(String::as_str).collect();
+        got.sort();
+        // `Loose` extends something outside the project: its `open()` may be that class's, so no link.
+        assert_eq!(
+            got,
+            [
+                "a.py	5	open	base.py	receiver_type",
+                "b.ts	4	open	base.ts	receiver_type",
+            ],
+            "{got:?}"
         );
     }
 
