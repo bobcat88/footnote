@@ -112,6 +112,8 @@ struct Def {
     /// Rust: the type whose `impl` (or trait) holds this function, and its declared return type with `Self` spelled out.
     owner: Option<String>,
     ret: Option<String>,
+    /// Java: how many parameters, or `None` for a varargs method; tells overloads apart by argument count.
+    arity: Option<usize>,
 }
 
 /// What a Rust method call is called on, as steps the method tables can follow: `self.store.open()?` is the impl's type,
@@ -137,6 +139,8 @@ struct Call {
     member: bool,
     /// Rust member calls: the receiver, when it can be traced to a type.
     recv: Option<(Base, Vec<Step>)>,
+    /// Java: how many arguments the call passes.
+    args: Option<usize>,
     file: usize,
     range: [i32; 4],
     /// Found inside a Rust macro's arguments: linked with `scip::MACRO_ARG`, so a compiler graph can take it (#197).
@@ -341,6 +345,7 @@ fn parse(root: &Path, project: &str) -> anyhow::Result<(Vec<Document>, usize, Ve
                     signature: signature.chars().take(200).collect(),
                     owner,
                     ret,
+                    arity: java_arity(node, *l),
                 });
             } else if node.kind() != "macro_invocation" {
                 // The JavaScript query tags `obj.f(x)` on its arguments; the call is their parent.
@@ -388,6 +393,12 @@ fn parse(root: &Path, project: &str) -> anyhow::Result<(Vec<Document>, usize, Ve
                     qualifier,
                     member,
                     recv,
+                    args: (*l == Lang::Java)
+                        .then(|| {
+                            node.child_by_field_name("arguments")
+                                .map(|a| a.named_child_count())
+                        })
+                        .flatten(),
                     file: i,
                     range: range(&n),
                     in_macro: false,
@@ -400,6 +411,7 @@ fn parse(root: &Path, project: &str) -> anyhow::Result<(Vec<Document>, usize, Ve
                         qualifier,
                         member: false,
                         recv: None,
+                        args: None,
                         file: i,
                         range: range(&name),
                         in_macro: true,
@@ -543,10 +555,10 @@ fn parse(root: &Path, project: &str) -> anyhow::Result<(Vec<Document>, usize, Ve
         }
         Some(owner)
     };
-    let method = |ty: &str, name: &str, file: usize| {
+    let method = |ty: &str, name: &str, file: usize, args: Option<usize>| {
         let owner = owner(ty, file)?;
-        match methods.get(&(owner.as_str(), name)) {
-            Some(v) if v.len() == 1 => Some(v[0]),
+        match narrow(&defs, methods.get(&(owner.as_str(), name))?, args).as_slice() {
+            [one] => Some(*one),
             _ => None,
         }
     };
@@ -555,7 +567,7 @@ fn parse(root: &Path, project: &str) -> anyhow::Result<(Vec<Document>, usize, Ve
         let (mut t, mut context) = match b {
             Base::Type(t) => (t.clone(), file),
             Base::Static(ty, f) => {
-                let d = &defs[method(ty, f, file)?];
+                let d = &defs[method(ty, f, file, None)?];
                 (d.ret.clone()?, d.file)
             }
         };
@@ -564,7 +576,7 @@ fn parse(root: &Path, project: &str) -> anyhow::Result<(Vec<Document>, usize, Ve
                 Step::Try => unwrap_ty(&t)?,
                 Step::Call(m) if m == "unwrap" || m == "expect" => unwrap_ty(&t)?,
                 Step::Call(m) => {
-                    let d = &defs[method(&t, m, context)?];
+                    let d = &defs[method(&t, m, context, None)?];
                     context = d.file;
                     d.ret.clone()?
                 }
@@ -677,6 +689,7 @@ fn parse(root: &Path, project: &str) -> anyhow::Result<(Vec<Document>, usize, Ve
                     && files[c.file].1 != Lang::Java)
             })
             .collect();
+        let same = narrow(&defs, &same, c.args);
         let bare = c.qualifier.is_empty() && !c.member;
         let via = if c.member && c.qualifier.is_empty() {
             None // called on a computed value (`new Hono().get()`): never through an import (hono, 18 Nov 2026)
@@ -702,13 +715,12 @@ fn parse(root: &Path, project: &str) -> anyhow::Result<(Vec<Document>, usize, Ve
                 .filter(|&&d| defs[d].kind == "type")
                 .map(|&d| defs[d].file)
                 .collect();
-            match cands
+            let in_homes: Vec<usize> = cands
                 .iter()
                 .copied()
                 .filter(|d| homes.contains(&defs[*d].file))
-                .collect::<Vec<_>>()
-                .as_slice()
-            {
+                .collect();
+            match narrow(&defs, &in_homes, c.args).as_slice() {
                 [one] => Some(*one),
                 _ => None,
             }
@@ -718,7 +730,7 @@ fn parse(root: &Path, project: &str) -> anyhow::Result<(Vec<Document>, usize, Ve
             .recv
             .as_ref()
             .and_then(|(b, s)| type_of(b, s, c.file))
-            .and_then(|(t, file)| method(&t, &c.name, file));
+            .and_then(|(t, file)| method(&t, &c.name, file, c.args));
         let target: Option<(usize, &str)> = if let Some(d) = typed {
             Some((d, "receiver_type"))
         } else if !same.is_empty()
@@ -773,7 +785,7 @@ fn parse(root: &Path, project: &str) -> anyhow::Result<(Vec<Document>, usize, Ve
                 }
                 None => in_module(cands, module),
             };
-            match found.as_slice() {
+            match narrow(&defs, &found, c.args).as_slice() {
                 [one] => Some((*one, "import")),
                 _ => None,
             }
@@ -782,7 +794,7 @@ fn parse(root: &Path, project: &str) -> anyhow::Result<(Vec<Document>, usize, Ve
         } else if let Some(one) = if rust {
             // Rust: only a method of that very type. The file rule linked `ByteBuf::default()` (derived) to a neighbour's
             // `impl Default for Phase` (brotli, 18 Nov 2026).
-            method(&c.qualifier, &c.name, c.file)
+            method(&c.qualifier, &c.name, c.file, c.args)
         } else {
             owned_by(&c.qualifier)
         } {
@@ -826,6 +838,31 @@ fn parse(root: &Path, project: &str) -> anyhow::Result<(Vec<Document>, usize, Ve
         }
     }
     Ok((docs, resolved, rules))
+}
+
+/// Java overloads: of several definitions of one name, those taking as many parameters as the call has arguments. Abstains
+/// (keeps them all) when the count is unknown or one of them is varargs, and leaves a single definition alone.
+fn narrow(defs: &[Def], v: &[usize], args: Option<usize>) -> Vec<usize> {
+    match args {
+        Some(n) if v.len() > 1 && v.iter().all(|&d| defs[d].arity.is_some()) => v
+            .iter()
+            .copied()
+            .filter(|&d| defs[d].arity == Some(n))
+            .collect(),
+        _ => v.to_vec(),
+    }
+}
+
+/// A Java method's parameter count (`None` when it is varargs or not Java).
+fn java_arity(node: Node, l: Lang) -> Option<usize> {
+    if l != Lang::Java {
+        return None;
+    }
+    let params = node.child_by_field_name("parameters")?;
+    let mut c = params.walk();
+    let kinds: Vec<&str> = params.named_children(&mut c).map(|p| p.kind()).collect();
+    (!kinds.contains(&"spread_parameter"))
+        .then(|| kinds.iter().filter(|k| **k == "formal_parameter").count())
 }
 
 /// Whether the innermost item around a call declares the called name before the call: `let f =`, `const f`, `var f`,
@@ -2045,6 +2082,44 @@ mod tests {
             ],
             "{rules:?}"
         ); // `u.save()` (no annotation), loop and comprehension variables: no link
+    }
+
+    #[test]
+    fn java_overloads_are_told_apart_by_argument_count() {
+        let t = tempfile::tempdir().unwrap();
+        let w = |p: &str, s: &str| std::fs::write(t.path().join(p), s).unwrap();
+        w(
+            "A.java",
+            "class Util {
+  static void log(String a) {}
+  static void log(String a, int b) {}
+  static void same(int a) {}
+  static void same(long a) {}
+  static void rest(String... a) {}
+  static void rest(String a, int b) {}
+}
+class Use {
+  void go(Util u) {
+    u.log(\"a\");
+    u.log(\"a\", 1);
+    u.same(1);
+    u.rest(\"a\", 1);
+  }
+}
+",
+        );
+        let (_, _, rules) = parse(t.path(), "demo").unwrap();
+        let mut typed: Vec<&str> = rules.iter().map(String::as_str).collect();
+        typed.sort();
+        // Two `same` of one arity and a varargs `rest` stay unlinked.
+        assert_eq!(
+            typed,
+            [
+                "A.java	11	log	A.java	receiver_type",
+                "A.java	12	log	A.java	receiver_type"
+            ],
+            "{rules:?}"
+        );
     }
 
     #[test]

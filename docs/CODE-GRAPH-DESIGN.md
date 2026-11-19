@@ -406,3 +406,10 @@ removed the wrong same-file links the old rule made to a same-named method of an
 Not measured: Graphify and the other tools on Java, Kotlin and Scala (no grammar yet), calls to inherited methods (recall gap in
 commons-lang), and projects that need dependencies on the classpath. Still open for #179: Kotlin and Scala grammars (licence and
 security review first) and the scip-java upgrade.
+
+**Overloads by argument count (#179, 19 November 2026).** Of Spring's missed calls, 46% went to a method with overloads. A call
+now picks the overload whose parameter count equals the call's argument count, only when exactly one matches; varargs methods
+and equal-arity overloads (`notNull(Object, String)` against `notNull(Object, Supplier)`, Spring's commonest) still abstain.
+Same javac scoring, precision stays 1.00 everywhere; recall: gson 0.84 to 0.85, jsoup 0.57 to 0.65, commons-lang 0.76 to 0.78,
+Spring 0.59 to 0.63. The rest of the overload misses need argument types. Next: inherited methods, then the receivers that
+go through generics.
