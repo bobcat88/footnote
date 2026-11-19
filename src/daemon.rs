@@ -10,7 +10,11 @@
 //! one warm corpus shared by Claude Code, Codex and Gemini at the same time.
 use crate::mcp::{Shared, session_loop};
 use anyhow::{Context, Result};
-use interprocess::local_socket::{GenericNamespaced, ListenerOptions, Stream, prelude::*};
+#[cfg(windows)]
+use interprocess::local_socket::GenericNamespaced;
+#[cfg(not(windows))]
+use interprocess::local_socket::GenericFilePath;
+use interprocess::local_socket::{ListenerOptions, Name, Stream, prelude::*};
 use std::{
     io::{BufRead, BufReader, Read, Write},
     path::Path,
@@ -40,11 +44,28 @@ fn endpoint_of(db: &Path) -> String {
     endpoint_name(db)
 }
 
+/// Local socket name: a namespaced pipe on Windows, a socket file in the private (0700) state folder elsewhere, so no other
+/// local user can take the name first (#208; Linux's abstract namespace is open to everyone).
+fn name_of(endpoint: &str) -> Result<Name<'static>> {
+    #[cfg(windows)]
+    {
+        Ok(endpoint.to_string().to_ns_name::<GenericNamespaced>()?)
+    }
+    #[cfg(not(windows))]
+    {
+        let dir = crate::state::state_dir()?;
+        crate::state::ensure_private_dir(&dir)?;
+        Ok(dir.join(format!("{endpoint}.sock")).to_fs_name::<GenericFilePath>()?)
+    }
+}
+
 /// Run the daemon: accept many concurrent agents, one thread each.
 pub fn run(shared: Shared, idle: Option<Duration>) -> Result<()> {
     let endpoint = endpoint_of(&shared.db);
-    let name = endpoint.as_str().to_ns_name::<GenericNamespaced>()?;
-    let options = ListenerOptions::new().name(name);
+    let options = ListenerOptions::new().name(name_of(&endpoint)?);
+    // A crashed daemon leaves its socket file behind; replace it (the client connects first, so a live daemon is found).
+    #[cfg(not(windows))]
+    let options = options.try_overwrite(true);
     // Owner and SYSTEM only (#208): Windows' default pipe access also lets Everyone and Anonymous open it read-only.
     #[cfg(windows)]
     let options = {
@@ -123,9 +144,7 @@ pub fn run(shared: Shared, idle: Option<Duration>) -> Result<()> {
 /// in-process.
 pub fn connect(db: &Path) -> Result<Stream> {
     let endpoint = endpoint_of(db);
-    Ok(Stream::connect(
-        endpoint.as_str().to_ns_name::<GenericNamespaced>()?,
-    )?)
+    Ok(Stream::connect(name_of(&endpoint)?)?)
 }
 
 #[cfg(feature = "memory")]
