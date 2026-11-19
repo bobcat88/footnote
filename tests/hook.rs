@@ -141,6 +141,8 @@ fn pack_recall_save_and_stop_loop_match_the_existing_contract() {
         st,
         json!({"turns":3,"asked_at":3,"embed":false,"handoff_asked":false})
     );
+    // A build with the `metrics` feature always writes timings (#265); otherwise they are off by default.
+    #[cfg(not(feature = "metrics"))]
     assert!(!state.join("metrics.jsonl").exists());
 }
 

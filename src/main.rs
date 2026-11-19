@@ -27,5 +27,13 @@ use footnote_search::lexical;
 use footnote_search::{records, semantic};
 
 fn main() {
-    app::run();
+    // Windows gives the main thread 1 MB, which a debug build with every feature overflows (#265): the command runs on a
+    // thread with 8 MB, the default on Linux. process::exit inside it still ends the process with its code.
+    let worker = std::thread::Builder::new()
+        .stack_size(8 << 20)
+        .spawn(app::run)
+        .expect("start the command thread");
+    if worker.join().is_err() {
+        std::process::exit(101); // a panic, already reported by the default hook
+    }
 }
