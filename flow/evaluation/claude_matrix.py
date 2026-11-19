@@ -339,6 +339,12 @@ def aggregate():
     return summary
 
 
+def usage_limited(cell):
+    """The worker was refused at its first call because the plan's usage limit was reached."""
+    result = stream(cell)[1] or {}
+    return result.get('api_error') == 'usage_limit_reached' and result.get('num_turns', 0) <= 1
+
+
 def run_all():
     for entry in manifest()['cells']:
         cell = Path(entry['cell_dir'])
@@ -353,7 +359,15 @@ def run_all():
         if spent >= TOKEN_CAP:
             print(json.dumps({'stopped': 'token cap', 'spent': spent, 'next': entry['cell_id']}), flush=True)
             break
-        launch(entry)
+        while True:
+            launch(entry)
+            if not usage_limited(cell):
+                break
+            # The subscription's usage window ran out before the worker did anything: not a result, so wait and rerun.
+            for f in ('stream.jsonl', 'stderr.txt', 'run.json'):
+                (cell / f).unlink()
+            print(json.dumps({'waiting': 'usage limit', 'cell_id': entry['cell_id'], 'retry_in_s': 900}), flush=True)
+            time.sleep(900)
         r = collect(entry['cell_id'])
         print(json.dumps({k: r[k] for k in ('sequence', 'cell_id', 'accepted', 'wall_seconds')} |
                          {'usd': r['usage']['api_price_usd'] if r['usage'] else None, 'setup_ok': r['setup']['ok']}), flush=True)
@@ -371,6 +385,11 @@ def self_test():
     assert not setup_check('harness', {**harness, 'mcp_servers': []}, ['SessionStart'])['ok']
     cell = ROOT / 'cells/abc123'
     work = str(cell / 'workspace')
+    with tempfile.TemporaryDirectory() as tmp:
+        (Path(tmp) / 'stream.jsonl').write_text(json.dumps({'type': 'result', 'api_error': 'usage_limit_reached', 'num_turns': 1}), encoding='utf-8')
+        assert usage_limited(Path(tmp))
+        (Path(tmp) / 'stream.jsonl').write_text(json.dumps({'type': 'result', 'num_turns': 9}), encoding='utf-8')
+        assert not usage_limited(Path(tmp))
     with tempfile.TemporaryDirectory() as tmp:
         def scan_calls(*calls):
             f = Path(tmp) / f's{len(list(Path(tmp).iterdir()))}.jsonl'
