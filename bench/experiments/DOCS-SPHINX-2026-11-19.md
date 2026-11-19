@@ -46,3 +46,45 @@ CLIs alternating, the way the harness invokes them (Grounded Docs through `npx`)
   is reported as blocked, not retried into the score; coverage of judged URLs is reported.
 - Machine load is sampled before every run and reported; other agent sessions share the machine, so seconds are indicative only.
 - No new third-party library or tool: Grounded Docs 3.4.1 and llama.cpp b11901 were reviewed in earlier rounds.
+
+## Development, round 1 (19 November, written before the next measurement)
+
+Run `bench/work/sphinx/dev1..dev3` (local, not committed). Deviations, in order:
+
+1. **Footnote's crawler could not fetch Read the Docs / Pallets sites at all** (Jinja, Requests; Flask's Nov 16 "block" is probably the
+   same): Cloudflare answered every request from `footnote crawl` with a challenge (HTTP 429, `cf-mitigated: challenge`) while curl
+   and Python with the same headers got 200. Isolated with a debug build: the Windows TLS stack (`native-tls`) is the trigger; the
+   same binary with rustls (`ureq` features `rustls` + `platform-verifier`, system roots kept) gets 200 on Jinja, FastAPI, Python,
+   Django and Flask. Fix kept (a defect, not a tuning): the crawler uses rustls. New crates reviewed, see the PR.
+2. **Sphinx's own site (sphinx-doc.org, Cloudflare) answered Grounded Docs' scrape with 429s** after Footnote's 200-page crawl (11 s,
+   no 429 for Footnote) and has kept challenging our IP since. Its 12 questions are dropped from the rematch (`dataset-core.yaml`,
+   `recipe-core.json`: Django 16, Jinja 12); the full 40-question file stays. Lesson for the final: the second system on a
+   Cloudflare host can be locked out by the first; order alternates, the cool-down is 600 s, and a blocked crawl is reported as such.
+3. **Result on the core set with the fixed binary** (`dev3`): own crawl, Footnote − Grounded nDCG@5 −0.184 [−0.355, −0.014]
+   (Django −0.406, Jinja +0.112); on Grounded Docs' stored pages (same text) Footnote − Grounded +0.069 (0.900 against 0.831).
+   Ranking on Sphinx text is not the problem; the crawl is: judged-URL coverage on Django 0.435 against 1.000. The sitemap lists
+   32,861 pages alphabetically and the crawler took the first 200 in that order (faq, howto, internals, ref), never reaching
+   `topics/`.
+
+**Candidate H (crawl order under a page cap), written before measuring it:** sitemap pages are queued shallowest path first
+(stable, so equal depth keeps sitemap order). **Keep H** when, on the development libraries, judged-URL coverage rises on Django and
+falls on none, and end-to-end nDCG@5 rises (paired, against the same binary without H); the Django, Jinja, FastAPI, Python, React,
+Vite, Tailwind, Pydantic and Svelte start pages are crawled with and without H and coverage compared where the earlier question
+sets' recipes allow (Grounded Docs' stored sets are gone with their work folders, so only the Sphinx development libraries are measured;
+the general guard is the unchanged search code).
+
+**Result of H (`dev4`, same core set, 60 s cool-down):** judged-URL coverage on Django **fell** from 0.435 to 0.217 (Jinja 1.000
+unchanged) and end-to-end nDCG@5 against Grounded Docs fell from −0.184 to −0.309 [−0.493, −0.120]. Keep rule failed: **H rejected and
+removed**. Reading: Django's sitemap is flat, so depth does not separate the pages that judges point to; no sitemap-order heuristic is
+adopted. The crawl gap on very large sites under a 200-page cap is reported as a finding (Footnote follows the sitemap's order; Grounded
+follows links from the start page, breadth first), not tuned further on the development set.
+
+## Sealed final (written before any system ran on Flask or Python)
+
+Dev closed after round 1 (H rejected). Sealed set `bench/datasets/docs-sphinx-sealed/dataset.yaml` (sha256
+`2e06dc864bfd4b345c78f25bb18ad89194400f1da1e28146e7dc50081a9d113a`), recipe `recipe.json` beside it. Flask 20 and Python 20
+questions, seed 20261120, hybrid `--limit 5 --per-source 1`, Footnote with the TLS fix (rustls) and no ordering change. Crawl order
+alternates (Flask: Footnote first, Python: Grounded first), 600 s cool-down. Decision rule as in the protocol above: better if the 95%
+paired lower bound > 0, equivalent if > −0.05, otherwise worse; a crawl that a host blocks is reported as blocked, not retried into the score.
+Sphinx's own site (12 dev questions) stays out of the rematch because its host blocks Grounded Docs' scraper from this IP.
+- final.exe sha256 7a2879b40eb4c012067f2c80d8c8105c73a4dcde70550b461f54abcc82df5e0b (frozen for the sealed run)

@@ -1,0 +1,300 @@
+description: Footnote sealed set for Sphinx-built documentation (#106), Flask and Python, written 19 Nov 2026 by Claude after the development set was closed and before any system ran on these libraries. 40 questions (20 per library), 49 graded URLs verified 200. Never tuned on.
+entries:
+- vars:
+    library: flask
+    query: decorator that requires a logged in user on a view
+    intent: api-lookup
+    qrels:
+    - url: https://flask.palletsprojects.com/en/stable/patterns/viewdecorators/
+      grade: 3
+    - url: https://flask.palletsprojects.com/en/stable/tutorial/views/
+      grade: 2
+- vars:
+    library: flask
+    query: open a sqlite3 connection for each request and close it afterwards
+    intent: api-lookup
+    qrels:
+    - url: https://flask.palletsprojects.com/en/stable/patterns/sqlite3/
+      grade: 3
+    - url: https://flask.palletsprojects.com/en/stable/tutorial/database/
+      grade: 2
+- vars:
+    library: flask
+    query: validate submitted forms with WTForms
+    intent: api-lookup
+    qrels:
+    - url: https://flask.palletsprojects.com/en/stable/patterns/wtforms/
+      grade: 3
+- vars:
+    library: flask
+    query: serve a single page JavaScript application
+    intent: conceptual
+    qrels:
+    - url: https://flask.palletsprojects.com/en/stable/patterns/singlepageapplications/
+      grade: 3
+- vars:
+    library: flask
+    query: call the server from JavaScript with fetch and JSON
+    intent: api-lookup
+    qrels:
+    - url: https://flask.palletsprojects.com/en/stable/patterns/javascript/
+      grade: 3
+- vars:
+    library: flask
+    query: grow a single file app into a package
+    intent: conceptual
+    qrels:
+    - url: https://flask.palletsprojects.com/en/stable/patterns/packages/
+      grade: 3
+- vars:
+    library: flask
+    query: mount several Flask apps under different URL prefixes in one process
+    intent: api-lookup
+    qrels:
+    - url: https://flask.palletsprojects.com/en/stable/patterns/appdispatch/
+      grade: 3
+- vars:
+    library: flask
+    query: cache responses to speed up a view
+    intent: api-lookup
+    qrels:
+    - url: https://flask.palletsprojects.com/en/stable/patterns/caching/
+      grade: 3
+- vars:
+    library: flask
+    query: add a favicon to the site
+    intent: api-lookup
+    qrels:
+    - url: https://flask.palletsprojects.com/en/stable/patterns/favicon/
+      grade: 3
+- vars:
+    library: flask
+    query: install Flask inside a virtual environment
+    intent: api-lookup
+    qrels:
+    - url: https://flask.palletsprojects.com/en/stable/installation/
+      grade: 3
+- vars:
+    library: flask
+    query: publish a Flask extension for others
+    intent: conceptual
+    qrels:
+    - url: https://flask.palletsprojects.com/en/stable/extensiondev/
+      grade: 3
+    - url: https://flask.palletsprojects.com/en/stable/extensions/
+      grade: 2
+- vars:
+    library: flask
+    query: start the development server and reload when code changes
+    intent: troubleshooting
+    qrels:
+    - url: https://flask.palletsprojects.com/en/stable/server/
+      grade: 3
+    - url: https://flask.palletsprojects.com/en/stable/quickstart/
+      grade: 2
+- vars:
+    library: flask
+    query: open an interactive Python shell with the app context loaded
+    intent: api-lookup
+    qrels:
+    - url: https://flask.palletsprojects.com/en/stable/shell/
+      grade: 3
+- vars:
+    library: flask
+    query: what happens between receiving a request and sending the response
+    intent: conceptual
+    qrels:
+    - url: https://flask.palletsprojects.com/en/stable/lifecycle/
+      grade: 3
+    - url: https://flask.palletsprojects.com/en/stable/reqcontext/
+      grade: 2
+- vars:
+    library: flask
+    query: run a function after the request finishes, even when it fails
+    intent: api-lookup
+    qrels:
+    - url: https://flask.palletsprojects.com/en/stable/patterns/deferredcallbacks/
+      grade: 3
+- vars:
+    library: flask
+    query: fill in the same URL value for every view of a blueprint
+    intent: api-lookup
+    qrels:
+    - url: https://flask.palletsprojects.com/en/stable/patterns/urlprocessors/
+      grade: 3
+- vars:
+    library: flask
+    query: change how the Flask class behaves by subclassing it
+    intent: api-lookup
+    qrels:
+    - url: https://flask.palletsprojects.com/en/stable/patterns/subclassing/
+      grade: 3
+- vars:
+    library: flask
+    query: use gevent workers
+    intent: api-lookup
+    qrels:
+    - url: https://flask.palletsprojects.com/en/stable/gevent/
+      grade: 3
+- vars:
+    library: flask
+    query: why does Flask not ship a database layer or form library
+    intent: conceptual
+    qrels:
+    - url: https://flask.palletsprojects.com/en/stable/design/
+      grade: 3
+- vars:
+    library: flask
+    query: reject a request whose body does not match its checksum
+    intent: api-lookup
+    qrels:
+    - url: https://flask.palletsprojects.com/en/stable/patterns/requestchecksum/
+      grade: 3
+- vars:
+    library: python
+    query: parse command line arguments with flags and defaults
+    intent: api-lookup
+    qrels:
+    - url: https://docs.python.org/3/library/argparse.html
+      grade: 3
+- vars:
+    library: python
+    query: read and write JSON files
+    intent: api-lookup
+    qrels:
+    - url: https://docs.python.org/3/library/json.html
+      grade: 3
+- vars:
+    library: python
+    query: join and inspect file paths as objects
+    intent: api-lookup
+    qrels:
+    - url: https://docs.python.org/3/library/pathlib.html
+      grade: 3
+- vars:
+    library: python
+    query: run an external command and capture its output
+    intent: api-lookup
+    qrels:
+    - url: https://docs.python.org/3/library/subprocess.html
+      grade: 3
+- vars:
+    library: python
+    query: regular expression named groups and matches
+    intent: api-lookup
+    qrels:
+    - url: https://docs.python.org/3/library/re.html
+      grade: 3
+    - url: https://docs.python.org/3/howto/regex.html
+      grade: 2
+- vars:
+    library: python
+    query: count items with a dictionary subclass
+    intent: api-lookup
+    qrels:
+    - url: https://docs.python.org/3/library/collections.html
+      grade: 3
+- vars:
+    library: python
+    query: classes that generate their own init and repr
+    intent: api-lookup
+    qrels:
+    - url: https://docs.python.org/3/library/dataclasses.html
+      grade: 3
+- vars:
+    library: python
+    query: write log messages with levels to a file
+    intent: api-lookup
+    qrels:
+    - url: https://docs.python.org/3/library/logging.html
+      grade: 3
+    - url: https://docs.python.org/3/howto/logging.html
+      grade: 2
+- vars:
+    library: python
+    query: replace objects with mocks in unit tests
+    intent: api-lookup
+    qrels:
+    - url: https://docs.python.org/3/library/unittest.mock.html
+      grade: 3
+- vars:
+    library: python
+    query: run coroutines concurrently as tasks
+    intent: api-lookup
+    qrels:
+    - url: https://docs.python.org/3/library/asyncio-task.html
+      grade: 3
+- vars:
+    library: python
+    query: run functions in a pool of threads or processes
+    intent: api-lookup
+    qrels:
+    - url: https://docs.python.org/3/library/concurrent.futures.html
+      grade: 3
+- vars:
+    library: python
+    query: format and parse dates and times
+    intent: api-lookup
+    qrels:
+    - url: https://docs.python.org/3/library/datetime.html
+      grade: 3
+- vars:
+    library: python
+    query: annotate generics and optional values with type hints
+    intent: api-lookup
+    qrels:
+    - url: https://docs.python.org/3/library/typing.html
+      grade: 3
+- vars:
+    library: python
+    query: remember the results of a function call
+    intent: api-lookup
+    qrels:
+    - url: https://docs.python.org/3/library/functools.html
+      grade: 3
+- vars:
+    library: python
+    query: read a CSV file into dictionaries
+    intent: api-lookup
+    qrels:
+    - url: https://docs.python.org/3/library/csv.html
+      grade: 3
+- vars:
+    library: python
+    query: make a temporary file or directory
+    intent: api-lookup
+    qrels:
+    - url: https://docs.python.org/3/library/tempfile.html
+      grade: 3
+- vars:
+    library: python
+    query: copy or move a whole directory tree
+    intent: api-lookup
+    qrels:
+    - url: https://docs.python.org/3/library/shutil.html
+      grade: 3
+- vars:
+    library: python
+    query: create an isolated virtual environment
+    intent: api-lookup
+    qrels:
+    - url: https://docs.python.org/3/library/venv.html
+      grade: 3
+    - url: https://docs.python.org/3/tutorial/venv.html
+      grade: 2
+- vars:
+    library: python
+    query: product and permutations of iterables
+    intent: api-lookup
+    qrels:
+    - url: https://docs.python.org/3/library/itertools.html
+      grade: 3
+- vars:
+    library: python
+    query: how modules and packages are imported
+    intent: conceptual
+    qrels:
+    - url: https://docs.python.org/3/tutorial/modules.html
+      grade: 3
+    - url: https://docs.python.org/3/reference/import.html
+      grade: 2

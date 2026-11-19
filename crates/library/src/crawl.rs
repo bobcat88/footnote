@@ -30,13 +30,17 @@ pub struct Options<'a> {
     pub concurrency: usize,
 }
 
+const TLS_PROVIDER: ureq::tls::TlsProvider = ureq::tls::TlsProvider::Rustls;
+
 fn agent() -> ureq::Agent {
-    use ureq::tls::{RootCerts, TlsConfig, TlsProvider};
+    use ureq::tls::{RootCerts, TlsConfig};
     // System roots, not ureq's bundled Mozilla list: fastapi.tiangolo.com fails against the bundle, and companies add their own roots.
+    // rustls, not the Windows TLS stack: Cloudflare answers the latter with a challenge (HTTP 429, `cf-mitigated`) on Read the Docs and
+    // Pallets sites (jinja, flask), so no page could be crawled (DOCS-SPHINX-2026-11-19.md).
     ureq::Agent::config_builder()
         .tls_config(
             TlsConfig::builder()
-                .provider(TlsProvider::NativeTls)
+                .provider(TLS_PROVIDER)
                 .root_certs(RootCerts::PlatformVerifier)
                 .build(),
         )
@@ -381,6 +385,11 @@ pub fn crawl(out: &Path, o: &Options, progress: &mut dyn FnMut(u64, u64)) -> Res
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn crawler_keeps_the_tls_stack_cloudflare_lets_through() {
+        assert_eq!(TLS_PROVIDER, ureq::tls::TlsProvider::Rustls);
+    }
 
     #[test]
     fn scope_keeps_the_start_folder_only() {

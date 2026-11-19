@@ -23,7 +23,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 import docs_crawl as c  # noqa: E402
 
 g = c.g
-EXE, ORDER = ARGS[2], dict(kv.split("=") for kv in ARGS[3].split(","))
+EXE, ORDER = str(Path(ARGS[2]).resolve()), dict(kv.split("=") for kv in ARGS[3].split(","))
 COOLDOWN = int(ARGS[4]) if len(ARGS) > 4 else 600
 V = "minimal"
 SEED = int(os.environ.get("DOCS_SEED", 20261119))

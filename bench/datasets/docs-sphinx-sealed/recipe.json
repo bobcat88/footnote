@@ -1,0 +1,12 @@
+{
+ "flask": [
+  "https://flask.palletsprojects.com/en/stable/",
+  200,
+  "/llms-[a-z]+\\.txt$/"
+ ],
+ "python": [
+  "https://docs.python.org/3/",
+  500,
+  "/^https:\\/\\/docs\\.python\\.org\\/3\\/[a-z]{2}(-[a-z]+)?\\//"
+ ]
+}

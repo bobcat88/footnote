@@ -1,0 +1,12 @@
+{
+ "django": [
+  "https://docs.djangoproject.com/en/5.2/",
+  200,
+  "/llms-[a-z]+\\.txt$/"
+ ],
+ "jinja": [
+  "https://jinja.palletsprojects.com/en/stable/",
+  200,
+  "/llms-[a-z]+\\.txt$/"
+ ]
+}
