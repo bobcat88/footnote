@@ -424,16 +424,16 @@ fn read_file(path: &Path, agent: &str, parse: Parse, st: &mut FileState) -> Resu
 /// Price one session file (#223), Claude Code or Codex, found by which reader recognises it: tokens per category, list
 /// price, priced and unpriced requests, per model. The benchmark collector calls this instead of copying the price table.
 pub fn session(path: &Path) -> Result<Value> {
-    let mut best: Option<(&str, FileState)> = None;
+    let mut best: Option<(&str, Parse, FileState)> = None;
     for (agent, parse) in [("claude-code", claude_line as Parse), ("codex", codex_line)] {
         let mut st = FileState::default();
         read_file(path, agent, parse, &mut st)?;
         if !st.rows.is_empty() {
-            best = Some((agent, st));
+            best = Some((agent, parse, st));
             break;
         }
     }
-    let (agent, st) = best.context("no Claude Code or Codex token counts in this file")?;
+    let (agent, parse, st) = best.context("no Claude Code or Codex token counts in this file")?;
     let (mut totals, mut by_model) = (Tokens::default(), BTreeMap::<String, Tokens>::new());
     for (key, t) in &st.rows {
         totals.add(t);
@@ -450,9 +450,34 @@ pub fn session(path: &Path) -> Result<Value> {
             v
         })
         .collect();
+    let (fixed, floor) = fixed_overhead(path, parse, totals.requests, totals.cache_read);
     Ok(
-        json!({"file": path.display().to_string(), "agent": agent, "prices": PRICES, "totals": totals, "by_model": by_model}),
+        json!({"file": path.display().to_string(), "agent": agent, "prices": PRICES, "totals": totals, "by_model": by_model,
+            "fixed_overhead": {"first_prompt_tokens": fixed, "share_of_cache_reads_at_least": floor,
+                "note": "the first request's whole prompt: system prompt, tool schemas, CLAUDE.md, skills, hook text and the first message; every later turn reads it again. A resumed session starts larger, so this is only a clean measure on a fresh one."}}),
     )
+}
+
+/// The first request's prompt size, and the share of all cache reads that re-reading it every later turn accounts for at
+/// least (#238). `None` for a compressed file: shortcut, the readers cannot be asked for one request there, add it if needed.
+fn fixed_overhead(
+    path: &Path,
+    parse: Parse,
+    requests: u64,
+    cache_read: u64,
+) -> (Option<u64>, Option<f64>) {
+    let Ok(data) = std::fs::read(path) else {
+        return (None, None);
+    };
+    let mut st = FileState::default();
+    let first = data.split(|&b| b == b'\n').find_map(|l| parse(l, &mut st));
+    let Some((_, _, t)) = first else {
+        return (None, None);
+    };
+    let prompt = t.input + t.cache_read + t.cache_write_5m + t.cache_write_1h;
+    let floor = (cache_read > 0)
+        .then(|| ((prompt * requests.saturating_sub(1)) as f64 / cache_read as f64).min(1.0));
+    (Some(prompt), floor.map(|f| (f * 1000.0).round() / 1000.0))
 }
 
 fn sessions(dir: &Path) -> Vec<PathBuf> {
@@ -818,5 +843,28 @@ mod tests {
         assert!((usd("claude-haiku-5-5", 100_000) - 0.01).abs() < 1e-9);
         assert!((usd("claude-haiku-5-5", 200_000) - 0.10).abs() < 1e-9);
         assert_eq!(request("some-new-model", t(1)).unpriced_requests, 1);
+    }
+
+    #[test]
+    fn fixed_overhead_is_the_first_prompt_and_its_share_of_cache_reads() {
+        let line = |id: &str, read: u64, write: u64| {
+            format!(
+                r#"{{"type":"assistant","timestamp":"2026-11-19T10:00:00Z","requestId":"{id}","message":{{"id":"{id}","model":"claude-sonnet-5-5","usage":{{"input_tokens":5,"output_tokens":1,"cache_read_input_tokens":{read},"cache_creation_input_tokens":{write}}}}}}}"#
+            )
+        };
+        let dir = tempfile::tempdir().unwrap();
+        let f = dir.path().join("s.jsonl");
+        // First prompt 1,000 (5 + 0 + 995); two later turns each re-read 1,000 and 1,100.
+        std::fs::write(
+            &f,
+            [line("a", 0, 995), line("b", 1000, 100), line("c", 1100, 50)]
+                .map(|l| l + "\n")
+                .concat(),
+        )
+        .unwrap();
+        let v = session(&f).unwrap();
+        assert_eq!(v["fixed_overhead"]["first_prompt_tokens"], 1000);
+        // 1000 x 2 later requests / 2100 cache reads.
+        assert_eq!(v["fixed_overhead"]["share_of_cache_reads_at_least"], 0.952);
     }
 }
