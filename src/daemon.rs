@@ -10,10 +10,10 @@
 //! one warm corpus shared by Claude Code, Codex and Gemini at the same time.
 use crate::mcp::{Shared, session_loop};
 use anyhow::{Context, Result};
-#[cfg(windows)]
-use interprocess::local_socket::GenericNamespaced;
 #[cfg(not(windows))]
 use interprocess::local_socket::GenericFilePath;
+#[cfg(windows)]
+use interprocess::local_socket::GenericNamespaced;
 use interprocess::local_socket::{ListenerOptions, Name, Stream, prelude::*};
 use std::{
     io::{BufRead, BufReader, Read, Write},
@@ -55,7 +55,9 @@ fn name_of(endpoint: &str) -> Result<Name<'static>> {
     {
         let dir = crate::state::state_dir()?;
         crate::state::ensure_private_dir(&dir)?;
-        Ok(dir.join(format!("{endpoint}.sock")).to_fs_name::<GenericFilePath>()?)
+        Ok(dir
+            .join(format!("{endpoint}.sock"))
+            .to_fs_name::<GenericFilePath>()?)
     }
 }
 

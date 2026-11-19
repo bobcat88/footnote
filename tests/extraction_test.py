@@ -33,10 +33,12 @@ class ExtractionTests(unittest.TestCase):
             self.assertEqual({Path(h['path']).suffix for h in result},{'.pdf','.png'})
             for h in result:
                 self.assertEqual(h['page'],1);self.assertEqual(h['freshness'],'current')
-                self.assertIn('rapidocr',h['extractor'])
+                # Lean search (#20) leaves the extractor out of hits; `get` still has it.
+                extractor=call('get',str(h['id']))['extractor']
+                self.assertIn('rapidocr',extractor)
                 # Licence regression lock: extraction must stay on PDFium, not PyMuPDF.
-                self.assertIn('pdfium',h['extractor'])
-                self.assertNotIn('pymupdf',h['extractor'])
+                self.assertIn('pdfium',extractor)
+                self.assertNotIn('pymupdf',extractor)
             self.assertEqual(original,{p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in [png,pdf]})
             self.assertEqual(call('index','--root',str(root),'--allow',str(root))['unchanged'],2)
 if __name__=='__main__':unittest.main()

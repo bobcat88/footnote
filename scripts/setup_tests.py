@@ -1,7 +1,7 @@
 """Prepare everything the full test run needs (#206). A fresh checkout passes `cargo test` without it: the tests that need
 these skip and say why. Run from the repository root: python scripts/setup_tests.py
 
-1. `.venv` with the pinned extraction packages (requirements-extract.lock), for the PDF and Office helper tests.
+1. `.venv` with the pinned extraction packages (requirements-extract.lock) and psutil, for the PDF and Office helper tests.
 2. The embedding models the search tests use (minilm, e5-small, gte-small), hash-checked by tools/provision_embeddings.py.
 3. Reports which code indexers are on PATH; installing them is left to you, since each is its own tool.
 """
@@ -23,6 +23,8 @@ python = venv / ("Scripts/python.exe" if sys.platform == "win32" else "bin/pytho
 if not python.exists():
     run(sys.executable, "-m", "venv", venv)
 run(python, "-m", "pip", "install", "-r", ROOT / "requirements-extract.lock")
+# tests/hybrid_metrics_test.py imports tools/hybrid_benchmark.py, which needs psutil (pinned as in requirements-hybrid.lock).
+run(python, "-m", "pip", "install", "psutil==7.2.2")
 run(python, ROOT / "tools/provision_embeddings.py", "minilm", "e5-small", "gte-small")
 
 for tool, hint in [

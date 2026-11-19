@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# ADR 0002: Actions is blocked by billing, so the checks run here before anything leaves the machine.
+# Enable once per clone: git config core.hooksPath .githooks. Skip for a docs-only push with FOOTNOTE_SKIP_CHECK=1.
+[[ -n ${FOOTNOTE_SKIP_CHECK:-} ]] && exit 0
+exec "$(dirname "$0")/../scripts/check.sh"
