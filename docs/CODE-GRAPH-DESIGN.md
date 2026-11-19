@@ -413,3 +413,10 @@ and equal-arity overloads (`notNull(Object, String)` against `notNull(Object, Su
 Same javac scoring, precision stays 1.00 everywhere; recall: gson 0.84 to 0.85, jsoup 0.57 to 0.65, commons-lang 0.76 to 0.78,
 Spring 0.59 to 0.63. The rest of the overload misses need argument types. Next: inherited methods, then the receivers that
 go through generics.
+
+**Inherited methods (#179, 19 November 2026).** A call on `this` (bare, or `this.m()`) now walks the class's `extends` and
+`implements` chain, up to 8 levels, and links the first level where a class defines the name, only when that class has exactly
+one narrowed candidate. A bare call also links to a method of an enclosing class, so outer and nested classes no longer lose it.
+Same javac scoring, precision stays 1.00 everywhere; recall: gson 0.85, jsoup 0.70, commons-lang 0.79, Spring 0.71 (from 0.85,
+0.65, 0.78, 0.63). Next: the same rule on Python and TypeScript against scip-python and scip-typescript, then receivers that go
+through generics.

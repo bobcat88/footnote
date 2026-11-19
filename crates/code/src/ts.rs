@@ -141,6 +141,8 @@ struct Call {
     recv: Option<(Base, Vec<Step>)>,
     /// Java: how many arguments the call passes.
     args: Option<usize>,
+    /// Java bare calls: the named classes around the call.
+    within: Vec<String>,
     file: usize,
     range: [i32; 4],
     /// Found inside a Rust macro's arguments: linked with `scip::MACRO_ARG`, so a compiler graph can take it (#197).
@@ -234,6 +236,8 @@ fn parse(root: &Path, project: &str) -> anyhow::Result<(Vec<Document>, usize, Ve
     let mut compiled: HashMap<Lang, (Language, Query, Query)> = HashMap::new();
     // Rust struct field types, (struct, field) -> types: one step of a receiver chain (`self.store.save()`).
     let mut fields: HashMap<(String, String), Vec<(String, usize)>> = HashMap::new();
+    // Java: the types a class or interface extends or implements, by its name.
+    let mut supers: HashMap<String, Vec<String>> = HashMap::new();
     let rust_fields = Query::new(&tree_sitter_rust::LANGUAGE.into(), RUST_FIELDS).ok();
     let mut parser = Parser::new();
     for (i, (_, l, src)) in files.iter().enumerate() {
@@ -357,7 +361,7 @@ fn parse(root: &Path, project: &str) -> anyhow::Result<(Vec<Document>, usize, Ve
                 // A Rust macro (`env!`, `write!`) is not a call to a function of that name.
                 let (qualifier, member) = qualifier(&node, &n, src);
                 let f = node.child_by_field_name("function");
-                let recv = if member {
+                let recv = if member || (*l == Lang::Java && qualifier.is_empty()) {
                     match l {
                         Lang::Rust => f
                             .and_then(|f| f.child_by_field_name("value"))
@@ -367,7 +371,12 @@ fn parse(root: &Path, project: &str) -> anyhow::Result<(Vec<Document>, usize, Ve
                             .and_then(|v| receiver_dyn(v, src, 0)),
                         Lang::Java => node
                             .child_by_field_name("object")
-                            .and_then(|v| receiver_java(v, src, 0)),
+                            .and_then(|v| receiver_java(v, src, 0))
+                            // A bare call is a call on `this`.
+                            .or_else(|| {
+                                (!member && !in_anonymous(node))
+                                    .then(|| (Base::Type("Self".into()), vec![]))
+                            }),
                         _ => None,
                     }
                     .and_then(|(b, s)| {
@@ -388,6 +397,7 @@ fn parse(root: &Path, project: &str) -> anyhow::Result<(Vec<Document>, usize, Ve
                 } else {
                     None
                 };
+                let qualifier_is_empty = qualifier.is_empty();
                 calls.push(Call {
                     name: text.into(),
                     qualifier,
@@ -399,6 +409,11 @@ fn parse(root: &Path, project: &str) -> anyhow::Result<(Vec<Document>, usize, Ve
                                 .map(|a| a.named_child_count())
                         })
                         .flatten(),
+                    within: if *l == Lang::Java && !member && qualifier_is_empty {
+                        enclosing_classes(node, src)
+                    } else {
+                        Vec::new()
+                    },
                     file: i,
                     range: range(&n),
                     in_macro: false,
@@ -412,6 +427,7 @@ fn parse(root: &Path, project: &str) -> anyhow::Result<(Vec<Document>, usize, Ve
                         member: false,
                         recv: None,
                         args: None,
+                        within: Vec::new(),
                         file: i,
                         range: range(&name),
                         in_macro: true,
@@ -445,6 +461,11 @@ fn parse(root: &Path, project: &str) -> anyhow::Result<(Vec<Document>, usize, Ve
             } else {
                 class_fields(tree.root_node(), src)
             };
+            if *l == Lang::Java {
+                for (class, sup) in java_supers(tree.root_node(), src) {
+                    supers.entry(class).or_default().push(sup);
+                }
+            }
             for (s, f, t) in found {
                 let e = fields.entry((s, f)).or_default();
                 if !e.contains(&(t.clone(), i)) {
@@ -555,12 +576,54 @@ fn parse(root: &Path, project: &str) -> anyhow::Result<(Vec<Document>, usize, Ve
         }
         Some(owner)
     };
-    let method = |ty: &str, name: &str, file: usize, args: Option<usize>| {
-        let owner = owner(ty, file)?;
-        match narrow(&defs, methods.get(&(owner.as_str(), name))?, args).as_slice() {
-            [one] => Some(*one),
+    // The file that declares a type, when the name is unique.
+    let home = |o: &str| -> Option<usize> {
+        match by_name
+            .get(o)?
+            .iter()
+            .filter(|&&d| defs[d].kind == "type")
+            .collect::<Vec<_>>()[..]
+        {
+            [d] => Some(defs[*d].file),
             _ => None,
         }
+    };
+    // The method of that type, or else of the nearest ancestors that define the name: one of them, or none.
+    let method = |ty: &str, name: &str, file: usize, args: Option<usize>| {
+        let mut level = vec![owner(ty, file)?];
+        let mut seen: HashSet<String> = level.iter().cloned().collect();
+        for _ in 0..8 {
+            let defined: Vec<&Vec<usize>> = level
+                .iter()
+                .filter_map(|o| methods.get(&(o.as_str(), name)))
+                .collect();
+            if !defined.is_empty() {
+                let found: Vec<usize> = defined
+                    .iter()
+                    .flat_map(|v| narrow(&defs, v, args))
+                    .collect();
+                return match found.as_slice() {
+                    [one] => Some(*one),
+                    _ => None,
+                };
+            }
+            level = level
+                .iter()
+                .flat_map(|o| {
+                    let at = home(o);
+                    supers
+                        .get(o)
+                        .into_iter()
+                        .flatten()
+                        .filter_map(move |s| owner(s, at?))
+                })
+                .filter(|o| seen.insert(o.clone()))
+                .collect();
+            if level.is_empty() {
+                return None;
+            }
+        }
+        None
     };
     // The type a receiver chain ends on; `None` as soon as one step is unknown (std, a dependency, a generic).
     let type_of = |b: &Base, steps: &[Step], file: usize| -> Option<(String, usize)> {
@@ -683,10 +746,9 @@ fn parse(root: &Path, project: &str) -> anyhow::Result<(Vec<Document>, usize, Ve
             .filter(|&d| defs[d].file == c.file)
             // A bare Rust call (`write_help(..)`) never reaches a method; clap's `Command::write_help` caught this.
             .filter(|&d| {
-                !(c.qualifier.is_empty()
-                    && defs[d].owner.is_some()
-                    // A bare Java call is a call on `this`.
-                    && files[c.file].1 != Lang::Java)
+                !(c.qualifier.is_empty() && defs[d].owner.is_some())
+                    // A bare Java call is on `this` or on a class around it, never on another class of the file.
+                    || defs[d].owner.as_ref().is_some_and(|o| c.within.contains(o))
             })
             .collect();
         let same = narrow(&defs, &same, c.args);
@@ -1396,6 +1458,22 @@ fn receiver_java(e: Node, src: &[u8], depth: u8) -> Option<(Base, Vec<Step>)> {
     }
 }
 
+/// The named Java types around a node, innermost first.
+fn enclosing_classes(n: Node, src: &[u8]) -> Vec<String> {
+    std::iter::successors(n.parent(), |p| p.parent())
+        .filter(|p| {
+            matches!(
+                p.kind(),
+                "class_declaration"
+                    | "interface_declaration"
+                    | "record_declaration"
+                    | "enum_declaration"
+            )
+        })
+        .filter_map(|p| owner_name(&p, src))
+        .collect()
+}
+
 /// Whether `n` sits in an anonymous class body, where `this` and bare names are no longer the enclosing named class's.
 fn in_anonymous(n: Node) -> bool {
     let mut p = n.parent();
@@ -1518,6 +1596,51 @@ fn declared_java(e: Node, src: &[u8], depth: u8) -> Option<(Base, Vec<Step>)> {
         child = p;
     }
     None
+}
+
+/// Java inheritance as (class, super): what each class or interface extends or implements, generics dropped.
+fn java_supers(root: Node, src: &[u8]) -> Vec<(String, String)> {
+    let mut out = Vec::new();
+    let mut stack = vec![root];
+    while let Some(n) = stack.pop() {
+        let decl = matches!(
+            n.kind(),
+            "class_declaration"
+                | "interface_declaration"
+                | "record_declaration"
+                | "enum_declaration"
+        );
+        {
+            if let Some(class) = decl.then(|| owner_name(&n, src)).flatten() {
+                let mut c = n.walk();
+                for k in n.children(&mut c).filter(|k| {
+                    matches!(
+                        k.kind(),
+                        "superclass" | "super_interfaces" | "extends_interfaces"
+                    )
+                }) {
+                    let mut ids = vec![k];
+                    while let Some(x) = ids.pop() {
+                        match x.kind() {
+                            "type_identifier" | "scoped_type_identifier" => {
+                                if let Ok(t) = x.utf8_text(src) {
+                                    out.push((class.clone(), t.to_string()));
+                                }
+                            }
+                            "type_arguments" => {}
+                            _ => {
+                                let mut c = x.walk();
+                                ids.extend(x.named_children(&mut c));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        let mut c = n.walk();
+        stack.extend(n.named_children(&mut c));
+    }
+    out
 }
 
 /// Whether `t` assigns `name` (`name = v`, `name += v`; not `name == v`).
@@ -2117,6 +2240,54 @@ class Use {
             [
                 "A.java	11	log	A.java	receiver_type",
                 "A.java	12	log	A.java	receiver_type"
+            ],
+            "{rules:?}"
+        );
+    }
+
+    #[test]
+    fn java_calls_reach_methods_inherited_from_a_superclass_or_interface() {
+        let t = tempfile::tempdir().unwrap();
+        let w = |p: &str, s: &str| std::fs::write(t.path().join(p), s).unwrap();
+        w(
+            "A.java",
+            "interface Named {
+  String name();
+}
+class Base implements Named {
+  public String name() { return \"\"; }
+  void open() {}
+}
+class Mid extends Base {}
+class Child extends Mid {
+  void go(Child c) {
+    open();
+    this.name();
+    c.open();
+  }
+}
+class Loose extends Elsewhere {
+  void go() { open(); }
+}
+",
+        );
+        w(
+            "B.java",
+            "class Other {
+  void open() {}
+}
+",
+        );
+        let (_, _, rules) = parse(t.path(), "demo").unwrap();
+        let mut got: Vec<&str> = rules.iter().map(String::as_str).collect();
+        got.sort();
+        // `Loose extends Elsewhere` (outside the project): its `open()` may be Elsewhere's, so no link.
+        assert_eq!(
+            got,
+            [
+                "A.java	11	open	A.java	receiver_type",
+                "A.java	12	name	A.java	receiver_type",
+                "A.java	13	open	A.java	receiver_type",
             ],
             "{rules:?}"
         );
