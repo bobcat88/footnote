@@ -290,7 +290,7 @@ fn parse(root: &Path, project: &str) -> anyhow::Result<(Vec<Document>, usize, Ve
                     .next()
                     .unwrap_or("")
                     .trim();
-                let (owner, ret) = if kind == "function" && !matches!(l, Lang::Java | Lang::Go) {
+                let (owner, ret) = if kind == "function" && *l != Lang::Go {
                     // The `impl`, trait or class whose body holds this function (a Python decorator wraps it once).
                     let owner = node
                         .parent()
@@ -320,7 +320,11 @@ fn parse(root: &Path, project: &str) -> anyhow::Result<(Vec<Document>, usize, Ve
                             member.then(String::new)
                         });
                     let ret = node
-                        .child_by_field_name("return_type")
+                        .child_by_field_name(if *l == Lang::Java {
+                            "type"
+                        } else {
+                            "return_type"
+                        })
                         .and_then(|r| r.utf8_text(src).ok())
                         .map(|r| r.trim_start_matches(':').trim())
                         .map(|r| owner.as_deref().map_or(r.to_string(), |o| swap_self(r, o)));
@@ -340,7 +344,7 @@ fn parse(root: &Path, project: &str) -> anyhow::Result<(Vec<Document>, usize, Ve
                 });
             } else if node.kind() != "macro_invocation" {
                 // The JavaScript query tags `obj.f(x)` on its arguments; the call is their parent.
-                let node = if node.kind() == "arguments" {
+                let node = if matches!(node.kind(), "arguments" | "argument_list") {
                     node.parent().unwrap_or(node)
                 } else {
                     node
@@ -356,6 +360,9 @@ fn parse(root: &Path, project: &str) -> anyhow::Result<(Vec<Document>, usize, Ve
                         Lang::Python | Lang::Ts | Lang::Tsx | Lang::Js => f
                             .and_then(|f| f.child_by_field_name("object"))
                             .and_then(|v| receiver_dyn(v, src, 0)),
+                        Lang::Java => node
+                            .child_by_field_name("object")
+                            .and_then(|v| receiver_java(v, src, 0)),
                         _ => None,
                     }
                     .and_then(|(b, s)| {
@@ -417,8 +424,16 @@ fn parse(root: &Path, project: &str) -> anyhow::Result<(Vec<Document>, usize, Ve
                 }
             }
         }
-        if matches!(l, Lang::Python | Lang::Ts | Lang::Tsx | Lang::Js) {
-            for (s, f, t) in class_fields(tree.root_node(), src) {
+        if matches!(
+            l,
+            Lang::Python | Lang::Ts | Lang::Tsx | Lang::Js | Lang::Java
+        ) {
+            let found = if *l == Lang::Java {
+                java_fields(tree.root_node(), src)
+            } else {
+                class_fields(tree.root_node(), src)
+            };
+            for (s, f, t) in found {
                 let e = fields.entry((s, f)).or_default();
                 if !e.contains(&(t.clone(), i)) {
                     e.push((t, i));
@@ -630,7 +645,12 @@ fn parse(root: &Path, project: &str) -> anyhow::Result<(Vec<Document>, usize, Ve
             .copied()
             .filter(|&d| defs[d].file == c.file)
             // A bare Rust call (`write_help(..)`) never reaches a method; clap's `Command::write_help` caught this.
-            .filter(|&d| !(c.qualifier.is_empty() && defs[d].owner.is_some()))
+            .filter(|&d| {
+                !(c.qualifier.is_empty()
+                    && defs[d].owner.is_some()
+                    // A bare Java call is a call on `this`.
+                    && files[c.file].1 != Lang::Java)
+            })
             .collect();
         let bare = c.qualifier.is_empty() && !c.member;
         let via = if c.member && c.qualifier.is_empty() {
@@ -829,6 +849,8 @@ fn owner_name(item: &Node, src: &[u8]) -> Option<String> {
         | "class_declaration"
         | "abstract_class_declaration"
         | "class"
+        | "record_declaration"
+        | "enum_declaration"
         | "interface_declaration" => "name",
         _ => return None,
     };
@@ -1273,6 +1295,226 @@ fn declared_dyn(e: Node, src: &[u8], depth: u8) -> Option<(Base, Vec<Step>)> {
         child = p;
     }
     None
+}
+
+/// Trace a Java receiver to a written type: `this`, a local, parameter or field, `new T()` or a cast, followed by fields and
+/// method calls. A `var` follows its value; anything else (a lambda parameter, a pattern, an anonymous class) gives up.
+fn receiver_java(e: Node, src: &[u8], depth: u8) -> Option<(Base, Vec<Step>)> {
+    if depth > 12 {
+        return None;
+    }
+    let text = |n: Node| n.utf8_text(src).ok().map(str::to_string);
+    let then = |inner: Node, step: Step| {
+        let (b, mut s) = receiver_java(inner, src, depth + 1)?;
+        s.push(step);
+        Some((b, s))
+    };
+    let me = || (!in_anonymous(e)).then(|| Base::Type("Self".into()));
+    match e.kind() {
+        "this" => Some((me()?, vec![])),
+        "identifier" => declared_java(e, src, depth),
+        "field_access" => then(
+            e.child_by_field_name("object")?,
+            Step::Field(text(e.child_by_field_name("field")?)?),
+        ),
+        "method_invocation" => {
+            let name = text(e.child_by_field_name("name")?)?;
+            match e.child_by_field_name("object") {
+                Some(o) => then(o, Step::Call(name)),
+                None => Some((me()?, vec![Step::Call(name)])),
+            }
+        }
+        "object_creation_expression" if e.child_by_field_name("body").is_none() => {
+            let t = text(e.child_by_field_name("type")?)?;
+            Some((Base::Type(head_dyn(&t)?), vec![]))
+        }
+        "cast_expression" => Some((Base::Type(text(e.child_by_field_name("type")?)?), vec![])),
+        "parenthesized_expression" => receiver_java(e.named_child(0)?, src, depth + 1),
+        _ => None,
+    }
+}
+
+/// Whether `n` sits in an anonymous class body, where `this` and bare names are no longer the enclosing named class's.
+fn in_anonymous(n: Node) -> bool {
+    let mut p = n.parent();
+    while let Some(x) = p {
+        if x.kind() == "class_body"
+            && x.parent()
+                .is_some_and(|c| matches!(c.kind(), "object_creation_expression" | "enum_constant"))
+        {
+            return true;
+        }
+        if matches!(
+            x.kind(),
+            "class_declaration" | "record_declaration" | "enum_declaration"
+        ) {
+            return false;
+        }
+        p = x.parent();
+    }
+    false
+}
+
+/// Where a Java name gets its type before `e`: a local declared in an enclosing block, a for-each variable, a parameter, or
+/// a field of the enclosing class. Anything that may rebind it in between gives up.
+fn declared_java(e: Node, src: &[u8], depth: u8) -> Option<(Base, Vec<Step>)> {
+    let name = e.utf8_text(src).ok()?;
+    let text = |n: Node| n.utf8_text(src).unwrap_or("");
+    let typed = |t: Node, value: Option<Node>| {
+        let ty = text(t).trim();
+        if ty == "var" {
+            receiver_java(value?, src, depth + 1)
+        } else {
+            Some((Base::Type(ty.to_string()), vec![]))
+        }
+    };
+    let mut anon = false;
+    let mut child = e;
+    while let Some(p) = child.parent() {
+        match p.kind() {
+            "block" | "constructor_body" | "switch_block_statement_group" => {
+                let mut c = p.walk();
+                let before: Vec<Node> = p
+                    .named_children(&mut c)
+                    .take_while(|k| k.end_byte() <= child.start_byte())
+                    .collect();
+                for s in before.iter().rev() {
+                    if s.kind() == "local_variable_declaration" {
+                        let mut c = s.walk();
+                        let d = s.named_children(&mut c).find(|d| {
+                            d.kind() == "variable_declarator"
+                                && d.child_by_field_name("name").map(text) == Some(name)
+                        });
+                        if let Some(d) = d {
+                            return typed(
+                                s.child_by_field_name("type")?,
+                                d.child_by_field_name("value"),
+                            );
+                        }
+                    }
+                    let t = text(*s);
+                    if (t.contains("instanceof") && has_word(t, name)) || assigns(t, name) {
+                        return None;
+                    }
+                }
+            }
+            "method_declaration" | "constructor_declaration" => {
+                if let Some(params) = p.child_by_field_name("parameters") {
+                    let mut c = params.walk();
+                    let found = params.named_children(&mut c).find(|k| {
+                        matches!(k.kind(), "formal_parameter" | "spread_parameter")
+                            && k.child_by_field_name("name").map(text) == Some(name)
+                    });
+                    if let Some(k) = found {
+                        return typed(k.child_by_field_name("type")?, None)
+                            .filter(|_| k.kind() == "formal_parameter");
+                    }
+                }
+            }
+            "lambda_expression"
+                if p.child_by_field_name("parameters")
+                    .is_some_and(|k| has_word(text(k), name)) =>
+            {
+                return None;
+            }
+            "enhanced_for_statement" if p.child_by_field_name("name").map(text) == Some(name) => {
+                let in_body = p
+                    .child_by_field_name("body")
+                    .is_some_and(|b| b.id() == child.id());
+                return in_body
+                    .then(|| typed(p.child_by_field_name("type")?, None))
+                    .flatten();
+            }
+            "for_statement" | "catch_clause" | "try_with_resources_statement"
+                if has_word(
+                    &String::from_utf8_lossy(&src[p.start_byte()..child.start_byte()]),
+                    name,
+                ) =>
+            {
+                return None;
+            }
+            "class_body"
+                if p.parent().is_some_and(|c| {
+                    matches!(c.kind(), "object_creation_expression" | "enum_constant")
+                }) =>
+            {
+                anon = true;
+            }
+            "class_declaration"
+            | "record_declaration"
+            | "enum_declaration"
+            | "interface_declaration" => {
+                return (!anon).then(|| {
+                    (
+                        Base::Type("Self".into()),
+                        vec![Step::Field(name.to_string())],
+                    )
+                });
+            }
+            _ => {}
+        }
+        child = p;
+    }
+    None
+}
+
+/// Whether `t` assigns `name` (`name = v`, `name += v`; not `name == v`).
+fn assigns(t: &str, name: &str) -> bool {
+    word_at(t, name).into_iter().any(|i| {
+        let after = t[i + name.len()..].trim_start();
+        (after.starts_with('=') && !after.starts_with("=="))
+            || after
+                .strip_prefix(['+', '-', '*', '/', '|', '&', '%', '^'])
+                .is_some_and(|r| r.starts_with('='))
+    })
+}
+
+/// Java field types as (class, field, type): `Repo repo;` in a class body and a record's components.
+fn java_fields(root: Node, src: &[u8]) -> Vec<(String, String, String)> {
+    let text = |n: Node| n.utf8_text(src).unwrap_or("").to_string();
+    let mut out = Vec::new();
+    let mut stack = vec![root];
+    while let Some(n) = stack.pop() {
+        if matches!(n.kind(), "class_declaration" | "record_declaration") {
+            let cls = owner_name(&n, src).unwrap_or_default();
+            if let Some(body) = n.child_by_field_name("body") {
+                let mut c = body.walk();
+                for f in body
+                    .named_children(&mut c)
+                    .filter(|f| f.kind() == "field_declaration")
+                {
+                    let Some(ty) = f.child_by_field_name("type") else {
+                        continue;
+                    };
+                    let mut k = f.walk();
+                    for d in f
+                        .named_children(&mut k)
+                        .filter(|d| d.kind() == "variable_declarator")
+                    {
+                        if let Some(name) = d.child_by_field_name("name") {
+                            out.push((cls.clone(), text(name), text(ty)));
+                        }
+                    }
+                }
+            }
+            if let Some(params) = n.child_by_field_name("parameters") {
+                let mut c = params.walk();
+                for p in params
+                    .named_children(&mut c)
+                    .filter(|p| p.kind() == "formal_parameter")
+                {
+                    if let (Some(name), Some(ty)) =
+                        (p.child_by_field_name("name"), p.child_by_field_name("type"))
+                    {
+                        out.push((cls.clone(), text(name), text(ty)));
+                    }
+                }
+            }
+        }
+        let mut c = n.walk();
+        stack.extend(n.children(&mut c));
+    }
+    out
 }
 
 /// A statement that declares `name` directly: `x = v`, `x: T = v` (Python), `const x: T = v` (TypeScript). Gives the
@@ -1778,6 +2020,40 @@ mod tests {
             ],
             "{rules:?}"
         ); // `u.save()` (no annotation), loop and comprehension variables: no link
+    }
+
+    #[test]
+    fn java_method_calls_link_through_the_receiver_type() {
+        let t = tempfile::tempdir().unwrap();
+        let w = |p: &str, s: &str| std::fs::write(t.path().join(p), s).unwrap();
+        w(
+            "A.java",
+            "class Repo {\n  Item find() { return new Item(); }\n}\nclass Item {\n  void open() {}\n}\nclass Svc {\n  private Repo repo;\n  void go(Repo r, Object u) {\n    repo.find().open();\n    this.repo.find();\n    var i = new Item();\n    i.open();\n    r.find();\n    u.open();\n    for (Item k : items()) { k.open(); }\n    Runnable f = () -> r.find();\n  }\n}\n",
+        );
+        w(
+            "B.java",
+            "class Other {\n  void open() {}\n  Item find() { return null; }\n}\n",
+        );
+        let (_, _, rules) = parse(t.path(), "demo").unwrap();
+        let mut typed: Vec<&str> = rules
+            .iter()
+            .map(String::as_str)
+            .filter(|l| l.ends_with("receiver_type"))
+            .collect();
+        typed.sort();
+        assert_eq!(
+            typed,
+            [
+                "A.java\t10\tfind\tA.java\treceiver_type",
+                "A.java\t10\topen\tA.java\treceiver_type",
+                "A.java\t11\tfind\tA.java\treceiver_type",
+                "A.java\t13\topen\tA.java\treceiver_type",
+                "A.java\t14\tfind\tA.java\treceiver_type",
+                "A.java\t16\topen\tA.java\treceiver_type",
+                "A.java\t17\tfind\tA.java\treceiver_type",
+            ],
+            "{rules:?}"
+        ); // `u.open()` (Object): no link, though `Other.open` exists
     }
 
     #[test]
