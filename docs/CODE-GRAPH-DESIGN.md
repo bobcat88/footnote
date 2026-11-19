@@ -383,3 +383,21 @@ Measured against the compiler graph on the same five projects, Footnote's parser
 more correct links (1.2 to 3 times) and conflicts far less (0 to 0.1% against 0 to 7.4%), and codebase-memory-mcp aborted on
 the largest project (section above). Recommendation: switch. Removing codebase-memory-mcp from the agents' MCP configuration
 (Claude Code, Codex) is Johan's step; it also drops its tool definitions from every session.
+### Java receiver typing (#179, 19 November 2026)
+
+Java calls now link through the receiver's written type (locals, parameters, fields, `this`, `new`, casts, `var`, for-each; lambda
+parameters, patterns and anonymous classes abstain). Truth is javac itself (`bench/experiments/code-graph/JavacOracle.java`, the
+Compiler Tree API on `src/main/java`, no build run), scored by `score_java.py` on three projects the rules were not tuned on.
+Edges are file, line, method name and target file; JDK 21, parser only, no indexer.
+
+| project (oracle edges) | before: links, precision, recall | after: links, precision, recall |
+|---|---|---|
+| gson (1,979) | 1,127 · 0.75 · 0.42 | 1,654 · **1.00** · **0.84** |
+| jsoup (5,908) | 2,090 · 0.76 · 0.27 | 3,373 · **1.00** · **0.57** |
+| commons-lang (5,024) | 5,148 · 0.72 · 0.74 | 3,823 · **1.00** · **0.76** |
+
+`receiver_type` links: 774, 1,789 and 213, at 1.00, 1.00 and 0.99. Bare calls (`foo()`) now count as calls on `this`, which also
+removed the wrong same-file links the old rule made to a same-named method of another class. Index time 0.5, 0.7 and 2.0 s.
+Not measured: Graphify and the other tools on Java, Kotlin and Scala (no grammar yet), calls to inherited methods (recall gap in
+commons-lang), and projects that need dependencies on the classpath. Still open for #179: Kotlin and Scala grammars (licence and
+security review first) and the scip-java upgrade.
