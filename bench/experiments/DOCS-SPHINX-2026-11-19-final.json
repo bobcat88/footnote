@@ -1,0 +1,107 @@
+{
+ "seed": 20261120,
+ "binary": "C:\\Users\\johan\\.t3\\worktrees\\Footnote\\t3-e544e770-5ad204b7246c1991\\bench\\work\\sphinx\\bin\\final.exe",
+ "latency_median_s": {
+  "gd": 2.624947190284729,
+  "fn": 1.2377808094024658
+ },
+ "latency_mean_s": {
+  "gd": 2.6289869785308837,
+  "fn": 1.2574240386486053
+ },
+ "crawl_seconds": {
+  "flask/fn": 3.5,
+  "flask/gd": 53.3,
+  "python/gd": 629.6,
+  "python/fn": 19.0
+ },
+ "index_seconds": {
+  "footnote-same/flask": 35.2,
+  "footnote-same/python": 480.4
+ },
+ "rows": {
+  "all": {
+   "questions": 40,
+   "grounded": 0.7736693086122759,
+   "footnote": 0.7704339782402647,
+   "footnote_same_text": 0.809610988717154,
+   "footnote_minus_grounded": {
+    "diff": -0.003235330372011136,
+    "ci95": [
+     -0.08495890099054773,
+     0.07847242675423685
+    ],
+    "verdict": "worse"
+   },
+   "footnote_same_text_minus_grounded": {
+    "diff": 0.03594168010487817,
+    "ci95": [
+     -0.03823889636269545,
+     0.10960981915948464
+    ],
+    "verdict": "equivalent"
+   }
+  },
+  "flask": {
+   "questions": 20,
+   "grounded": 0.7332160996606747,
+   "footnote": 0.7781016722631933,
+   "footnote_same_text": 0.7859956171712168,
+   "footnote_minus_grounded": {
+    "diff": 0.04488557260251859,
+    "ci95": [
+     -0.06133902465562606,
+     0.14825305983912662
+    ],
+    "verdict": "worse"
+   },
+   "footnote_same_text_minus_grounded": {
+    "diff": 0.05277951751054203,
+    "ci95": [
+     -0.05722546760512163,
+     0.15697073448037255
+    ],
+    "verdict": "worse"
+   }
+  },
+  "python": {
+   "questions": 20,
+   "grounded": 0.814122517563877,
+   "footnote": 0.7627662842173362,
+   "footnote_same_text": 0.8332263602630914,
+   "footnote_minus_grounded": {
+    "diff": -0.05135623334654086,
+    "ci95": [
+     -0.17604530661002268,
+     0.07385838707850487
+    ],
+    "verdict": "worse"
+   },
+   "footnote_same_text_minus_grounded": {
+    "diff": 0.019103842699214314,
+    "ci95": [
+     -0.08324504199990802,
+     0.12610957617006863
+    ],
+    "verdict": "worse"
+   }
+  }
+ },
+ "secondary": {
+  "grounded": {
+   "recall_at_5": 0.9125,
+   "hit_at_3": 0.85,
+   "mrr": 0.7570833333333333
+  },
+  "footnote": {
+   "recall_at_5": 0.9125,
+   "hit_at_3": 0.875,
+   "mrr": 0.7416666666666667
+  },
+  "footnote_same_text": {
+   "recall_at_5": 0.9125,
+   "hit_at_3": 0.85,
+   "mrr": 0.7758333333333334
+  }
+ }
+}
