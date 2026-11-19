@@ -471,7 +471,29 @@ fn parse(root: &Path, project: &str) -> anyhow::Result<(Vec<Document>, usize, Ve
                 .collect::<Vec<_>>()
         })
         .collect();
-    let local = |m: &str| {
+    // Java packages the project holds, as every tail of a source folder: `org/acme/store` for `src/main/java/org/acme/store`.
+    // Its folders are named `java` and `main` too, so a stem match would call `java.util.Set` local.
+    let java_dirs: HashSet<String> = files
+        .iter()
+        .filter(|f| f.1 == Lang::Java)
+        .filter_map(|f| f.0.rsplit_once('/').map(|d| d.0))
+        .flat_map(|d| {
+            d.char_indices()
+                .filter(|&(_, c)| c == '/')
+                .map(|(i, _)| &d[i + 1..])
+                .chain([d])
+        })
+        .map(str::to_string)
+        .collect();
+    let local = |m: &str, file: usize| {
+        if files[file].1 == Lang::Java {
+            // `a.b.C` or `a.b.C.f` (a static import): the package is `a/b` or `a/b/C`'s parent.
+            let path = m.replace('.', "/");
+            return std::iter::successors(Some(path.as_str()), |p| p.rsplit_once('/').map(|x| x.0))
+                .skip(1)
+                .take(2)
+                .any(|d| java_dirs.contains(d));
+        }
         m.starts_with('.')
             || m.starts_with('/')
             || ["crate", "self", "super"].contains(&first(m))
@@ -508,7 +530,10 @@ fn parse(root: &Path, project: &str) -> anyhow::Result<(Vec<Document>, usize, Ve
         };
         // Imported type identity is not established by this table, except a TypeScript or Python class imported from
         // the project's own module: its name is checked unique below.
-        if imports[file].get(&owner).is_some_and(|m| rust || !local(m)) {
+        if imports[file]
+            .get(&owner)
+            .is_some_and(|m| rust || !local(m, file))
+        {
             return None;
         }
         // Equal short names in different modules are distinct types. Never combine their method tables.
@@ -704,7 +729,7 @@ fn parse(root: &Path, project: &str) -> anyhow::Result<(Vec<Document>, usize, Ve
         {
             Some((same[0], "same_file"))
         } else if let Some(module) = via {
-            if !local(module) {
+            if !local(module, c.file) {
                 // A call into an outside package: counted for the architecture map, never linked.
                 let pkg = package_of(files[c.file].1, module);
                 docs[c.file].occurrences.push(Occurrence {
@@ -2020,6 +2045,37 @@ mod tests {
             ],
             "{rules:?}"
         ); // `u.save()` (no annotation), loop and comprehension variables: no link
+    }
+
+    #[test]
+    fn java_standard_library_imports_stay_outside_the_project() {
+        let t = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(t.path().join("src/main/java/acme")).unwrap();
+        let w = |p: &str, s: &str| std::fs::write(t.path().join(p), s).unwrap();
+        // A project class named like `java.util.Set`, and a folder named `java` that must not make the import local.
+        w(
+            "src/main/java/acme/Set.java",
+            "package acme;
+class Set {
+  void add(Object o) {}
+}
+",
+        );
+        w(
+            "src/main/java/acme/C.java",
+            "package acme;
+import java.util.Set;
+class C {
+  private Set<String> s;
+  void f() { s.add(\"x\"); }
+}
+",
+        );
+        let (_, _, rules) = parse(t.path(), "demo").unwrap();
+        assert!(
+            !rules.iter().any(|l| l.contains("receiver_type")),
+            "{rules:?}"
+        );
     }
 
     #[test]

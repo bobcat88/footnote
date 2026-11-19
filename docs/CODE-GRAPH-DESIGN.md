@@ -396,7 +396,12 @@ Edges are file, line, method name and target file; JDK 21, parser only, no index
 | jsoup (5,908) | 2,090 · 0.76 · 0.27 | 3,373 · **1.00** · **0.57** |
 | commons-lang (5,024) | 5,148 · 0.72 · 0.74 | 3,823 · **1.00** · **0.76** |
 
-`receiver_type` links: 774, 1,789 and 213, at 1.00, 1.00 and 0.99. Bare calls (`foo()`) now count as calls on `this`, which also
+| Spring Framework (core, beans, aop, expression, context: 2,057 files, 28,138) | 13,696 · 0.70 · 0.34 | 16,579 · **1.00** · **0.59** |
+
+The Spring run first scored 0.97, not 1.00: 391 `receiver_type` links sent a `java.util.Set` or `List` field to a project class
+named `Set` (spring-core's nested `Attribute.Set`). Cause: a Java import counted as the project's own when the first word of its
+package (`java`) was also a folder name (`src/main/java`). Fixed by matching Java imports against the project's package folders,
+with a regression test. Spring indexes in 4.7 s (2,057 files). `receiver_type` links: 774, 1,789 and 213, at 1.00, 1.00 and 0.99. Bare calls (`foo()`) now count as calls on `this`, which also
 removed the wrong same-file links the old rule made to a same-named method of another class. Index time 0.5, 0.7 and 2.0 s.
 Not measured: Graphify and the other tools on Java, Kotlin and Scala (no grammar yet), calls to inherited methods (recall gap in
 commons-lang), and projects that need dependencies on the classpath. Still open for #179: Kotlin and Scala grammars (licence and
