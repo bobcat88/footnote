@@ -363,7 +363,9 @@ fn retire(c: &Connection, source: i64, status: &str) -> Result<()> {
 
 /// Store a batch of memories. Each item: `text`, `kind`, `scope` ("global" or a project name), `observed_at` (YYYY-MM-DD),
 /// optional `session`, optional `supersedes` (id of the memory it replaces, which is kept as history but no longer returned).
-/// `origin`: `mcp` or `cli`, recorded with each memory (#207).
+/// `origin`: `mcp` or `cli`, recorded with each memory (#207). A global preference written over MCP waits for the user's
+/// review (status `pending`, out of recall) because it steers every later prompt in every project: an injected agent must
+/// not plant one. `restore` approves it, `forget` rejects it.
 pub fn remember(
     c: &mut Connection,
     items: &Value,
@@ -453,13 +455,19 @@ pub fn remember(
             text,
             "",
         )?;
-        if let Some(old) = supersedes {
+        let pending = origin == "mcp" && scope == "global" && kind == "preference";
+        if pending {
+            retire(&tx, id, "pending")?; // what it supersedes stays live until the user approves it
+        } else if let Some(old) = supersedes {
             retire(&tx, old, "superseded")?;
         }
         let chunk: i64 = tx.query_row("SELECT id FROM chunks WHERE source_id=?1", [id], |r| {
             r.get(0)
         })?;
         let mut row = json!({"id": chunk, "kind": kind, "scope": scope, "tags": tags});
+        if pending {
+            row["pending_review"] = json!(true);
+        }
         if !anchors.is_empty() {
             row["code"] = json!(anchors);
         }
@@ -467,6 +475,11 @@ pub fn remember(
     }
     tx.commit()?;
     let mut report = json!({"stored": stored, "duplicates": duplicates});
+    if stored.iter().any(|r| r["pending_review"] == true) {
+        report["note"] = json!(
+            "Global preferences saved by an agent wait for the user's review before any agent sees them: tell the user you proposed them, and that `footnote memory-review` lists them."
+        );
+    }
     report["lexical_index"] = json!(match lexical::sync(c) {
         Ok(Some(_)) => "ready",
         Ok(None) => "not_applicable",
@@ -496,6 +509,16 @@ pub fn restore(c: &mut Connection, id: i64) -> Result<Value> {
         r.get(0)
     })?;
     anyhow::ensure!(status != "indexed", "memory {id} is not retired");
+    // Approving a pending memory applies the supersession it was saved with.
+    if status == "pending"
+        && let Some(old) = tx.query_row(
+            "SELECT supersedes FROM memories WHERE source_id=?1",
+            [source],
+            |r| r.get::<_, Option<i64>>(0),
+        )?
+    {
+        retire(&tx, old, "superseded")?;
+    }
     tx.execute(
         "UPDATE sources SET status='indexed',revision=revision+1 WHERE id=?1",
         [source],
@@ -511,6 +534,15 @@ fn row(r: &rusqlite::Row<'_>) -> rusqlite::Result<Value> {
     )
 }
 const LIVE: &str = "SELECT c.id,m.kind,m.scope,m.observed_at,c.text FROM memories m JOIN sources s ON s.id=m.source_id JOIN chunks c ON c.source_id=s.id WHERE s.status='indexed'";
+
+/// Memories waiting for the user's review (#207), oldest first.
+pub fn pending(c: &Connection) -> Result<Vec<Value>> {
+    let mut s = c.prepare(&format!(
+        "{} ORDER BY c.id",
+        LIVE.replace("s.status='indexed'", "s.status='pending'")
+    ))?;
+    Ok(s.query_map([], row)?.collect::<rusqlite::Result<_>>()?)
+}
 
 /// The project's newest handoff observed on or after `since` (#250): a memory tagged `handoff` that a long session saved
 /// before the user cleared it, put first in the next session's pack.

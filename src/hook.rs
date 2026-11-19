@@ -19,6 +19,9 @@ const SAVE: &str = r#"Footnote memory: before you stop, save what is worth remem
 - tags: 1 to 5 short lowercase words for the stack, platform, component or state ("rust", "windows", "daemon", "bugfix", "resolved"), only when the conversation supports them; footnote_tag adds or removes tags on an existing memory.
 - Skip what is already remembered, what is readable in the code or git history, and temporary task state.
 Then tell the user in one short line what you saved (count and ids), or that nothing was worth keeping. Then stop."#;
+/// At this many memories waiting for review (#207), the session start reminds the user, so the queue is never missed.
+const REVIEW_AT: usize = 5;
+const REVIEW: &str = "Footnote: {n} global preferences that agents saved are waiting for the user's review, and no agent sees them until then. Tell the user in one line, and that `footnote memory-review` lists them (`footnote memory-restore <id>` approves one, `footnote forget <id>` rejects it).";
 const VISIBLE: &str = "Footnote memory: when one of these memories, or one recalled later in this session, shapes your answer, say so in a few words (for example \"from memory: ...\"). Do not mention memories that played no part.";
 const HANDOFF: &str = r#"Footnote: this session's context is {tokens} tokens, and every call re-reads all of it. Before you stop, save one handoff memory with the footnote_remember tool (MCP server footnote-memory): kind "session", scope "{project}", observed_at "{today}", tags ["handoff"], one self-contained paragraph with the task, the decisions made, what is done and left, the next step, and the files and issues involved. Then tell the user in one line that the session is long and that running /clear (or opening a new session) continues the work for a fraction of the cost; Footnote brings the handoff back first at the next start. Then stop."#;
 const MAX_EVENT: u64 = 2 * 1024 * 1024;
@@ -536,14 +539,21 @@ fn handle(state: &Path, s: &Settings, event: &Value) -> Result<Option<Value>> {
                     "What you remember about this user and project",
                     false,
                 );
-                out = context(
-                    &e.name,
-                    if pack.is_empty() {
-                        pack
+                let mut text = if pack.is_empty() {
+                    pack
+                } else {
+                    format!("{pack}\n\n{VISIBLE}")
+                };
+                let waiting = crate::memory::pending(&conn).map_or(0, |p| p.len());
+                if waiting >= REVIEW_AT {
+                    let line = REVIEW.replace("{n}", &waiting.to_string());
+                    text = if text.is_empty() {
+                        line
                     } else {
-                        format!("{pack}\n\n{VISIBLE}")
-                    },
-                );
+                        format!("{text}\n\n{line}")
+                    };
+                }
+                out = context(&e.name, text);
             }
         }
         "UserPromptSubmit" => {

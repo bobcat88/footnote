@@ -449,3 +449,39 @@ fn a_long_session_is_asked_once_for_a_handoff_that_leads_the_next_pack() {
         "{pack}"
     );
 }
+
+#[test]
+fn five_pending_global_preferences_remind_the_user_at_session_start() {
+    let t = tempfile::tempdir().unwrap();
+    let state = t.path();
+    seed(state, &[]);
+    // Agents save global preferences over MCP; each waits for the user's review (#207).
+    let propose = |n: usize| {
+        let mut input = json!({"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"t","version":"1"}}}).to_string() + "
+";
+        for i in 0..n {
+            input += &(json!({"jsonrpc":"2.0","id":i + 2,"method":"tools/call","params":{"name":"footnote_remember","arguments":{"memories":[
+                {"text": format!("Agent-proposed preference {i}."), "kind": "preference", "scope": "global", "observed_at": "2026-11-19"}]}}}).to_string() + "
+");
+        }
+        command(state)
+            .arg("--db")
+            .arg(state.join("memory.db"))
+            .args(["serve", "--mcp"])
+            .write_stdin(input)
+            .assert()
+            .success();
+    };
+    propose(4);
+    let start = hook(state, event("SessionStart", ""));
+    assert!(
+        !start.contains("waiting for the user's review") && !start.contains("Agent-proposed"),
+        "{start}"
+    );
+    propose(5); // the same four again, plus a fifth
+    let start = hook(state, event_in("s2", "SessionStart", ""));
+    assert!(
+        start.contains("5 global preferences") && !start.contains("Agent-proposed"),
+        "{start}"
+    );
+}

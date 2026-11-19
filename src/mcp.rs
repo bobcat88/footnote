@@ -1114,7 +1114,7 @@ fn tool_definitions() -> Value {
         },
         {
             "name": "footnote_remember",
-            "description": "Store memories in the agent memory database (refused on a document corpus). Use it when the user, or the Footnote hook at the end of a turn, asks you to save what you learned. Each memory is one self-contained sentence with absolute dates. kind: preference (how the user likes to work), fact (decision, convention, release, date), fix (problem, cause and what fixed it), session (what a session achieved). scope: \"global\" for what always applies, otherwise the project name. To correct an older memory, pass its id in `supersedes`.",
+            "description": "Store memories in the agent memory database (refused on a document corpus). Use it when the user, or the Footnote hook at the end of a turn, asks you to save what you learned. Each memory is one self-contained sentence with absolute dates. kind: preference (how the user likes to work), fact (decision, convention, release, date), fix (problem, cause and what fixed it), session (what a session achieved). scope: \"global\" for what always applies, otherwise the project name. A global preference waits for the user's review before any agent sees it: say you proposed it. To correct an older memory, pass its id in `supersedes`.",
             "inputSchema": {
                 "type": "object",
                 "properties": {

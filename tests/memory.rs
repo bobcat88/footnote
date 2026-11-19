@@ -247,9 +247,55 @@ fn agents_can_remember_over_mcp_but_never_into_a_corpus() {
         json!({"memories": [mem("Prefers French answers.", "preference", "global", "2026-11-14")]}),
     );
     assert_eq!(ok["isError"], false, "{ok}");
+    // A global preference from an agent waits for the user's review (#207): no agent sees it until it is approved.
+    assert!(texts(&run(&memory, &["memory-pack"], None)).is_empty());
+    // memory-review reads the state folder's database, which is this test's folder.
+    let review: Value = serde_json::from_slice(
+        &cmd(&memory, &["memory-review"])
+            .env("FOOTNOTE_STATE_DIR", t.path())
+            .assert()
+            .success()
+            .get_output()
+            .stdout,
+    )
+    .unwrap();
+    assert_eq!(review["counts"]["pending"], 1, "{review}");
+    let id = review["pending"][0]["id"].as_i64().unwrap().to_string();
+    run(&memory, &["memory-restore", &id], None);
     assert_eq!(
         texts(&run(&memory, &["memory-pack"], None)),
         ["Prefers French answers."]
+    );
+    // A pending correction leaves the old preference live until the user approves it.
+    let mut fix = mem(
+        "Prefers English answers.",
+        "preference",
+        "global",
+        "2026-11-15",
+    );
+    fix["supersedes"] = json!(id.parse::<i64>().unwrap());
+    let saved = call(&memory, "footnote_remember", json!({"memories": [fix]}));
+    let new_id: Value =
+        serde_json::from_str(saved["content"][0]["text"].as_str().unwrap()).unwrap();
+    let new_id = new_id["stored"][0]["id"].as_i64().unwrap().to_string();
+    assert_eq!(
+        texts(&run(&memory, &["memory-pack"], None)),
+        ["Prefers French answers."]
+    );
+    run(&memory, &["memory-restore", &new_id], None);
+    assert_eq!(
+        texts(&run(&memory, &["memory-pack"], None)),
+        ["Prefers English answers."]
+    );
+    // A global fact from an agent is live at once.
+    call(
+        &memory,
+        "footnote_remember",
+        json!({"memories": [mem("Ships on Windows first.", "fact", "global", "2026-11-14")]}),
+    );
+    assert!(
+        texts(&run(&memory, &["memory-pack"], None))
+            .contains(&"Ships on Windows first.".to_string())
     );
     // Each memory says who wrote it (#207): an agent over MCP, or a person at the command line.
     run(
@@ -270,7 +316,7 @@ fn agents_can_remember_over_mcp_but_never_into_a_corpus() {
         })
         .collect();
     assert!(
-        origins.contains(&("Prefers French answers.", "mcp"))
+        origins.contains(&("Prefers English answers.", "mcp"))
             && origins.contains(&("Uses Rust.", "cli")),
         "{pack}"
     );

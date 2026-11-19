@@ -1,5 +1,6 @@
 //! `footnote memory-review`: a bounded list of memories worth a second look (goal 11), each with its reason. Nothing changes
-//! here: the user decides, with `forget <id>` (kept as history) or `memory-restore <id>` (undoes a forget or a supersession).
+//! here: the user decides, with `forget <id>` (kept as history) or `memory-restore <id>` (undoes a forget or a supersession,
+//! or approves a pending memory: a global preference an agent saved, held back until the user reviews it, #207).
 use anyhow::Result;
 use serde_json::{Value, json};
 use std::collections::{HashMap, HashSet};
@@ -27,7 +28,7 @@ pub fn review(limit: usize) -> Result<Value> {
     let db = crate::status::memory_db(&state)?;
     if !db.exists() {
         return Ok(
-            json!({"duplicates": [], "old_sessions": [], "unused": [], "counts": {}, "note": "no memories yet"}),
+            json!({"pending": [], "duplicates": [], "old_sessions": [], "unused": [], "counts": {}, "note": "no memories yet"}),
         );
     }
     let c = crate::app::open(&db, false)?;
@@ -101,12 +102,13 @@ pub fn review(limit: usize) -> Result<Value> {
             .collect()
     };
 
-    let counts = json!({"memories": live.len(), "duplicates": duplicates.len(), "old_sessions": old_sessions.len(), "unused": unused.len()});
+    let pending = crate::memory::pending(&c)?;
+    let counts = json!({"pending": pending.len(), "memories": live.len(), "duplicates": duplicates.len(), "old_sessions": old_sessions.len(), "unused": unused.len()});
     let take = |v: Vec<Value>| v.into_iter().take(limit).collect::<Vec<_>>();
     Ok(json!({
-        "duplicates": take(duplicates), "old_sessions": take(old_sessions), "unused": take(unused), "counts": counts,
+        "pending": take(pending), "duplicates": take(duplicates), "old_sessions": take(old_sessions), "unused": take(unused), "counts": counts,
         "unused_since": since, "older_than": old,
-        "how": "Nothing was changed. `footnote forget <id>` retires a memory (kept as history); `footnote memory-restore <id>` brings it back.",
+        "how": "Nothing was changed. `footnote memory-restore <id>` approves a pending memory or brings a retired one back; `footnote forget <id>` rejects or retires one (kept as history).",
     }))
 }
 

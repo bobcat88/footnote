@@ -105,6 +105,10 @@ Add-only with supersede links, as in mem0's newest pipeline and Zep: nothing is 
 3. **Who may write: the extraction hook and explicit requests only.** Never automatic writes from tool output. A user command forces an extraction at the current point of the session.
 4. **Sensitive projects.** A project can be marked sensitive. Its project memories are then never extracted through a non-local LLM. Global preferences may still be extracted. Project memories in a sensitive project come only from a local LLM route.
 
+5. **Global preferences from agents wait for the user's review (Johan, 19 November 2026, #207).** A global preference saved over MCP is stored as `pending`: no recall, pack or search returns it, and what it supersedes stays live, until the user approves it (`footnote memory-restore <id>`) or rejects it (`footnote forget <id>`). `footnote memory-review` lists the pending ones first, and from 5 pending the session start asks the agent to tell the user. Project memories, global facts and fixes, and anything written at the command line are live at once. There is no exemption for the hook's own save request, because an injected agent can answer that request too.
+
+   *Why, for the product presentation:* a global preference is recalled into every later prompt, in every project, by every agent. Some grant permissions ("may run benchmarks without asking"). An agent that read a hostile page or README could otherwise turn one prompt injection into a standing rule that steers all future work (security audit of 18 November 2026, `docs/security/AUDIT-2026-11-18.md`). The cost is small: about 3 to 5 global preferences a day in the first week (64 global memories out of 297, 45 of them preferences), a minute of review, against the one memory kind whose forgery would do the most harm.
+
 After agent memory: index build time (section "Where Footnote loses" in `bench/experiments/FINAL-RANKING.md`).
 
 ## 7b. One layer: the agent writes its own memories (Johan, 14 November 2026)
