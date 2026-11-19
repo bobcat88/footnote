@@ -10,7 +10,7 @@ Verdicts: **adopt** (review it, then add it to the catalogue), **cherry-pick** (
    - Micro-skills overlap Footnote Memory, tool pruning automates what we did by hand when we removed codebase-memory-mcp from normal runs, and the loop guard is something Lean does not have.
    - Action: add it as an arm in Lean E (#244). Lean must beat it on cost per accepted delivery, or we cannot claim the lead.
 2. **Indra OCR (Datalab) is a strong new candidate for the OCR benchmark (#136).** It runs on CPU at about 210 ms a page on 4 cores and outputs Markdown, text or JSON with boxes and reading order. It reports 66.7 on OmniParseBench against 58.4 for PaddleOCR PP-StructureV3 (vendor numbers; French is not benchmarked separately). The models are ONNX files with no PyTorch, so Footnote could run them from Rust through ONNX Runtime and stay within the all-Rust rule. Licences: the code is Apache-2.0, but the weights are under a modified OpenRAIL-M licence, free for personal use, research and startups under $20M, and not for use that competes with Datalab's API. That fits Johan's personal corpus. Shipping the weights inside Footnote for companies would need a licence check first.
-3. **SkillEvaluator (NVIDIA; Apache-2.0)** does two things #229 needs. Its static tier checks a skill's schema, PII, licence, hidden Unicode and scripts, runs Gitleaks, Bandit and SkillSpector, and tests whether each agent actually loads the skill. Its live tier compares runs with and without the skill in a sandbox. Action: use its static tier as the automated first pass of the source review (lab tooling, so Python is fine). Keep our Flow matrix for the live comparison, because ours measures cost per accepted delivery and theirs does not report tokens.
+3. **SkillEvaluator (NVIDIA; Apache-2.0)** does two things #229 needs. Its static tier checks a skill's schema, PII, licence, hidden Unicode and scripts, runs Gitleaks, Bandit and SkillSpector, and tests whether each agent actually loads the skill. Its live tier compares runs with and without the skill in a sandbox. Action: use its static tier as the automated first pass of the source review (lab tooling, so Python is fine). Keep our Flow matrix for the live comparison, because ours measures cost per accepted delivery; theirs records tokens but scores quality.
 
 ## Every screenshot
 
@@ -23,17 +23,17 @@ Verdicts: **adopt** (review it, then add it to the catalogue), **cherry-pick** (
 | Modern Web Guidance (Chrome team, with Edge and Firefox) | Skill and CLI that fetch current web-platform guidance and Baseline compatibility data | **adopt** | Official source, small, fills a real gap for the website: agents write dated front-end code |
 | OpenSEO (MIT) | Self-hosted Semrush or Ahrefs alternative with an MCP server | **skip for now** | Needs paid DataForSEO credits. Google Search Console and Bing Webmaster Tools are free and enough for an alpha site |
 | Graphify | Code and docs knowledge graph | **done** | Already benchmarked against Footnote Code (#246, docs/CODE-GRAPH-DESIGN.md) |
-| Dashboard Design skill (abdiraimov-otabek, ~64 stars) | Dashboard UI skill with screenshot checks | **study** | `dataviz` + QLoop already cover it. Its "done when" steps per stage are worth borrowing |
+| Dashboard Design skill (abdiraimov-otabek, ~64 stars) | Dashboard UI skill with screenshot checks | **adopt** (after due diligence) | Its "done when" steps, known-total fixtures and honesty-first critique are worth taking whole; remove its promo sign-off |
 | ppt-master (MIT, ~75k stars) | Agent-built native PowerPoint (SVG to DrawingML) | **study** | We have `premium-editable-presentations` and `pptx`. Its native-chart path is the part to compare. It is token-heavy, and its PDF step pulls in PyMuPDF (AGPL) |
 | Papermorph | PDF to animated web book skill | **skip** | No planned use |
 | MotionSites skill | Cinematic landing pages | **have it** | Installed as `motionsites-web-builder` |
 | Humanizer, ADHD, Taste, UI UX Pro Max, Archify | Writing and design skills from the same video lists | **skip** | `unslop`, `impeccable`, `design-taste-frontend` and `design-studio` cover them; more overlapping design skills make output less consistent |
 | Cap | Open-source screen recorder | **adopt as a tool** | Demo videos for the alpha launch, free |
 | OpenWhispr, VoiceStudio, Open Higgsfield, Chatwoot, AppFlowy | Dictation, voice, AI video, support desk, notes | **skip** | Off the plan. Chatwoot only if alpha support outgrows GitHub issues |
-| AG-UI (MIT) | Event protocol between agents and front ends | **skip** | Footnote's Launcher does not host agent runs. Revisit if it ever streams one |
-| gitcraft | Rust + egui git client | **skip** | Interesting stack, but the Launcher is Tauri, and that choice stands |
+| AG-UI (MIT) | Event protocol between agents and front ends | **catalogue candidate** | Not needed for Footnote today; for any project that streams agent runs into a UI, use its event model and review its `ag-ui-a2ui-integration` skill |
+| gitcraft | Rust + egui git client | **reference** | The Launcher stays Tauri; as a cross-project reference for an egui desktop skill |
 | Sniffnet, Pulse | Network monitor, Windows event viewer | **skip** | Off-topic. Pulse's timeline is a decent reference for a health view |
-| Skipper UI, Vengeance UI, Animaster | React animation libraries | **skip** | `transitions-dev` covers what we need, and the HIG asks for restraint in motion |
+| Skiper UI, Vengeance UI, Animaster | React animation libraries | **skip (no source)** | Paid packs with no public source to review; if a project needs one, a free library (Magic UI) is the candidate |
 | "20 ways to unslop AI designs" | Checklist | **study** | Mostly in `impeccable` and `unslop` already. Check DESIGN.md for the three often missed: tabular figures, inner radius = outer radius − padding, loading states |
 | "22 backgrounds" | Texture list | **study** | The blueprint grid is already in the Code map direction. Use one texture at most, on marketing pages only |
 | Comment on plugin safety ("what can it read, run, reach; is it pinned") | Review questions | **have it** | Same rule as the #229 review: pinned, hashed, read before listing |
@@ -81,5 +81,7 @@ Marketing packs are written for SaaS growth teams and push volume: popups, urgen
 - ppt-master: https://github.com/hugohe3/ppt-master
 - Dashboard Design skill: https://skillsllm.com/skill/dashboard-design-skill
 - AG-UI: https://github.com/ag-ui-protocol/ag-ui
+
+Due diligence on the cloned repos: [THIRD-PARTY-DUE-DILIGENCE.md](THIRD-PARTY-DUE-DILIGENCE.md). Verdicts above are for the cross-project catalogue, not only the Footnote plan.
 
 All retrieved 19 November 2026. Figures are the projects' own and have not been reproduced.
