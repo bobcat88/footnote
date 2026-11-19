@@ -610,6 +610,13 @@ fn parse(root: &Path, project: &str) -> anyhow::Result<(Vec<Document>, usize, Ve
                     _ => None,
                 };
             }
+            // A field of that name (`match = match` in a class) hides the base's method: unknown, not the base's.
+            if level
+                .iter()
+                .any(|o| fields.contains_key(&(o.clone(), name.to_string())))
+            {
+                return None;
+            }
             level = level
                 .iter()
                 .flat_map(|o| {
@@ -2376,6 +2383,10 @@ export interface Named { name(): string }
             "import { Root, Named } from './base';
 class Kid extends Root implements Named {
   name() { return ''; }
+  go() { this.open(); }
+}
+class Fld extends Root {
+  open: () => void = () => {};
   go() { this.open(); }
 }
 class Wild extends Elsewhere {
