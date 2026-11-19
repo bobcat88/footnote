@@ -79,10 +79,10 @@ Plan and decisions: [P1-PLAN.md](P1-PLAN.md) (engine commands first, then design
   originals in secure storage, one editable Markdown per original linked by content hash, and benchmarked high-precision OCR.
   Six gated steps in [PERSONAL-CORPUS-PLAN.md](PERSONAL-CORPUS-PLAN.md); nothing is ingested before Johan approves a step.
 
-12. **Footnote Alias** (pseudonymisation before the LLM): desk study done 16 Nov ([ALIAS-DESK-STUDY.md](../research/ALIAS-DESK-STUDY.md)):
+12. **Footnote Alias** (pseudonymisation before the LLM): **moved to Footnote Enterprise on 19 Nov (#144): the code, desk study and evaluation now live in the private `footnote-enterprise` repository, and this free build has no Alias.** Desk study done 16 Nov (ALIAS-DESK-STUDY.md there):
     French identifier rules in Rust (no tool ships them), one small model for names and addresses chosen by measurement on French
     text (GLiNER2-PII, urchade multi PII, OpenAI Privacy Filter as reference), stable keyed pseudonyms. Done 16 Nov: evaluation
-    set v1 and rule ([ALIAS-EVAL.md](../../bench/experiments/ALIAS-EVAL.md)); the Rust rules (`crates/alias`, `footnote alias-scan`)
+    set v1 and rule (ALIAS-EVAL.md there); the Rust rules (`crates/alias`, formerly `footnote alias-scan`)
     pass the identifiers part on held-out (1.000, no look-alike hit). Rules plus OpenAI Privacy Filter (ONNX q4) pass names on
     held-out (0.913, misses are lone first names). Done 16 Nov: both inside the binary (`alias-scan --model`, same held-out scores,
     34 ms per text) with stable keyed pseudonyms (`--pseudonymise`). Installed with `footnote models install openai-privacy-filter`

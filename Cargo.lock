@@ -882,7 +882,6 @@ dependencies = [
  "anyhow",
  "assert_cmd",
  "clap",
- "footnote-alias",
  "footnote-code",
  "footnote-core",
  "footnote-library",
@@ -905,19 +904,6 @@ dependencies = [
  "windows-sys 0.61.2",
  "zeroize",
  "zstd",
-]
-
-[[package]]
-name = "footnote-alias"
-version = "0.1.0-alpha.1"
-dependencies = [
- "anyhow",
- "footnote-core",
- "ort",
- "regex",
- "serde",
- "sha2",
- "tokenizers",
 ]
 
 [[package]]

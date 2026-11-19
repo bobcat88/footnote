@@ -199,13 +199,6 @@ pub fn load_or_create_key() -> Result<PathBuf> {
     Ok(path)
 }
 
-/// Footnote Alias's pseudonym key, generated on first use. Losing it changes every pseudonym, so it is never replaced.
-pub fn load_or_create_alias_key() -> Result<Vec<u8>> {
-    let path = state_dir()?.join("alias.key");
-    write_private(&path, random_hex(32)?.as_bytes())?;
-    crate::audit::load_key(&path)
-}
-
 /// The daemon token, generated on first use. Both the daemon and its local proxy
 /// read this same file, so the handshake needs no user action.
 pub fn load_or_create_token() -> Result<String> {

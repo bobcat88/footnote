@@ -155,34 +155,7 @@ const RECIPES: &[Recipe] = &[
 ];
 const DEFAULT_PAIR: [&str; 2] = ["bekko-a8m", "gte-small"];
 
-/// Footnote Alias's detector, OpenAI Privacy Filter (Apache-2.0, bench/experiments/ALIAS-EVAL.md). Not an embedding model: no
-/// manifest, never offered to `use`. Every file pinned, the 875 MB weights included (Alias does not re-hash them at each load).
-const ALIAS_MODEL: &str = "openai-privacy-filter";
-const ALIAS_SOURCE: (&str, &str) = (
-    "openai/privacy-filter",
-    "7ffa9a043d54d1be65afb281eddf0ffbe629385b",
-);
-/// The three Alias files at the pinned revision, from the Hugging Face API (17 Nov 2026).
-const ALIAS_DOWNLOAD_BYTES: u64 = 945_148_537;
-const ALIAS_FILES: [(&str, &str); 3] = [
-    (
-        "tokenizer.json",
-        "0614fe83cadab421296e664e1f48f4261fa8fef6e03e63bb75c20f38e37d07d3",
-    ),
-    (
-        "onnx/model_q4.onnx",
-        "8f7dee8b46d096f052b359375dfba5d983cc4d18c44a783bf548615c472f8dea",
-    ),
-    (
-        "onnx/model_q4.onnx_data",
-        "f30998e28c71c5374cc7e8b7de8f0f83e981592c0c2d652d2ad4928454dbb496",
-    ),
-];
-
 fn recipe(name: &str) -> Result<&'static Recipe> {
-    if name == ALIAS_MODEL {
-        bail!("`{ALIAS_MODEL}` is Footnote Alias's detector, not an embedding model");
-    }
     RECIPES
         .iter()
         .find(|r| r.name == name)
@@ -227,12 +200,6 @@ pub fn list(state: &Path) -> Result<Value> {
                 "license": (!r.license.is_empty()).then_some(r.license)})
         })
         .collect();
-    let alias_dir = models_dir(state).join(ALIAS_MODEL);
-    let alias_installed = ALIAS_FILES.iter().all(|(f, _)| alias_dir.join(f).exists());
-    let mut rows = rows;
-    rows.push(json!({"name": ALIAS_MODEL, "role": "Footnote Alias: names, addresses and dates", "installed": alias_installed,
-        "path": alias_installed.then(|| alias_dir.clone()), "used_by_memory": false, "download_bytes": ALIAS_DOWNLOAD_BYTES,
-        "source": format!("{}@{}", ALIAS_SOURCE.0, &ALIAS_SOURCE.1[..12]), "license": "Apache-2.0"}));
     // Models the hook uses from elsewhere (for example a development checkout) are reported too.
     let elsewhere: Vec<&String> = used
         .iter()
@@ -375,24 +342,6 @@ fn manifest_text(r: &Recipe, files: &[(&str, String, u64, String)]) -> String {
 pub fn install(state: &Path, names: &[String]) -> Result<Value> {
     let mut done = Vec::new();
     for name in names {
-        if name == ALIAS_MODEL {
-            if !cfg!(feature = "alias") {
-                bail!(
-                    "`{name}` is for Footnote Alias, which this build of Footnote does not include"
-                );
-            }
-            let dir = models_dir(state).join(name);
-            ignore_models(state)?;
-            for (file, pinned) in ALIAS_FILES {
-                let url = format!(
-                    "https://huggingface.co/{}/resolve/{}/{file}",
-                    ALIAS_SOURCE.0, ALIAS_SOURCE.1
-                );
-                fetch(state, name, &dir.join(file), &url, Some(pinned))?;
-            }
-            done.push(json!({"name": name, "path": dir, "license": "Apache-2.0"}));
-            continue;
-        }
         let r = recipe(name)?;
         if r.gguf() && !cfg!(feature = "llama") {
             bail!("`{name}` runs through llama.cpp, which this build of Footnote does not include");
@@ -489,9 +438,7 @@ pub fn use_models(state: &Path, names: &[String]) -> Result<Value> {
 }
 
 pub fn remove(state: &Path, name: &str) -> Result<Value> {
-    if name != ALIAS_MODEL {
-        recipe(name)?;
-    }
+    recipe(name)?;
     let dir = models_dir(state).join(name);
     if in_use(state)?.iter().any(|u| same_model(u, &dir)) {
         bail!("`{name}` is used by Footnote Memory; switch with `footnote models use` first");

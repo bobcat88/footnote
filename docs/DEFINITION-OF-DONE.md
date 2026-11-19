@@ -7,8 +7,8 @@ story's own acceptance criteria both hold. A story that cannot meet a line says 
 
 1. **One branch, one PR**, Conventional Commit title of at most 72 characters, merged by squash, branch deleted locally and on
    GitHub. The PR body says what changed, how it was checked, and what was not checked.
-2. **Local checks pass** (CI has no credits): `cargo fmt --all --check`; clippy `-D warnings` on the six CI feature sets (default,
-   library, memory, code, alias, llama), plus `encryption` when touched; `cargo test --workspace`.
+2. **Local checks pass** (CI has no credits): `cargo fmt --all --check`; clippy `-D warnings` on the five CI feature sets (default,
+   library, memory, code, llama), plus `encryption` when touched; `cargo test --workspace`.
 3. **A test that fails without the change** (for a fix, shown failing first). Tests never write to the real state folder.
 4. **Dependencies:** a new crate or package gets a security review (real upstream, code read, install hooks and build scripts
    checked) and passes `python scripts/third_party.py --check`.

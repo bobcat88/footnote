@@ -10,7 +10,6 @@ One workspace, dependencies pointing one way ([ADR 0001](adr/0001-repository-str
 | `crates/search` (`footnote-search`) | The one schema and its migrations (`store.rs`), Tantivy keyword index, embeddings (ONNX, optional llama.cpp), fusion, records |
 | `crates/library` (`footnote-library`) | Footnote Library: extraction, folder indexing |
 | `crates/memory` (`footnote-memory`) | Footnote Memory: remember, recall, pack, forget |
-| `crates/alias` (`footnote-alias`) | Footnote Alias, not released (feature `alias`): personal-data identifiers found by rules with check digits |
 | root package `footnote` (`src/`) | The executable: command line, MCP server, daemon, hook, install |
 
 Products are features of the executable, on by default: `cargo build --release --no-default-features --features library` builds

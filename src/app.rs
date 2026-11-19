@@ -360,17 +360,6 @@ enum Action {
         #[command(subcommand)]
         action: ConfigAction,
     },
-    /// Footnote Alias (not released): personal data in a JSON array of texts on stdin, by rules with check digits and, when
-    /// installed, OpenAI Privacy Filter for names, addresses and dates.
-    #[cfg(feature = "alias")]
-    AliasScan {
-        /// Privacy Filter folder (default: `models/openai-privacy-filter` in the state folder, if present).
-        #[arg(long)]
-        model: Option<PathBuf>,
-        /// Return each text with keyed pseudonyms (`[PERSON_3f9a1c]`) and the replacement table, instead of the hits.
-        #[arg(long)]
-        pseudonymise: bool,
-    },
     /// Footnote Code: build the code graph of a project (Rust, TypeScript/JavaScript, Python, others by parser). Warning:
     /// for Rust, `rust-analyzer scip` builds the project, which runs its build scripts and procedural macros, so index
     /// only code you trust; without the compiler indexer, the parser graph runs no project code.
@@ -597,46 +586,6 @@ fn execute(cli: Cli) -> Result<Value> {
         #[cfg(feature = "code")]
         Action::Code { name, root, limit } => {
             return code_lookup(root, name, *limit, false);
-        }
-        #[cfg(feature = "alias")]
-        Action::AliasScan {
-            model,
-            pseudonymise,
-        } => {
-            let texts: Vec<String> = serde_json::from_reader(std::io::stdin().lock())?;
-            let dir = match model {
-                Some(d) => Some(d.clone()),
-                None => Some(
-                    crate::models::models_dir(&crate::state::state_dir()?)
-                        .join("openai-privacy-filter"),
-                )
-                .filter(|d| d.is_dir()),
-            };
-            let mut pf = dir
-                .as_deref()
-                .map(footnote_alias::model::PrivacyFilter::load)
-                .transpose()?;
-            let key = if *pseudonymise {
-                crate::state::load_or_create_alias_key()?
-            } else {
-                Vec::new()
-            };
-            let mut results = Vec::with_capacity(texts.len());
-            for t in &texts {
-                let hits = footnote_alias::find(t, pf.as_mut())?;
-                results.push(if *pseudonymise {
-                    let (text, replacements) = footnote_alias::pseudonymise(t, &hits, &key);
-                    json!({ "text": text, "replacements": replacements })
-                } else {
-                    json!(hits)
-                });
-            }
-            let detectors = if pf.is_some() {
-                json!(["rules", "privacy-filter"])
-            } else {
-                json!(["rules"])
-            };
-            return Ok(json!({ "detectors": detectors, "results": results }));
         }
         Action::Status => return crate::status::status(),
         #[cfg(feature = "library")]
@@ -892,8 +841,6 @@ fn execute(cli: Cli) -> Result<Value> {
         | Action::CodeImpact { .. } => {
             unreachable!("dispatched before the database is opened")
         }
-        #[cfg(feature = "alias")]
-        Action::AliasScan { .. } => unreachable!("dispatched before the database is opened"),
         Action::Audit { .. }
         | Action::Options
         | Action::Config { .. }
@@ -1057,8 +1004,6 @@ fn action_name(a: &Action) -> &'static str {
         #[cfg(feature = "memory")]
         Action::Hook { .. } => "hook",
         Action::Audit { .. } => "audit",
-        #[cfg(feature = "alias")]
-        Action::AliasScan { .. } => "alias-scan",
         #[cfg(feature = "code")]
         Action::CodeIndex { .. } => "code-index",
         #[cfg(feature = "code")]

@@ -67,31 +67,6 @@ fn use_and_remove_protect_the_models_memory_relies_on() {
         assert!(!state.join("models/jina-v5-nano").exists());
     }
 
-    // Alias's detector is listed, refused as an embedding model, and refused at install in builds without Alias.
-    assert!(
-        list["models"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|m| m["name"] == "openai-privacy-filter" && m["installed"] == false),
-        "{list}"
-    );
-    assert!(
-        models(state, &["use", "openai-privacy-filter"])["error"]
-            .as_str()
-            .unwrap()
-            .contains("not an embedding model")
-    );
-    if !cfg!(feature = "alias") {
-        assert!(
-            models(state, &["install", "openai-privacy-filter"])["error"]
-                .as_str()
-                .unwrap()
-                .contains("does not include")
-        );
-        assert!(!state.join("models/openai-privacy-filter").exists());
-    }
-
     // Not installed: refused, nothing written.
     assert!(
         models(state, &["use", "gte-small"])["error"]
