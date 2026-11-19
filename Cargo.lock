@@ -901,6 +901,7 @@ dependencies = [
  "url",
  "wait-timeout",
  "walkdir",
+ "widestring",
  "windows-sys 0.61.2",
  "zeroize",
  "zstd",

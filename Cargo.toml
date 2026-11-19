@@ -99,6 +99,8 @@ zeroize = { version = "1", optional = true }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys.workspace = true
+# The daemon pipe's owner-only security descriptor is given as an SDDL wide string (#208); already in the tree through interprocess.
+widestring = "=1.2.1"
 
 [dev-dependencies]
 assert_cmd.workspace = true

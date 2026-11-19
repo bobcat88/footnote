@@ -44,15 +44,22 @@ fn endpoint_of(db: &Path) -> String {
 pub fn run(shared: Shared, idle: Option<Duration>) -> Result<()> {
     let endpoint = endpoint_of(&shared.db);
     let name = endpoint.as_str().to_ns_name::<GenericNamespaced>()?;
-    let listener = ListenerOptions::new()
-        .name(name)
-        .create_sync()
-        .with_context(|| {
-            format!(
-                "cannot create a daemon endpoint for {} (another daemon may already serve it)",
-                shared.db.display()
-            )
-        })?;
+    let options = ListenerOptions::new().name(name);
+    // Owner and SYSTEM only (#208): Windows' default pipe access also lets Everyone and Anonymous open it read-only.
+    #[cfg(windows)]
+    let options = {
+        use interprocess::os::windows::{
+            local_socket::ListenerOptionsExt, security_descriptor::SecurityDescriptor,
+        };
+        let sddl = widestring::U16CString::from_str("D:P(A;;GA;;;SY)(A;;GA;;;OW)")?;
+        options.security_descriptor(SecurityDescriptor::deserialize(&sddl)?)
+    };
+    let listener = options.create_sync().with_context(|| {
+        format!(
+            "cannot create a daemon endpoint for {} (another daemon may already serve it)",
+            shared.db.display()
+        )
+    })?;
     // Record the pid so operators (and tests) can stop an owned daemon without
     // killing every other footnote process on the machine.
     if let Ok(state) = crate::state::state_dir() {
