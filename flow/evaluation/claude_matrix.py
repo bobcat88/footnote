@@ -340,9 +340,20 @@ def aggregate():
 
 
 def usage_limited(cell):
-    """The worker was refused at its first call because the plan's usage limit was reached."""
-    result = stream(cell)[1] or {}
-    return result.get('api_error') == 'usage_limit_reached' and result.get('num_turns', 0) <= 1
+    """The plan's usage limit stopped the worker, at its first call or partway."""
+    return (stream(cell)[1] or {}).get('api_error') == 'usage_limit_reached'
+
+
+def reset(entry):
+    """Put a cell back as prepared: fresh workspace from the level's controls, no run files, no Footnote state."""
+    cell, work = Path(entry['cell_dir']), Path(entry['workspace'])
+    for f in ('stream.jsonl', 'stderr.txt', 'run.json', 'result.json', 'harness-settings.json', 'harness-mcp.json'):
+        (cell / f).unlink(missing_ok=True)
+    shutil.rmtree(cell / 'footnote-state', ignore_errors=True)
+    fresh = ROOT / 'controls' / entry['level'] / 'baseline/workspace'
+    shutil.rmtree(work)
+    shutil.copytree(fresh, work)
+    assert workspace_hashes(work) == workspace_hashes(fresh), entry['cell_id']
 
 
 def run_all():
@@ -363,9 +374,8 @@ def run_all():
             launch(entry)
             if not usage_limited(cell):
                 break
-            # The subscription's usage window ran out before the worker did anything: not a result, so wait and rerun.
-            for f in ('stream.jsonl', 'stderr.txt', 'run.json'):
-                (cell / f).unlink()
+            # The plan's usage window ran out: not a result, so start the cell over once the window resets.
+            reset(entry)
             print(json.dumps({'waiting': 'usage limit', 'cell_id': entry['cell_id'], 'retry_in_s': 900}), flush=True)
             time.sleep(900)
         r = collect(entry['cell_id'])
@@ -388,7 +398,7 @@ def self_test():
     with tempfile.TemporaryDirectory() as tmp:
         (Path(tmp) / 'stream.jsonl').write_text(json.dumps({'type': 'result', 'api_error': 'usage_limit_reached', 'num_turns': 1}), encoding='utf-8')
         assert usage_limited(Path(tmp))
-        (Path(tmp) / 'stream.jsonl').write_text(json.dumps({'type': 'result', 'num_turns': 9}), encoding='utf-8')
+        (Path(tmp) / 'stream.jsonl').write_text(json.dumps({'type': 'result', 'is_error': False}), encoding='utf-8')
         assert not usage_limited(Path(tmp))
     with tempfile.TemporaryDirectory() as tmp:
         def scan_calls(*calls):
