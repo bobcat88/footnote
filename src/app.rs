@@ -245,6 +245,15 @@ enum Action {
         #[arg(long)]
         memory: bool,
     },
+    /// Replace this binary with a newer one; the current one is kept beside it so `rollback` can put it back. Data in the state
+    /// folder is not touched.
+    Update {
+        /// The new footnote binary (checked with `--version` before anything moves).
+        #[arg(long)]
+        from: PathBuf,
+    },
+    /// Put back the binary that the last `update` replaced.
+    Rollback,
     /// Remove Footnote Memory from every agent (hooks, MCP server, /remember). Memories and settings are kept.
     #[cfg(feature = "memory")]
     Uninstall {
@@ -708,6 +717,8 @@ fn execute(cli: Cli) -> Result<Value> {
         }
         #[cfg(feature = "memory")]
         Action::Uninstall { dry_run, .. } => return crate::install::uninstall_memory(*dry_run),
+        Action::Update { from } => return crate::update::update(from),
+        Action::Rollback => return crate::update::rollback(),
         Action::Config { action } => {
             let state = crate::state::state_dir()?;
             return match action {
@@ -895,7 +906,10 @@ fn execute(cli: Cli) -> Result<Value> {
         Action::Projects => unreachable!("dispatched before the database is opened"),
         #[cfg(feature = "memory")]
         Action::Hook { .. } => unreachable!("the hook is dispatched before the database is opened"),
-        Action::Install { .. } | Action::Embed { .. } => {
+        Action::Install { .. }
+        | Action::Embed { .. }
+        | Action::Update { .. }
+        | Action::Rollback => {
             unreachable!("dispatched before the database is opened")
         }
         #[cfg(feature = "metrics")]
@@ -1071,6 +1085,8 @@ fn action_name(a: &Action) -> &'static str {
         #[cfg(feature = "memory")]
         Action::Uninstall { .. } => "uninstall",
         Action::Config { .. } => "config",
+        Action::Update { .. } => "update",
+        Action::Rollback => "rollback",
         Action::Embed { .. } => "embed",
         Action::Metrics { .. } => "metrics",
     }

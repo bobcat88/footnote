@@ -137,6 +137,10 @@ The commands above use a POSIX shell. On Windows, add `target\release` to `PATH`
 
 Lexical search works without Python or models; hybrid search needs them. Re-run `index` whenever your files change (only changed files are re-read) and `rebuild-embeddings` afterwards (only new or changed chunks are embedded).
 
+**Update and rollback.** `footnote update --from <new footnote binary>` checks that the new binary runs, keeps the current one beside it as `footnote.exe.replaced-<time>` (only the newest is kept) and puts the new one in place, even while agents are using it. `footnote rollback` puts the previous one back. Your data lives in the state folder (`%LOCALAPPDATA%\footnote` on Windows, `~/.local/state/footnote` elsewhere, or `FOOTNOTE_STATE_DIR`), apart from the binary, so neither touches it.
+
+**Uninstall.** `footnote uninstall --memory` removes the memory hook and MCP server from every agent (memories and settings are kept). Then delete the binary, and the state folder if you no longer want your data, indexes and models.
+
 ## Connect your agent
 
 ```bash

@@ -16,6 +16,7 @@ mod projects;
 #[cfg(feature = "memory")]
 mod review;
 mod status;
+mod update;
 mod usage;
 
 // Moved to library crates (ADR 0001); imported here so `crate::<module>` paths keep working.
