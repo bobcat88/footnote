@@ -900,6 +900,7 @@ dependencies = [
  "getrandom 0.4.3",
  "interprocess",
  "regex",
+ "ring",
  "rusqlite",
  "serde",
  "serde_json",

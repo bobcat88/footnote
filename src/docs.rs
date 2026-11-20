@@ -9,7 +9,7 @@
 //! per site, every version older than the newest (numbers compare as numbers, so 10.0 > 9.2; any non-numeric version such
 //! as `latest` counts as newer than every numeric one).
 use crate::find;
-use anyhow::{Result, bail, ensure};
+use anyhow::{Context, Result, bail, ensure};
 use footnote_core::jobs::{self, Job};
 use footnote_library::{crawl, index};
 use serde_json::{Value, json};
@@ -79,6 +79,20 @@ fn entries(state: &Path) -> Vec<(String, String, PathBuf)> {
     }
     out.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| compare(&a.1, &b.1)));
     out
+}
+
+/// The cache entry for a library (site) and an optional version, else its newest.
+pub fn find_entry(
+    state: &Path,
+    library: &str,
+    version: Option<&str>,
+) -> Result<(String, String, PathBuf)> {
+    let site = safe("library", library)?;
+    let version = version.map(|v| safe("version", v)).transpose()?;
+    entries(state)
+        .into_iter()
+        .rfind(|e| e.0 == site && version.as_ref().is_none_or(|v| &e.1 == v))
+        .with_context(|| format!("{library} is not in the docs cache (see `footnote docs list`)"))
 }
 
 pub struct Add<'a> {
@@ -362,6 +376,7 @@ pub fn prune(state: &Path) -> Result<Value> {
             for ext in ["", "-wal", "-shm"] {
                 let _ = std::fs::remove_file(format!("{}{ext}", db.display()));
             }
+            let _ = std::fs::remove_file(db.with_extension("licence.json"));
             list.retain(|p| p != db);
             removed.push(json!({"site": site, "version": version}));
         }

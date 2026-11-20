@@ -524,6 +524,41 @@ enum DocsAction {
     List,
     /// Delete every version older than the newest of its site.
     Prune,
+    /// Record the source licence of a cached library; `bundle` needs it.
+    Licence {
+        library: String,
+        #[arg(long)]
+        version: Option<String>,
+        #[arg(long)]
+        name: String,
+        /// Whether the licence allows redistributing the indexed text (`true` or `false`).
+        #[arg(long, action = clap::ArgAction::Set)]
+        redistributable: bool,
+        /// The docs site the pages came from.
+        #[arg(long)]
+        url: String,
+    },
+    /// Make a signing key for bundles (private key file, never overwritten); prints the public key.
+    Keygen { file: PathBuf },
+    /// Build a signed bundle of a cached library (refused without a recorded, redistributable licence).
+    Bundle {
+        library: String,
+        #[arg(long)]
+        version: Option<String>,
+        /// Private key file from `docs keygen`.
+        #[arg(long)]
+        key: PathBuf,
+        /// Output file; default `<library>-<version>.fnbundle`.
+        #[arg(long)]
+        out: Option<PathBuf>,
+    },
+    /// Install a bundle (file or https URL) after checking its signature and hash.
+    Install {
+        source: String,
+        /// Also trust this public key (hex), besides the key built into Footnote.
+        #[arg(long)]
+        trust_key: Vec<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -802,6 +837,32 @@ fn execute(cli: Cli) -> Result<Value> {
                 DocsAction::Embed { model, dbs } => crate::docs::embed(&state, dbs, model),
                 DocsAction::List => crate::docs::list(&state),
                 DocsAction::Prune => crate::docs::prune(&state),
+                DocsAction::Licence {
+                    library,
+                    version,
+                    name,
+                    redistributable,
+                    url,
+                } => crate::bundle::licence(
+                    &state,
+                    library,
+                    version.as_deref(),
+                    name,
+                    *redistributable,
+                    url,
+                ),
+                DocsAction::Keygen { file } => crate::bundle::keygen(file),
+                DocsAction::Bundle {
+                    library,
+                    version,
+                    key,
+                    out,
+                } => {
+                    crate::bundle::bundle(&state, library, version.as_deref(), key, out.as_deref())
+                }
+                DocsAction::Install { source, trust_key } => {
+                    crate::bundle::install(&state, source, trust_key)
+                }
             };
         }
         Action::Find { query, limit } => return crate::find::find(query, usize::from(*limit)),

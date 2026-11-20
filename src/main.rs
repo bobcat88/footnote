@@ -1,6 +1,8 @@
 #[cfg(feature = "memory")]
 mod activity;
 mod app;
+#[cfg(feature = "library")]
+mod bundle;
 mod daemon;
 #[cfg(feature = "library")]
 mod docs;
