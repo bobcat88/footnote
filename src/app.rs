@@ -424,6 +424,18 @@ enum Action {
         #[arg(long, default_value_t = 50)]
         limit: usize,
     },
+    /// Project framing: a readiness score (0-100) from weighted checks (stack, dependency file, cached docs, README or goal,
+    /// test command, git) with the one next action for each, the questions still open and a verdict (ready 80+, almost 50-79,
+    /// not yet below 50). `--set goal="..."` stores an answer in project memory; it counts next time. Local, no model.
+    #[cfg(feature = "code")]
+    Frame {
+        /// Project folder.
+        #[arg(default_value = ".")]
+        path: PathBuf,
+        /// An answer to a framing question, `goal`, `users`, `constraints` or `tests`: `--set goal="a CLI that ..."`. Repeatable.
+        #[arg(long = "set", value_name = "KEY=VALUE")]
+        set: Vec<String>,
+    },
     /// Footnote Code: the libraries a project uses, from its manifests and lockfiles, else from its imports, else one question.
     /// The result is recorded in Footnote Memory with exact versions where known; a re-run reports only the difference. Reads
     /// files only: no network. When the stack came only from imports the result suggests the missing dependency file;
@@ -726,6 +738,8 @@ fn execute(cli: Cli) -> Result<Value> {
             write: Some(StackWrite::Write { path, yes }),
             ..
         } => return crate::stack::write(path, *yes),
+        #[cfg(feature = "code")]
+        Action::Frame { path, set } => return crate::frame::run(path, set, true),
         #[cfg(feature = "code")]
         Action::Stack { path, library, .. } => return crate::stack::run(path, library, true),
         #[cfg(feature = "code")]
@@ -1091,7 +1105,8 @@ fn execute(cli: Cli) -> Result<Value> {
         | Action::CodeMap { .. }
         | Action::CodeImpact { .. }
         | Action::CodeUnresolved { .. }
-        | Action::Stack { .. } => {
+        | Action::Stack { .. }
+        | Action::Frame { .. } => {
             unreachable!("dispatched before the database is opened")
         }
         Action::Audit { .. }
@@ -1267,6 +1282,8 @@ fn action_name(a: &Action) -> &'static str {
         Action::CodeUnresolved { .. } => "code-unresolved",
         #[cfg(feature = "code")]
         Action::Stack { .. } => "stack",
+        #[cfg(feature = "code")]
+        Action::Frame { .. } => "frame",
         #[cfg(feature = "code")]
         Action::CodeMap { .. } => "code-map",
         Action::Options => "options",

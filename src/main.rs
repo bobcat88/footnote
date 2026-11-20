@@ -7,6 +7,8 @@ mod daemon;
 #[cfg(feature = "library")]
 mod docs;
 mod find;
+#[cfg(feature = "code")]
+mod frame;
 mod hardware;
 #[cfg(feature = "memory")]
 mod hook;

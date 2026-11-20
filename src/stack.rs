@@ -706,6 +706,11 @@ pub fn write(root: &Path, yes: bool) -> Result<Value> {
     Ok(out)
 }
 
+/// The detected libraries as JSON (`name`, `ecosystem`, `source`, ...), for `footnote frame`. Reads files only.
+pub(crate) fn detected(root: &Path) -> Result<Vec<Value>> {
+    Ok(detect(root, &[])?.values().map(Lib::json).collect())
+}
+
 /// `footnote stack`. `record`: write the result to Footnote Memory (the CLI); the MCP tool only reads.
 pub fn run(root: &Path, user: &[String], record: bool) -> Result<Value> {
     let root = std::path::absolute(root)?;
