@@ -1,0 +1,50 @@
+# pass 1, 8 libraries (run dir stackrun-20261120-0810)
+08:10:19 flask: cpu% before 0,183340362482975 0,761442894779563 1,0778465608361
+08:10:23 flask: crawl 3.7 s, exit 0, 77 pages, 8,"discovered":{"llms_txt":0,"sitemap":1},"out":"C:\\Users\\johan\\AppData\\Local\\Temp\\stackrun-20261120-0810\\crawl\\flask","pages":77,"queued_left":0,"robots_txt":true,"skipped":0
+08:10:23 flask: index 0.6 s, exit 0, db 3.4 MB
+08:10:27 flask: cpu% before embed 2,19995408268284 0 0,894683158319953
+08:10:55 flask: embed 28.0 s, exit 0, db 4.4 MB 
+08:10:58 sqlalchemy: cpu% before 10,3608558592077 8,33445925381907 6,47369583059831
+08:11:14 sqlalchemy: crawl 15.8 s, exit 0, 222 pages, overed":{"llms_txt":0,"sitemap":0},"out":"C:\\Users\\johan\\AppData\\Local\\Temp\\stackrun-20261120-0810\\crawl\\sqlalchemy","pages":222,"queued_left":0,"robots_txt":false,"ski
+08:11:15 sqlalchemy: index 0.9 s, exit 0, db 45.0 MB
+08:11:18 sqlalchemy: cpu% before embed 4,09353703857558 5,24474207171476 3,70433520801308
+08:17:15 sqlalchemy: embed 357.5 s, exit 0, db 57.7 MB 
+08:17:19 requests: cpu% before 2,00719292736735 0,84038994692528 0,308556474234267
+08:17:21 requests: crawl 2.7 s, exit 0, 26 pages, discovered":{"llms_txt":0,"sitemap":2},"out":"C:\\Users\\johan\\AppData\\Local\\Temp\\stackrun-20261120-0810\\crawl\\requests","pages":26,"queued_left":0,"robots_txt":true,"skipped
+08:17:22 requests: index 0.5 s, exit 0, db 1.6 MB
+08:17:25 requests: cpu% before embed 3,38046946102095 0,0887571207439874 0,274273629983857
+08:17:37 requests: embed 12.2 s, exit 0, db 2.0 MB 
+08:17:41 jinja: cpu% before 4,94621922036008 4,55765638726764 0,554539093017969
+08:17:45 jinja: crawl 4.2 s, exit 0, 16 pages, 8,"discovered":{"llms_txt":0,"sitemap":1},"out":"C:\\Users\\johan\\AppData\\Local\\Temp\\stackrun-20261120-0810\\crawl\\jinja","pages":16,"queued_left":0,"robots_txt":true,"skipped":0
+08:17:45 jinja: index 0.5 s, exit 0, db 1.7 MB
+08:17:49 jinja: cpu% before embed 0 0,0881238187487865 1,54879435578545
+08:18:01 jinja: embed 12.4 s, exit 0, db 1.9 MB 
+08:18:04 pydantic: cpu% before 0,912384219310869 0,772851694000243 0,922352167839824
+08:18:06 pydantic: crawl 1.3 s, exit 0, 9 pages, scovered":{"llms_txt":87,"sitemap":326},"out":"C:\\Users\\johan\\AppData\\Local\\Temp\\stackrun-20261120-0810\\crawl\\pydantic","pages":9,"queued_left":0,"robots_txt":true,"skipped"
+08:18:06 pydantic: index 0.6 s, exit 0, db 2.0 MB
+08:18:09 pydantic: cpu% before embed 3,39410538690957 0 1,73384355817832
+08:18:28 pydantic: embed 18.4 s, exit 0, db 2.4 MB 
+08:18:31 vite: cpu% before 2,02077821405938 3,42080331094068 6,54793893872366
+08:18:35 vite: crawl 3.4 s, exit 0, 24 pages, "discovered":{"llms_txt":49,"sitemap":57},"out":"C:\\Users\\johan\\AppData\\Local\\Temp\\stackrun-20261120-0810\\crawl\\vite","pages":24,"queued_left":0,"robots_txt":false,"skipped":0,
+08:18:35 vite: index 0.6 s, exit 0, db 1.2 MB
+08:18:38 vite: cpu% before embed 0,457940294978509 2,36282534855493 1,85513612243646
+08:18:50 vite: embed 11.2 s, exit 0, db 1.5 MB 
+08:18:53 serde: cpu% before 1,73783498158834 0,78898776215317 0
+08:18:56 serde: crawl 3.7 s, exit 0, 38 pages, 8,"discovered":{"llms_txt":0,"sitemap":0},"out":"C:\\Users\\johan\\AppData\\Local\\Temp\\stackrun-20261120-0810\\crawl\\serde","pages":38,"queued_left":0,"robots_txt":true,"skipped":2
+08:18:57 serde: index 0.6 s, exit 0, db 0.6 MB
+08:19:00 serde: cpu% before embed 3,07175525663026 0,647995998144391 0,347827339870388
+08:19:05 serde: embed 5.1 s, exit 0, db 0.7 MB 
+08:19:09 tokio: cpu% before 2,61276286700128 2,07218305255137 0,733214259514947
+08:19:12 tokio: crawl 3.2 s, exit 0, 11 pages, ,"discovered":{"llms_txt":0,"sitemap":0},"out":"C:\\Users\\johan\\AppData\\Local\\Temp\\stackrun-20261120-0810\\crawl\\tokio","pages":11,"queued_left":0,"robots_txt":false,"skipped":0
+08:19:12 tokio: index 0.4 s, exit 0, db 0.6 MB
+08:19:16 tokio: cpu% before embed 0 0,326132893173536 0,283016277554649
+08:19:21 tokio: embed 5.1 s, exit 0, db 0.7 MB 
+08:19:21 done
+
+# pass 2, pydantic only with the post-redirect start URL
+08:19:44 pydantic: cpu% before 1,14492590199459 1,9413967144466 1,20675863958088
+08:19:48 pydantic: crawl 4.0 s, exit 0, 94 pages, ered":{"llms_txt":169,"sitemap":326},"out":"C:\\Users\\johan\\AppData\\Local\\Temp\\stackrun-20261120-pass2\\crawl\\pydantic","pages":94,"queued_left":0,"robots_txt":true,"skipped"
+08:19:48 pydantic: index 0.6 s, exit 0, db 6.9 MB
+08:19:52 pydantic: cpu% before embed 2,53240991718897 0,562933164792356 1,51479114881913
+08:21:03 pydantic: embed 71.3 s, exit 0, db 9.6 MB 
+08:21:03 done
