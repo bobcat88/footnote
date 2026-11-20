@@ -28,7 +28,7 @@ fn scan_limit() -> usize {
         .map_or(SCAN_LIMIT, |n: usize| n.min(SCAN_LIMIT))
 }
 const ALPHA: f64 = 0.55;
-const BATCH: usize = 128;
+const BATCH: usize = 64;
 const MAX_MODELS: usize = 3;
 
 struct Encoded {
@@ -299,12 +299,37 @@ pub fn rebuild_with(
     models: &[PathBuf],
     progress: &mut dyn FnMut(usize, usize),
 ) -> Result<Value> {
+    rebuild_stopping(c, models, progress, usize::MAX)
+}
+
+/// `rebuild_with` that stops with an error after `max_batches` committed batches (tests simulate a killed run with it).
+pub fn rebuild_stopping(
+    c: &mut Connection,
+    models: &[PathBuf],
+    progress: &mut dyn FnMut(usize, usize),
+    max_batches: usize,
+) -> Result<Value> {
+    // Each batch of vectors is committed, so a killed run resumes at the first chunk without a vector.
+    c.execute_batch("BEGIN IMMEDIATE")?;
+    let r = rebuild_batches(c, models, progress, max_batches);
+    if r.is_err() && !c.is_autocommit() {
+        let _ = c.execute_batch("ROLLBACK");
+    }
+    r
+}
+
+fn rebuild_batches(
+    c: &mut Connection,
+    models: &[PathBuf],
+    progress: &mut dyn FnMut(usize, usize),
+    max_batches: usize,
+) -> Result<Value> {
     if models.is_empty() || models.len() > MAX_MODELS {
         bail!("give 1 to {MAX_MODELS} --model directories");
     }
     let helper = helper_hash()?;
-    // Lock corpus/record revisions for the complete rebuild; readers remain read-only.
-    let tx = c.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+    let tx = &*c;
+    let mut batches = 0usize;
     let mut report = Vec::new();
     let mut embedded_total = 0usize;
     let mut dimensions = Vec::new();
@@ -355,36 +380,15 @@ pub fn rebuild_with(
             [],
             |r| r.get(0),
         )? as usize;
-        let mut seen = 0usize;
         let mut live: HashSet<(String, i64)> = HashSet::new();
         let (mut embedded, mut reused, mut truncated) = (0usize, 0usize, 0usize);
-        let mut batch: Vec<(String, i64, String, String)> = Vec::new(); // kind, id, signature, text
-        let mut flush = |batch: &mut Vec<(String, i64, String, String)>| -> Result<()> {
-            if batch.is_empty() {
-                return Ok(());
-            }
-            let texts: Vec<String> = batch.iter().map(|b| b.3.clone()).collect();
-            let encoded = encode(model, &texts, "passage")?;
-            check_identity(&identity, &encoded)?;
-            truncated += encoded.truncated_at_limit;
-            for ((kind, id, signature, _), vector) in batch.iter().zip(&encoded.vectors) {
-                tx.execute(
-                    "INSERT OR REPLACE INTO embeddings VALUES(?1,?2,?3,?4,?5)",
-                    params![identity, kind, id, signature, quantize(vector)],
-                )?;
-            }
-            embedded += batch.len();
-            batch.clear();
-            Ok(())
-        };
+        let mut pending: Vec<(String, i64, String, String)> = Vec::new(); // kind, id, signature, text
         {
             let mut s = tx.prepare("SELECT c.id,s.sha256,s.revision,c.heading,c.text FROM chunks c JOIN sources s ON s.id=c.source_id WHERE s.status='indexed' ORDER BY c.id")?;
             let mut rows = s.query([])?;
             while let Some(r) = rows.next()? {
                 let (id, sha, revision, heading, text): (i64, String, i64, String, String) =
                     (r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?);
-                seen += 1;
-                progress(seen - batch.len(), total);
                 let text = chunk_text(&heading, &text);
                 let signature = chunk_signature(&text);
                 live.insert(("chunk".into(), id));
@@ -404,10 +408,7 @@ pub fn rebuild_with(
                     )?;
                     reused += 1;
                 } else {
-                    batch.push(("chunk".into(), id, signature, text));
-                    if batch.len() >= BATCH {
-                        flush(&mut batch)?;
-                    }
+                    pending.push(("chunk".into(), id, signature, text));
                 }
             }
         }
@@ -419,20 +420,35 @@ pub fn rebuild_with(
                 let (id, sha, revision, payload): (i64, String, i64, String) =
                     (r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?);
                 let signature = format!("{sha}:{revision}");
-                seen += 1;
-                progress(seen - batch.len(), total);
                 live.insert(("record".into(), id));
                 if have.get(&("record".to_string(), id)) == Some(&signature) {
                     reused += 1;
                 } else {
-                    batch.push(("record".into(), id, signature, record_text(&payload)?));
-                    if batch.len() >= BATCH {
-                        flush(&mut batch)?;
-                    }
+                    pending.push(("record".into(), id, signature, record_text(&payload)?));
                 }
             }
         }
-        flush(&mut batch)?;
+        let first = total.saturating_sub(pending.len()); // entries already done, so a resumed run starts at its real n
+        progress(first, total);
+        for (n, batch) in pending.chunks(BATCH).enumerate() {
+            if batches >= max_batches {
+                bail!("stopped after {batches} batches");
+            }
+            let texts: Vec<String> = batch.iter().map(|b| b.3.clone()).collect();
+            let encoded = encode(model, &texts, "passage")?;
+            check_identity(&identity, &encoded)?;
+            truncated += encoded.truncated_at_limit;
+            for ((kind, id, signature, _), vector) in batch.iter().zip(&encoded.vectors) {
+                tx.execute(
+                    "INSERT OR REPLACE INTO embeddings VALUES(?1,?2,?3,?4,?5)",
+                    params![identity, kind, id, signature, quantize(vector)],
+                )?;
+            }
+            embedded += batch.len();
+            batches += 1;
+            tx.execute_batch("COMMIT; BEGIN IMMEDIATE")?;
+            progress(first + n * BATCH + batch.len(), total);
+        }
         let mut removed = 0usize;
         for (kind, id) in have.keys().filter(|k| !live.contains(*k)) {
             tx.execute(
@@ -444,7 +460,7 @@ pub fn rebuild_with(
         embedded_total += embedded;
         report.push(json!({"model_sha256":identity,"embedded":embedded,"reused":reused,"removed":removed,"truncated_at_limit":truncated}));
     }
-    tx.commit()?;
+    tx.execute_batch("COMMIT")?;
     Ok(
         json!({"embedded":embedded_total,"models":report,"dimension":dimensions[0],"dimensions":dimensions,"storage":"int8","derived_only":true}),
     )

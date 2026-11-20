@@ -2127,6 +2127,11 @@ const NODE_BUILTINS: &str = "assert async_hooks buffer child_process cluster con
 /// detector (#304). Standard library and the project's own modules are left out; Java is not covered. Same parser and the
 /// same notion of "local" as the code graph.
 pub fn imports(root: &Path) -> Vec<(&'static str, String)> {
+    import_counts(root).into_iter().map(|(k, _)| k).collect()
+}
+
+/// `imports` with how many import statements name each package (one per statement, not per file), so callers can rank libraries.
+pub fn import_counts(root: &Path) -> Vec<((&'static str, String), usize)> {
     let all = candidates(root);
     let mut files: Vec<(Lang, Vec<u8>)> = Vec::new();
     for rel in &all {
@@ -2172,7 +2177,7 @@ pub fn imports(root: &Path) -> Vec<(&'static str, String)> {
         "(call_expression function: (identifier) @f arguments: (arguments . (string) @s))",
     )
     .ok();
-    let mut found: std::collections::BTreeSet<(&'static str, String)> = Default::default();
+    let mut found: std::collections::BTreeMap<(&'static str, String), usize> = Default::default();
     let mut parser = Parser::new();
     for (l, src) in &files {
         let (lang, _, imp) = grammar(*l);
@@ -2256,7 +2261,7 @@ pub fn imports(root: &Path) -> Vec<(&'static str, String)> {
                 ),
             };
             if outside {
-                found.insert((name, package_of(*l, &m)));
+                *found.entry((name, package_of(*l, &m))).or_default() += 1;
             }
         }
     }

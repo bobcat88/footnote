@@ -195,3 +195,60 @@ fn a_library_that_cannot_be_crawled_does_not_stop_the_others() {
     assert_eq!(libs.len(), 2, "{v}");
     assert!(libs.iter().all(|l| l["error"].is_string()), "{v}");
 }
+
+#[test]
+fn a_killed_embedding_keeps_its_batches_and_resumes_without_recomputing() {
+    let t = tempfile::tempdir_in(env!("CARGO_TARGET_TMPDIR")).unwrap();
+    let state = t.path().join("state");
+    let notes = t.path().join("notes");
+    fs::create_dir(&notes).unwrap();
+    for i in 0..150 {
+        fs::write(
+            notes.join(format!("p{i}.md")),
+            format!(
+                "# Page {i}
+Unique text about topic number {i} and its details."
+            ),
+        )
+        .unwrap();
+    }
+    let added = run(
+        &state,
+        &[
+            "docs",
+            "add",
+            "--from",
+            notes.to_str().unwrap(),
+            "--site",
+            "lib",
+            "--version",
+            "1",
+            "--no-embed",
+        ],
+    );
+    let db = added["db"].as_str().unwrap().to_string();
+    let mut c = rusqlite::Connection::open(&db).unwrap();
+    let count =
+        |c: &rusqlite::Connection, sql: &str| c.query_row(sql, [], |r| r.get::<_, i64>(0)).unwrap();
+    let chunks = count(&c, "SELECT count(*) FROM chunks");
+    assert!(chunks > 128, "{chunks}");
+    let models = [std::path::PathBuf::from(MODEL)];
+
+    // Killed after two batches of 64: those vectors are durable, the rest is missing.
+    let stopped = footnote_search::semantic::rebuild_stopping(&mut c, &models, &mut |_, _| {}, 2);
+    assert!(stopped.is_err());
+    assert_eq!(count(&c, "SELECT count(*) FROM embeddings"), 128);
+    assert_eq!(row_state(&state), format!("keyword-only 128/{chunks}"));
+
+    // The rerun reports its real start, embeds only the missing chunks and ends ready.
+    let mut first = None;
+    let r = footnote_search::semantic::rebuild_with(&mut c, &models, &mut |d, _| {
+        first.get_or_insert(d);
+    })
+    .unwrap();
+    assert_eq!(first, Some(128));
+    assert_eq!(r["models"][0]["embedded"], chunks - 128, "{r}");
+    assert_eq!(r["models"][0]["reused"], 128, "{r}");
+    assert_eq!(count(&c, "SELECT count(*) FROM embeddings"), chunks);
+    assert_eq!(row_state(&state), "ready");
+}

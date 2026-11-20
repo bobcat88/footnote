@@ -518,6 +518,9 @@ enum DocsAction {
     Ingest {
         #[arg(required = true)]
         urls: Vec<String>,
+        /// Project folder: libraries it imports most often are indexed and embedded first.
+        #[arg(long)]
+        project: Option<PathBuf>,
         #[arg(long, default_value_t = 1000)]
         max_pages: usize,
         #[arg(long)]
@@ -843,6 +846,7 @@ fn execute(cli: Cli) -> Result<Value> {
                 ),
                 DocsAction::Ingest {
                     urls,
+                    project,
                     max_pages,
                     model,
                     no_embed,
@@ -858,6 +862,7 @@ fn execute(cli: Cli) -> Result<Value> {
                         models: model,
                         no_embed: *no_embed,
                     },
+                    project.as_deref(),
                 ),
                 DocsAction::Refresh {
                     library,

@@ -84,25 +84,35 @@ fn test_command(root: &Path) -> Option<&'static str> {
     }
 }
 
-/// How many of the libraries have a cached docs entry (the site name is, or contains, the library name).
-fn cached(libs: &[String]) -> usize {
+/// "docs ready n/m": libraries whose docs are searchable with vectors, out of the project's libraries.
+pub(crate) fn progress_line(ready: usize, total: usize) -> Option<String> {
+    (total > 0).then(|| format!("docs ready {ready}/{total}"))
+}
+
+/// How many of the libraries have a cached docs entry (the site name is, or contains, the library name), and how many of
+/// those have every vector ("docs ready n/m").
+fn cached(libs: &[String]) -> (usize, usize) {
     #[cfg(feature = "library")]
     if let Ok(state) = crate::state::state_dir() {
-        let sites: Vec<String> = crate::docs::entries(&state)
-            .into_iter()
-            .map(|e| e.0)
-            .collect();
+        let entries = crate::docs::entries(&state);
         // shortcut: substring match on the site name; exact library-to-site mapping would need the docs index to store it.
-        return libs
+        let mine = |l: &String| {
+            let l = l.to_lowercase();
+            entries
+                .iter()
+                .filter(move |e| e.0 == l || e.0.contains(&l))
+                .map(|e| &e.2)
+                .collect::<Vec<_>>()
+        };
+        let have = libs.iter().filter(|l| !mine(l).is_empty()).count();
+        let ready = libs
             .iter()
-            .filter(|l| {
-                let l = l.to_lowercase();
-                sites.iter().any(|s| s == &l || s.contains(&l))
-            })
+            .filter(|l| mine(l).iter().any(|db| crate::docs::is_ready(&state, db)))
             .count();
+        return (have, ready);
     }
     let _ = libs;
-    0
+    (0, 0)
 }
 
 #[cfg(feature = "memory")]
@@ -182,7 +192,7 @@ pub fn run(root: &Path, set: &[String], _record: bool) -> Result<Value> {
         .filter_map(|l| l["name"].as_str().map(String::from))
         .collect();
     let have_manifest = libs.iter().any(|l| l["source"] == "manifest");
-    let docs = cached(&names);
+    let (docs, docs_ready) = cached(&names);
     let tests = test_command(&root);
     let readme =
         text_of(&root, &["readme", "goal", "product"]).is_some_and(|t| t.trim().len() >= 40);
@@ -298,6 +308,9 @@ pub fn run(root: &Path, set: &[String], _record: bool) -> Result<Value> {
             if earned == weight { "x" } else { " " }
         );
     }
+    if let Some(l) = progress_line(docs_ready, names.len()) {
+        text += &format!("\n{l}");
+    }
     if !questions.is_empty() {
         text += "\nStill to answer:";
         for q in &questions {
@@ -313,5 +326,17 @@ pub fn run(root: &Path, set: &[String], _record: bool) -> Result<Value> {
     }
     Ok(json!({"root": root_s, "score": score, "band": band,
         "thresholds": {"ready": READY, "almost": ALMOST}, "checks": rows, "questions": questions,
-        "answers": given, "next": open.map(|c| c.4.clone()), "text": text}))
+        "docs_ready": {"ready": docs_ready, "total": names.len()}, "answers": given, "next": open.map(|c| c.4.clone()), "text": text}))
+}
+
+#[cfg(test)]
+mod progress_tests {
+    #[test]
+    fn docs_ready_line() {
+        assert_eq!(
+            super::progress_line(5, 8).as_deref(),
+            Some("docs ready 5/8")
+        );
+        assert_eq!(super::progress_line(0, 0), None);
+    }
 }

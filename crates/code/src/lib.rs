@@ -3,7 +3,7 @@
 //! Every edge says how it was made (`origin`: `compiler` here); the tree-sitter pass for other languages comes later.
 pub mod scip;
 mod ts;
-pub use ts::imports;
+pub use ts::{import_counts, imports};
 
 use anyhow::{Context, Result, bail};
 use rusqlite::{Connection, OptionalExtension, params};

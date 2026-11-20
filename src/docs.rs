@@ -118,9 +118,21 @@ pub fn add(state: &Path, a: &Add) -> Result<Value> {
 
 /// `docs ingest <url>...`: each library's keyword index in turn, then one worker embedding them, largest last. A library
 /// that fails does not stop the others.
-pub fn ingest(state: &Path, urls: &[String], a: &Add) -> Result<Value> {
+pub fn ingest(state: &Path, urls: &[String], a: &Add, project: Option<&Path>) -> Result<Value> {
     let (mut dbs, mut libraries) = (Vec::new(), Vec::new());
-    for u in urls {
+    #[cfg(feature = "code")]
+    let counts: Vec<((&str, String), usize)> = project
+        .map(footnote_code::import_counts)
+        .unwrap_or_default();
+    #[cfg(not(feature = "code"))]
+    let counts: Vec<((&str, String), usize)> = {
+        let _ = project; // import ranking needs the code feature
+        Vec::new()
+    };
+    let mut ranked: Vec<(usize, &String)> =
+        urls.iter().map(|u| (import_rank(u, &counts), u)).collect();
+    ranked.sort_by_key(|(n, _)| std::cmp::Reverse(*n)); // stable: equal ranks keep the given order
+    for (rank, u) in ranked {
         let one = Add {
             url: Some(u),
             from: None,
@@ -134,13 +146,26 @@ pub fn ingest(state: &Path, urls: &[String], a: &Add) -> Result<Value> {
             Ok(mut v) => {
                 let db = PathBuf::from(v["db"].as_str().unwrap_or_default());
                 v["state"] = json!(status(&db, &jobs_now(state)).0);
-                dbs.push(db);
+                dbs.push((rank, db));
                 libraries.push(v);
             }
             Err(e) => libraries.push(json!({"url": u, "error": format!("{e:#}")})),
         }
     }
-    Ok(json!({"libraries": libraries, "embedding": embed_missing(state, &dbs, a)?}))
+    Ok(json!({"libraries": libraries, "embedding": embed_ranked(state, &dbs, a)?}))
+}
+
+/// How many import statements of the project name the library a docs URL belongs to: the most-imported package whose name
+/// is part of the URL. shortcut: substring match on the URL, no registry mapping; upgrade when #305 stores URL per library.
+fn import_rank(url: &str, counts: &[((&str, String), usize)]) -> usize {
+    let norm = |t: &str| t.to_lowercase().replace('_', "-");
+    let url = norm(url);
+    counts
+        .iter()
+        .filter(|((_, name), _)| name.len() >= 3 && url.contains(&norm(name)))
+        .map(|(_, n)| *n)
+        .max()
+        .unwrap_or(0)
 }
 
 fn jobs_now(state: &Path) -> Vec<Value> {
@@ -151,7 +176,7 @@ fn jobs_now(state: &Path) -> Vec<Value> {
 }
 
 /// "embedding" with `(done, total)` while a live `docs.embed` job holds the database, "ready" once every chunk has a vector,
-/// otherwise "keyword-only" (a corpus whose worker died is keyword-only again; its job shows as interrupted).
+/// otherwise "keyword-only" (a corpus whose worker died is keyword-only again, with the n/m already committed; its job shows as interrupted).
 fn status(db: &Path, jobs: &[Value]) -> (&'static str, Option<(u64, u64)>) {
     let label = db.to_string_lossy();
     if let Some(j) = jobs.iter().find(|j| {
@@ -170,14 +195,20 @@ fn status(db: &Path, jobs: &[Value]) -> (&'static str, Option<(u64, u64)>) {
     let embedded = n(
         "SELECT coalesce(max(n),0) FROM (SELECT count(*) n FROM embeddings WHERE kind='chunk' GROUP BY model)",
     );
-    (
-        if embedded >= chunks {
-            "ready"
-        } else {
-            "keyword-only"
-        },
-        None,
-    )
+    if embedded >= chunks {
+        ("ready", None)
+    } else if embedded > 0 {
+        // A killed worker's batches are committed: show the real n/m, the next run resumes there.
+        ("keyword-only", Some((embedded as u64, chunks as u64)))
+    } else {
+        ("keyword-only", None)
+    }
+}
+
+/// Whether the cached corpus at `db` has every vector.
+#[cfg(feature = "code")]
+pub(crate) fn is_ready(state: &Path, db: &Path) -> bool {
+    status(db, &jobs_now(state)).0 == "ready"
 }
 
 fn chunk_count(db: &Path) -> i64 {
@@ -192,14 +223,20 @@ fn chunk_count(db: &Path) -> i64 {
 
 /// Start one detached worker for the keyword-only corpora among `dbs`, smallest first so a big one never holds up the rest.
 pub(crate) fn embed_missing(state: &Path, dbs: &[PathBuf], a: &Add) -> Result<Value> {
+    let ranked: Vec<(usize, PathBuf)> = dbs.iter().map(|d| (0, d.clone())).collect();
+    embed_ranked(state, &ranked, a)
+}
+
+/// Like `embed_missing`, most-imported library first, smallest first among equals.
+fn embed_ranked(state: &Path, dbs: &[(usize, PathBuf)], a: &Add) -> Result<Value> {
     if a.no_embed {
         return Ok(json!("skipped (--no-embed)"));
     }
     let jobs = jobs_now(state);
-    let mut todo: Vec<(i64, &PathBuf)> = dbs
+    let mut todo: Vec<(std::cmp::Reverse<usize>, i64, &PathBuf)> = dbs
         .iter()
-        .filter(|d| status(d, &jobs).0 == "keyword-only")
-        .map(|d| (chunk_count(d), d))
+        .filter(|(_, d)| status(d, &jobs).0 == "keyword-only")
+        .map(|(n, d)| (std::cmp::Reverse(*n), chunk_count(d), d))
         .collect();
     if todo.is_empty() {
         return Ok(json!("nothing to embed"));
@@ -223,7 +260,7 @@ pub(crate) fn embed_missing(state: &Path, dbs: &[PathBuf], a: &Add) -> Result<Va
     for m in &models {
         cmd.arg("--model").arg(m);
     }
-    cmd.args(todo.iter().map(|(_, d)| d.as_os_str()));
+    cmd.args(todo.iter().map(|(_, _, d)| d.as_os_str()));
     #[cfg(feature = "memory")]
     crate::hook::spawn_background(&mut cmd)?;
     #[cfg(not(feature = "memory"))]
@@ -386,4 +423,27 @@ pub fn prune(state: &Path) -> Result<Value> {
     }
     find::write(state, &list)?;
     Ok(json!({"removed": removed}))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn libraries_rank_by_how_often_the_project_imports_them() {
+        let counts = vec![
+            (("python", "requests".to_string()), 12),
+            (("python", "sqlalchemy".to_string()), 3),
+        ];
+        let urls = [
+            "https://docs.sqlalchemy.org/en/20/",
+            "https://docs.rs/serde/",
+            "https://requests.readthedocs.io/",
+        ];
+        let mut ranked: Vec<(usize, &str)> =
+            urls.iter().map(|u| (import_rank(u, &counts), *u)).collect();
+        ranked.sort_by_key(|(n, _)| std::cmp::Reverse(*n));
+        assert_eq!(ranked.iter().map(|r| r.0).collect::<Vec<_>>(), [12, 3, 0]);
+        assert!(ranked[0].1.contains("requests") && ranked[2].1.contains("serde"));
+    }
 }
