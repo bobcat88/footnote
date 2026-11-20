@@ -134,7 +134,11 @@ pub fn bundle(
     let _ = std::fs::remove_file(&snap);
     let c = crate::app::open(&db, false)?;
     c.execute("VACUUM INTO ?1", [snap.to_string_lossy().as_ref()])?;
-    let pages: i64 = c.query_row("SELECT count(*) FROM sources", [], |r| r.get(0))?;
+    let pages: i64 = c.query_row(
+        "SELECT count(*) FROM sources WHERE status='indexed'",
+        [],
+        |r| r.get(0),
+    )?;
     let model: String = c
         .query_row(
             "SELECT group_concat(identity) FROM embedding_models",
@@ -293,9 +297,11 @@ fn install_file(state: &Path, file: &Path, trust: &[String]) -> Result<Value> {
             hex(&h.finalize()) == m.db_sha256,
             "database hash does not match the manifest: bundle rejected"
         );
-        let pages: i64 =
-            crate::app::open(&part, false)?
-                .query_row("SELECT count(*) FROM sources", [], |r| r.get(0))?;
+        let pages: i64 = crate::app::open(&part, false)?.query_row(
+            "SELECT count(*) FROM sources WHERE status='indexed'",
+            [],
+            |r| r.get(0),
+        )?;
         ensure!(
             pages as u64 == m.pages,
             "page count does not match the manifest"

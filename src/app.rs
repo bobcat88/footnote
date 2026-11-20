@@ -520,6 +520,17 @@ enum DocsAction {
         model: Vec<PathBuf>,
         dbs: Vec<PathBuf>,
     },
+    /// Re-check cached documentation without crawling it again: a conditional request per page, then only changed pages are
+    /// re-indexed (keyword index first, embeddings in the background), removed pages dropped, new pages added.
+    Refresh {
+        /// One library (site); default every cached entry.
+        library: Option<String>,
+        #[arg(long)]
+        model: Vec<PathBuf>,
+        /// Keyword index only: skip the background embedding.
+        #[arg(long)]
+        no_embed: bool,
+    },
     /// Cached documentation: site, version, keyword-only / embedding n/m / ready, pages, size and date.
     List,
     /// Delete every version older than the newest of its site.
@@ -830,6 +841,24 @@ fn execute(cli: Cli) -> Result<Value> {
                         site: None,
                         version: None,
                         max_pages: *max_pages,
+                        models: model,
+                        no_embed: *no_embed,
+                    },
+                ),
+                DocsAction::Refresh {
+                    library,
+                    model,
+                    no_embed,
+                } => crate::refresh::run(
+                    &state,
+                    library.as_deref(),
+                    &crate::refresh::TokenDiff::default(),
+                    &crate::docs::Add {
+                        url: None,
+                        from: None,
+                        site: None,
+                        version: None,
+                        max_pages: 0,
                         models: model,
                         no_embed: *no_embed,
                     },

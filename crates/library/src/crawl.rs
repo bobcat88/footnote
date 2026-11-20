@@ -4,6 +4,7 @@
 //! an identifying user agent, and adaptive concurrency per host: a few requests in flight, more while the site answers, half as
 //! many after a 429, a 503 or a timeout (`Retry-After` honoured). JavaScript is not run.
 use anyhow::{Context, Result, bail};
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::{
     collections::{HashSet, VecDeque},
@@ -51,9 +52,18 @@ fn agent() -> ureq::Agent {
         .into()
 }
 
+/// What a page looked like when it was fetched: the cheap change check of `docs refresh` compares against it.
+#[derive(Clone, Default, Serialize, Deserialize, PartialEq, Debug)]
+pub struct Validators {
+    pub etag: Option<String>,
+    pub last_modified: Option<String>,
+    /// sha256 of the fetched body, for servers that send neither header.
+    pub hash: String,
+}
+
 enum Fetch {
-    /// Body, final URL after redirects, content type.
-    Page(String, Url, String),
+    /// Body, final URL after redirects, content type, validators.
+    Page(String, Url, String, Validators),
     /// The site asks us to slow down (429, 503) or did not answer in time; wait at least this long.
     SlowDown(Duration),
     Failed,
@@ -77,7 +87,7 @@ fn fetch(agent: &ureq::Agent, url: &Url) -> Fetch {
         return Fetch::SlowDown(Duration::from_secs(wait));
     }
     match page(&mut r, url) {
-        Some((body, last, kind)) => Fetch::Page(body, last, kind),
+        Some((body, last, kind, v)) => Fetch::Page(body, last, kind, v),
         None => Fetch::Failed,
     }
 }
@@ -85,15 +95,25 @@ fn fetch(agent: &ureq::Agent, url: &Url) -> Fetch {
 /// Body and final URL (after redirects) of a successful text response.
 fn get(agent: &ureq::Agent, url: &Url) -> Option<(String, Url, String)> {
     match fetch(agent, url) {
-        Fetch::Page(body, last, kind) => Some((body, last, kind)),
+        Fetch::Page(body, last, kind, _) => Some((body, last, kind)),
         _ => None,
     }
 }
 
-fn page(r: &mut ureq::http::Response<ureq::Body>, url: &Url) -> Option<(String, Url, String)> {
+fn page(
+    r: &mut ureq::http::Response<ureq::Body>,
+    url: &Url,
+) -> Option<(String, Url, String, Validators)> {
     if !r.status().is_success() {
         return None;
     }
+    let header = |r: &ureq::http::Response<ureq::Body>, k: &str| {
+        r.headers()
+            .get(k)
+            .and_then(|v| v.to_str().ok())
+            .map(str::to_string)
+    };
+    let (etag, last_modified) = (header(r, "etag"), header(r, "last-modified"));
     let kind = r
         .headers()
         .get("content-type")
@@ -111,7 +131,17 @@ fn page(r: &mut ureq::http::Response<ureq::Body>, url: &Url) -> Option<(String, 
         .limit(MAX_BYTES)
         .read_to_string()
         .ok()?;
-    Some((body, last, kind))
+    let hash = footnote_core::hash(body.as_bytes());
+    Some((
+        body,
+        last,
+        kind,
+        Validators {
+            etag,
+            last_modified,
+            hash,
+        },
+    ))
 }
 
 /// The start URL's folder: "/3/" and "/docs" keep theirs; "/guide/index.html" keeps "/guide".
@@ -232,6 +262,14 @@ fn sitemap(agent: &ureq::Agent, root: &Url) -> Vec<Url> {
     out.into_iter().map(normalize).collect()
 }
 
+fn robots(agent: &ureq::Agent, site: &Url) -> Option<texting_robots::Robot> {
+    site.join("/robots.txt")
+        .ok()
+        .and_then(|u| get(agent, &u))
+        .filter(|(_, _, kind)| !kind.contains("html")) // some sites answer a missing robots.txt with an HTML page
+        .and_then(|(txt, _, _)| texting_robots::Robot::new("FootnoteDocs", txt.as_bytes()).ok())
+}
+
 /// Main content as Markdown: Readability first; the page's main landmark (`main`, `role=main`) when Readability finds
 /// nothing or picks text outside it (it prefers a long footer to a short page: Python's index and removed-module pages);
 /// the whole body when there is no landmark. Not `article`: on Tailwind's pages the first one is a demo card.
@@ -284,12 +322,7 @@ pub fn crawl(out: &Path, o: &Options, progress: &mut dyn FnMut(u64, u64)) -> Res
         }
         None => start,
     };
-    let robots = start
-        .join("/robots.txt")
-        .ok()
-        .and_then(|u| get(&agent, &u))
-        .filter(|(_, _, kind)| !kind.contains("html")) // some sites answer a missing robots.txt with an HTML page
-        .and_then(|(txt, _, _)| texting_robots::Robot::new("FootnoteDocs", txt.as_bytes()).ok());
+    let robots = robots(&agent, &start);
     let allowed = |u: &Url| robots.as_ref().is_none_or(|r| r.allowed(u.as_str()));
 
     // Discovery: llms.txt beside the start page and at the root, then the sitemap, then the start page itself.
@@ -327,6 +360,7 @@ pub fn crawl(out: &Path, o: &Options, progress: &mut dyn FnMut(u64, u64)) -> Res
     }
     let (mut pages, mut bytes, mut skipped, mut slowed) = (0usize, 0u64, 0usize, 0usize);
     let mut urls = serde_json::Map::new();
+    let mut meta = serde_json::Map::new(); // file -> fetched URL and validators, for `docs refresh`
     // robots.txt Crawl-delay means one request at a time with that pause between them.
     let delay = robots
         .as_ref()
@@ -359,8 +393,8 @@ pub fn crawl(out: &Path, o: &Options, progress: &mut dyn FnMut(u64, u64)) -> Res
         });
         let mut wait = None;
         for (u, f) in batch.into_iter().zip(fetched) {
-            let (body, last, kind) = match f {
-                Fetch::Page(body, last, kind) => (body, last, kind),
+            let (body, last, kind, validators) = match f {
+                Fetch::Page(body, last, kind, v) => (body, last, kind, v),
                 Fetch::SlowDown(w) => {
                     slowed += 1;
                     wait = Some(wait.map_or(w, |x: Duration| x.max(w)));
@@ -409,6 +443,10 @@ pub fn crawl(out: &Path, o: &Options, progress: &mut dyn FnMut(u64, u64)) -> Res
             bytes += text.len() as u64;
             let file = format!("{pages}.md");
             fs::write(out.join(&file), &text)?;
+            meta.insert(
+                file.clone(),
+                json!({"url": last.as_str(), "validators": validators}),
+            );
             urls.insert(file, json!(page_url(&last)));
             progress(pages as u64, bytes);
         }
@@ -428,11 +466,142 @@ pub fn crawl(out: &Path, o: &Options, progress: &mut dyn FnMut(u64, u64)) -> Res
         }
     }
     fs::write(out.join("urls.json"), serde_json::to_string_pretty(&urls)?)?;
+    fs::write(
+        out.join("refresh.json"),
+        serde_json::to_string_pretty(
+            &json!({"scope": start.as_str(), "max_pages": o.max_pages, "pages": meta}),
+        )?,
+    )?;
     Ok(
         json!({"pages": pages, "bytes": bytes, "skipped": skipped, "queued_left": queue.len() + linked.len(),
         "discovered": {"llms_txt": via_llms, "sitemap": via_sitemap}, "out": out, "robots_txt": robots.is_some(),
         "concurrency": level, "slowed_down": slowed}),
     )
+}
+
+/// A page seen again: what `docs refresh` learns per known page.
+pub enum Recheck {
+    /// Not modified (HTTP 304) or the same body; the validators may have been renewed.
+    Same(Validators),
+    /// A new body: its Markdown, validators, and the links on it.
+    Changed(String, Validators, Vec<Url>),
+    /// The site says the page no longer exists (404, 410).
+    Gone,
+    /// No answer worth acting on (network error, 429/503, not a page): keep what we have.
+    Unreachable,
+}
+
+/// A page that was not in the index before.
+pub struct Found {
+    pub url: Url,
+    pub text: String,
+    pub validators: Validators,
+}
+
+/// The crawler's HTTP client for refreshes: conditional requests per page, then link and sitemap discovery of new pages.
+pub struct Client(ureq::Agent);
+
+impl Default for Client {
+    fn default() -> Self {
+        Client(agent())
+    }
+}
+
+/// A fetched body as indexable text, with the links it holds; `None` for anything that is not a page.
+fn text_of(body: String, last: &Url, kind: &str) -> Option<(String, Vec<Url>)> {
+    let (text, found) = if kind.contains("html") {
+        (markdown(&body, last), links(&body, last))
+    } else if kind.contains("markdown") || kind.contains("text/plain") {
+        (body, Vec::new())
+    } else {
+        return None;
+    };
+    (text.trim().len() >= 50).then_some((text, found))
+}
+
+impl Client {
+    /// One conditional GET (`If-None-Match`, `If-Modified-Since`); a 200 whose body hashes the same is also `Same`.
+    pub fn recheck(&self, url: &str, v: &Validators) -> Recheck {
+        let Ok(u) = Url::parse(url) else {
+            return Recheck::Unreachable;
+        };
+        let mut req = self.0.get(u.as_str());
+        if let Some(e) = &v.etag {
+            req = req.header("If-None-Match", e);
+        }
+        if let Some(m) = &v.last_modified {
+            req = req.header("If-Modified-Since", m);
+        }
+        let Ok(mut r) = req.call() else {
+            return Recheck::Unreachable;
+        };
+        match r.status().as_u16() {
+            304 => Recheck::Same(v.clone()),
+            404 | 410 => Recheck::Gone,
+            _ => match page(&mut r, &u) {
+                Some((_, _, _, nv)) if nv.hash == v.hash => Recheck::Same(nv),
+                Some((body, last, kind, nv)) => match text_of(body, &normalize(last), &kind) {
+                    Some((text, found)) => Recheck::Changed(text, nv, found),
+                    None => Recheck::Unreachable,
+                },
+                None => Recheck::Unreachable,
+            },
+        }
+    }
+
+    /// Pages in scope that `known` (page keys, see `key_of`) lacks: `seeds` (links from changed pages) and the sitemap, then
+    /// links of the new pages themselves, at most `room` of them, robots.txt honoured. One request at a time.
+    /// shortcut: a listed page that turns out empty is fetched again on every refresh; remember rejects if that costs too much.
+    pub fn find_new(
+        &self,
+        scope: &str,
+        known: &HashSet<String>,
+        seeds: Vec<Url>,
+        room: usize,
+    ) -> Vec<Found> {
+        let Ok(scope) = Url::parse(scope) else {
+            return Vec::new();
+        };
+        let robots = robots(&self.0, &scope);
+        let mut queue: VecDeque<Url> = seeds.into_iter().chain(sitemap(&self.0, &scope)).collect();
+        let mut seen: HashSet<String> = known.clone();
+        let mut out = Vec::new();
+        while out.len() < room
+            && let Some(u) = queue.pop_front()
+        {
+            if !in_scope(&u, &scope, &None)
+                || !seen.insert(page_key(&u))
+                || robots.as_ref().is_some_and(|r| !r.allowed(u.as_str()))
+            {
+                continue;
+            }
+            let Some((body, last, kind)) = get(&self.0, &u) else {
+                continue;
+            };
+            let last = normalize(last);
+            if !in_scope(&last, &scope, &None) || (last != u && !seen.insert(page_key(&last))) {
+                continue;
+            }
+            let hash = footnote_core::hash(body.as_bytes());
+            if let Some((text, found)) = text_of(body, &last, &kind) {
+                queue.extend(found);
+                out.push(Found {
+                    url: last,
+                    text,
+                    validators: Validators {
+                        hash,
+                        ..Validators::default()
+                    },
+                });
+            }
+        }
+        out
+    }
+}
+
+/// The key a page URL is compared by during discovery.
+pub fn key_of(url: &str) -> Option<String> {
+    Url::parse(url).ok().map(|u| page_key(&u))
 }
 
 #[cfg(test)]

@@ -17,6 +17,8 @@ mod models;
 mod personal;
 #[cfg(feature = "memory")]
 mod projects;
+#[cfg(feature = "library")]
+mod refresh;
 #[cfg(feature = "memory")]
 mod review;
 #[cfg(feature = "code")]

@@ -17,7 +17,7 @@ use std::cmp::Ordering;
 use std::path::{Path, PathBuf};
 
 /// A path component made of `[a-z0-9._-]` only and never starting with a dot, so it cannot climb out of the docs folder.
-fn safe(what: &str, raw: &str) -> Result<String> {
+pub(crate) fn safe(what: &str, raw: &str) -> Result<String> {
     let s: String = raw
         .trim()
         .to_lowercase()
@@ -55,7 +55,7 @@ fn root(state: &Path) -> PathBuf {
 }
 
 /// Every `(site, version, db)` in the cache, oldest version first within a site.
-fn entries(state: &Path) -> Vec<(String, String, PathBuf)> {
+pub(crate) fn entries(state: &Path) -> Vec<(String, String, PathBuf)> {
     let mut out: Vec<(String, String, PathBuf)> = Vec::new();
     for site in std::fs::read_dir(root(state))
         .into_iter()
@@ -191,7 +191,7 @@ fn chunk_count(db: &Path) -> i64 {
 }
 
 /// Start one detached worker for the keyword-only corpora among `dbs`, smallest first so a big one never holds up the rest.
-fn embed_missing(state: &Path, dbs: &[PathBuf], a: &Add) -> Result<Value> {
+pub(crate) fn embed_missing(state: &Path, dbs: &[PathBuf], a: &Add) -> Result<Value> {
     if a.no_embed {
         return Ok(json!("skipped (--no-embed)"));
     }
@@ -292,7 +292,9 @@ fn add_keyword(state: &Path, a: &Add) -> Result<Value> {
     // Build beside the final name and rename at the end, so a failed run never leaves a half database that counts as cached.
     let part = db.with_extension("db.part");
     let _ = std::fs::remove_file(&part);
-    let pages = root(state).join(format!(".pages-{}", std::process::id()));
+    // The crawled pages stay beside the database: `docs refresh` re-checks them and re-indexes only what changed.
+    let pages = db.with_extension("pages");
+    let _ = std::fs::remove_dir_all(&pages);
     let folder = match (a.url, a.from) {
         (Some(u), _) => {
             let options = crawl::Options {
@@ -320,7 +322,6 @@ fn add_keyword(state: &Path, a: &Add) -> Result<Value> {
         let _ = crate::lexical::sync(&c);
         Ok::<_, anyhow::Error>(report)
     })();
-    let _ = std::fs::remove_dir_all(&pages);
     // An unreachable site or empty folder must not be cached as an empty corpus that later reads as ready.
     let built = built.and_then(|r| {
         ensure!(
@@ -333,6 +334,7 @@ fn add_keyword(state: &Path, a: &Add) -> Result<Value> {
         Ok(r) => r,
         Err(e) => {
             let _ = std::fs::remove_file(&part);
+            let _ = std::fs::remove_dir_all(&pages);
             return Err(e);
         }
     };
@@ -347,7 +349,7 @@ pub fn list(state: &Path) -> Result<Value> {
         .into_iter()
         .map(|(site, version, db)| {
             let pages: Option<i64> = crate::app::open(&db, false).ok().and_then(|c| {
-                c.query_row("SELECT count(*) FROM sources", [], |r| r.get(0))
+                c.query_row("SELECT count(*) FROM sources WHERE status='indexed'", [], |r| r.get(0))
                     .ok()
             });
             let meta = std::fs::metadata(&db).ok();
@@ -377,6 +379,7 @@ pub fn prune(state: &Path) -> Result<Value> {
                 let _ = std::fs::remove_file(format!("{}{ext}", db.display()));
             }
             let _ = std::fs::remove_file(db.with_extension("licence.json"));
+            let _ = std::fs::remove_dir_all(db.with_extension("pages"));
             list.retain(|p| p != db);
             removed.push(json!({"site": site, "version": version}));
         }
