@@ -1,0 +1,12 @@
+{
+ "scrapy": [
+  "https://docs.scrapy.org/en/latest/",
+  200,
+  "/llms-[a-z]+\.txt$/"
+ ],
+ "pytest": [
+  "https://docs.pytest.org/en/stable/",
+  200,
+  "/llms-[a-z]+\.txt$/"
+ ]
+}

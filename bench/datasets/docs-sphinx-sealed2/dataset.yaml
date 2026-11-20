@@ -1,0 +1,297 @@
+description: 'Footnote sealed set 2 for Sphinx-built documentation (#106, #301), Scrapy (sphinx_rtd_theme) and pytest (furo), written 20 Nov 2026 by Claude from the sites'' page lists before any system
+  ran on them and before the results of any run were seen. 40 questions (20 per library), graded URLs verified 200. Never tuned on.'
+entries:
+- vars:
+    library: scrapy
+    query: pause a crawl and resume it later from where it stopped
+    intent: api-lookup
+    qrels:
+    - url: https://docs.scrapy.org/en/latest/topics/jobs.html
+      grade: 3
+- vars:
+    library: scrapy
+    query: slow down requests automatically based on server latency
+    intent: api-lookup
+    qrels:
+    - url: https://docs.scrapy.org/en/latest/topics/autothrottle.html
+      grade: 3
+- vars:
+    library: scrapy
+    query: export scraped items to a JSON lines file
+    intent: api-lookup
+    qrels:
+    - url: https://docs.scrapy.org/en/latest/topics/feed-exports.html
+      grade: 3
+    - url: https://docs.scrapy.org/en/latest/intro/tutorial.html
+      grade: 2
+- vars:
+    library: scrapy
+    query: pick out elements with CSS or XPath expressions
+    intent: api-lookup
+    qrels:
+    - url: https://docs.scrapy.org/en/latest/topics/selectors.html
+      grade: 3
+    - url: https://docs.scrapy.org/en/latest/intro/tutorial.html
+      grade: 2
+- vars:
+    library: scrapy
+    query: log in to a website by filling and submitting a form
+    intent: api-lookup
+    qrels:
+    - url: https://docs.scrapy.org/en/latest/topics/request-response.html
+      grade: 3
+- vars:
+    library: scrapy
+    query: discard duplicate or incomplete items after they are scraped
+    intent: api-lookup
+    qrels:
+    - url: https://docs.scrapy.org/en/latest/topics/item-pipeline.html
+      grade: 3
+- vars:
+    library: scrapy
+    query: download the images that belong to scraped items
+    intent: api-lookup
+    qrels:
+    - url: https://docs.scrapy.org/en/latest/topics/media-pipeline.html
+      grade: 3
+- vars:
+    library: scrapy
+    query: scrape a page whose content is filled in by JavaScript
+    intent: troubleshooting
+    qrels:
+    - url: https://docs.scrapy.org/en/latest/topics/dynamic-content.html
+      grade: 3
+- vars:
+    library: scrapy
+    query: open an interactive console to try selectors on a response
+    intent: api-lookup
+    qrels:
+    - url: https://docs.scrapy.org/en/latest/topics/shell.html
+      grade: 3
+    - url: https://docs.scrapy.org/en/latest/topics/debug.html
+      grade: 2
+- vars:
+    library: scrapy
+    query: follow links automatically with extraction rules
+    intent: api-lookup
+    qrels:
+    - url: https://docs.scrapy.org/en/latest/topics/spiders.html
+      grade: 3
+- vars:
+    library: scrapy
+    query: add headers or change the user agent on every outgoing request
+    intent: api-lookup
+    qrels:
+    - url: https://docs.scrapy.org/en/latest/topics/downloader-middleware.html
+      grade: 3
+- vars:
+    library: scrapy
+    query: run several spiders from one Python script
+    intent: api-lookup
+    qrels:
+    - url: https://docs.scrapy.org/en/latest/topics/practices.html
+      grade: 3
+- vars:
+    library: scrapy
+    query: put spiders on a server and schedule their runs
+    intent: api-lookup
+    qrels:
+    - url: https://docs.scrapy.org/en/latest/topics/deploy.html
+      grade: 3
+- vars:
+    library: scrapy
+    query: count pages crawled and other numbers during a run
+    intent: api-lookup
+    qrels:
+    - url: https://docs.scrapy.org/en/latest/topics/stats.html
+      grade: 3
+- vars:
+    library: scrapy
+    query: run code when a spider opens or closes
+    intent: api-lookup
+    qrels:
+    - url: https://docs.scrapy.org/en/latest/topics/signals.html
+      grade: 3
+- vars:
+    library: scrapy
+    query: find out why memory keeps growing during a long crawl
+    intent: troubleshooting
+    qrels:
+    - url: https://docs.scrapy.org/en/latest/topics/leaks.html
+      grade: 3
+- vars:
+    library: scrapy
+    query: clean up and join field values while filling an item
+    intent: api-lookup
+    qrels:
+    - url: https://docs.scrapy.org/en/latest/topics/loaders.html
+      grade: 3
+- vars:
+    library: scrapy
+    query: install the framework in a virtual environment
+    intent: api-lookup
+    qrels:
+    - url: https://docs.scrapy.org/en/latest/intro/install.html
+      grade: 3
+- vars:
+    library: scrapy
+    query: how the engine, scheduler and downloader exchange data
+    intent: conceptual
+    qrels:
+    - url: https://docs.scrapy.org/en/latest/topics/architecture.html
+      grade: 3
+- vars:
+    library: scrapy
+    query: handle a request that fails with a network error or a bad status
+    intent: troubleshooting
+    qrels:
+    - url: https://docs.scrapy.org/en/latest/topics/request-response.html
+      grade: 3
+- vars:
+    library: pytest
+    query: run one test with many sets of inputs
+    intent: api-lookup
+    qrels:
+    - url: https://docs.pytest.org/en/stable/how-to/parametrize.html
+      grade: 3
+- vars:
+    library: pytest
+    query: temporarily change an environment variable or attribute inside a test
+    intent: api-lookup
+    qrels:
+    - url: https://docs.pytest.org/en/stable/how-to/monkeypatch.html
+      grade: 3
+- vars:
+    library: pytest
+    query: skip a test on some platforms or mark it as expected to fail
+    intent: api-lookup
+    qrels:
+    - url: https://docs.pytest.org/en/stable/how-to/skipping.html
+      grade: 3
+- vars:
+    library: pytest
+    query: get a temporary directory that is unique to each test
+    intent: api-lookup
+    qrels:
+    - url: https://docs.pytest.org/en/stable/how-to/tmp_path.html
+      grade: 3
+- vars:
+    library: pytest
+    query: share setup code and resources between tests
+    intent: api-lookup
+    qrels:
+    - url: https://docs.pytest.org/en/stable/how-to/fixtures.html
+      grade: 3
+    - url: https://docs.pytest.org/en/stable/explanation/fixtures.html
+      grade: 2
+    - url: https://docs.pytest.org/en/stable/reference/fixtures.html
+      grade: 2
+- vars:
+    library: pytest
+    query: check that code raises a particular exception
+    intent: api-lookup
+    qrels:
+    - url: https://docs.pytest.org/en/stable/how-to/assert.html
+      grade: 3
+- vars:
+    library: pytest
+    query: look at the log records emitted during a test
+    intent: api-lookup
+    qrels:
+    - url: https://docs.pytest.org/en/stable/how-to/logging.html
+      grade: 3
+- vars:
+    library: pytest
+    query: turn warnings into errors or assert that one is issued
+    intent: api-lookup
+    qrels:
+    - url: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+      grade: 3
+- vars:
+    library: pytest
+    query: rerun only the tests that failed last time
+    intent: api-lookup
+    qrels:
+    - url: https://docs.pytest.org/en/stable/how-to/cache.html
+      grade: 3
+- vars:
+    library: pytest
+    query: register custom markers and select tests by marker
+    intent: api-lookup
+    qrels:
+    - url: https://docs.pytest.org/en/stable/how-to/mark.html
+      grade: 3
+- vars:
+    library: pytest
+    query: run the examples in docstrings as tests
+    intent: api-lookup
+    qrels:
+    - url: https://docs.pytest.org/en/stable/how-to/doctest.html
+      grade: 3
+- vars:
+    library: pytest
+    query: write an extension that adds options and hooks into the test run
+    intent: api-lookup
+    qrels:
+    - url: https://docs.pytest.org/en/stable/how-to/writing_plugins.html
+      grade: 3
+    - url: https://docs.pytest.org/en/stable/how-to/writing_hook_functions.html
+      grade: 2
+- vars:
+    library: pytest
+    query: run tests that were written with the standard library unittest
+    intent: api-lookup
+    qrels:
+    - url: https://docs.pytest.org/en/stable/how-to/unittest.html
+      grade: 3
+- vars:
+    library: pytest
+    query: which exit codes the test runner returns
+    intent: api-lookup
+    qrels:
+    - url: https://docs.pytest.org/en/stable/reference/exit-codes.html
+      grade: 3
+- vars:
+    library: pytest
+    query: inspect what a test printed to stdout and stderr
+    intent: api-lookup
+    qrels:
+    - url: https://docs.pytest.org/en/stable/how-to/capture-stdout-stderr.html
+      grade: 3
+- vars:
+    library: pytest
+    query: recommended layout of a project with its tests and how test files are imported
+    intent: conceptual
+    qrels:
+    - url: https://docs.pytest.org/en/stable/explanation/goodpractices.html
+      grade: 3
+    - url: https://docs.pytest.org/en/stable/explanation/pythonpath.html
+      grade: 2
+- vars:
+    library: pytest
+    query: module and class level setup and teardown functions
+    intent: api-lookup
+    qrels:
+    - url: https://docs.pytest.org/en/stable/how-to/xunit_setup.html
+      grade: 3
+- vars:
+    library: pytest
+    query: why some tests fail only sometimes and how to deal with that
+    intent: conceptual
+    qrels:
+    - url: https://docs.pytest.org/en/stable/explanation/flaky.html
+      grade: 3
+- vars:
+    library: pytest
+    query: install the tool and write a first test
+    intent: api-lookup
+    qrels:
+    - url: https://docs.pytest.org/en/stable/getting-started.html
+      grade: 3
+- vars:
+    library: pytest
+    query: keep going after one failed check inside a loop of assertions
+    intent: api-lookup
+    qrels:
+    - url: https://docs.pytest.org/en/stable/how-to/subtests.html
+      grade: 3
