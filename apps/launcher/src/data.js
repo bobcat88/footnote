@@ -65,7 +65,8 @@ export const AGENTS = {
   codex: "Codex",
   grok: "Grok",
   "deepseek-harness": "DeepSeek Harness",
-  gemini: "Gemini CLI",
+  "gemini-cli": "Gemini CLI",
+  antigravity: "Antigravity",
 };
 
 export const mb = (bytes) => `${num(Math.round(bytes / 1e6))} MB`;

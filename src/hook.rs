@@ -119,6 +119,19 @@ struct Session {
     shown: Vec<i64>,
     /// Whether this session was already asked for a handoff (#250).
     handoff_asked: bool,
+    /// Antigravity `PreInvocation` fires before every model step in a turn: keep a short SHA-256 prefix of the active
+    /// turn's prompt so tool-loop steps only count and recall once; cleared when the turn finishes. Hash only, never text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    turn_prompt_hash: Option<String>,
+}
+
+fn prompt_hash(prompt: &str) -> String {
+    let trimmed = prompt.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+    let hex = footnote_core::hash(trimmed.as_bytes());
+    hex[..16].to_string()
 }
 
 fn ids(v: &Value) -> impl Iterator<Item = i64> + '_ {
@@ -137,24 +150,47 @@ struct Event {
     /// Claude Code's session file; read only for its last token count, never its text.
     transcript: String,
     stop_active: bool,
+    /// True for Antigravity (`agy` CLI / IDE / ACP) payloads: `injectSteps` output and `decision: "continue"` on Stop.
+    agy: bool,
+    /// Antigravity `Stop` terminationReason (e.g. "NO_TOOL_CALL", "USER_CANCELED", "ERROR").
+    termination_reason: String,
 }
 impl Event {
     fn normalize(v: &Value) -> Self {
-        let text = |a: &str, b: &str, fallback: &str| {
-            [a, b]
-                .into_iter()
+        let text = |keys: &[&str], fallback: &str| {
+            keys.iter()
                 .filter_map(|k| v[k].as_str())
                 .find(|s| !s.is_empty())
                 .unwrap_or(fallback)
                 .to_string()
         };
+        let agy = v.get("conversationId").is_some()
+            || v["hookEventName"] == "PreInvocation"
+            || v.get("continuationActive").is_some()
+            || v.get("lastUserInput").is_some();
+        let workspace_first = v["workspacePaths"]
+            .as_array()
+            .and_then(|a| a.first())
+            .and_then(Value::as_str)
+            .filter(|s| !s.is_empty());
+        let cwd = ["cwd", "workspaceRoot"]
+            .into_iter()
+            .filter_map(|k| v[k].as_str())
+            .find(|s| !s.is_empty())
+            .or(workspace_first)
+            .unwrap_or(".")
+            .to_string();
         Self {
-            name: text("hook_event_name", "hookEventName", ""),
-            session: text("session_id", "sessionId", "unknown"),
-            cwd: text("cwd", "workspaceRoot", "."),
-            prompt: text("prompt", "userPrompt", ""),
-            transcript: text("transcript_path", "transcriptPath", ""),
-            stop_active: v["stop_hook_active"] == true || v["stopHookActive"] == true,
+            name: text(&["hook_event_name", "hookEventName"], ""),
+            session: text(&["session_id", "sessionId", "conversationId"], "unknown"),
+            cwd,
+            prompt: text(&["prompt", "userPrompt", "lastUserInput"], ""),
+            transcript: text(&["transcript_path", "transcriptPath"], ""),
+            stop_active: v["stop_hook_active"] == true
+                || v["stopHookActive"] == true
+                || v["continuationActive"] == true,
+            agy,
+            termination_reason: text(&["terminationReason"], ""),
         }
     }
 }
@@ -295,12 +331,21 @@ fn render(v: &Value, title: &str, short: bool) -> String {
     }
 }
 
-fn context(event: &str, text: String) -> Option<Value> {
+fn context(event: &Event, text: String) -> Option<Value> {
     if text.is_empty() {
         None
+    } else if event.agy {
+        Some(json!({"injectSteps": [{"systemMessage": {"systemMessage": text}}]}))
     } else {
-        Some(json!({"hookSpecificOutput": {"hookEventName": event, "additionalContext": text}}))
+        Some(
+            json!({"hookSpecificOutput": {"hookEventName": event.name, "additionalContext": text}}),
+        )
     }
+}
+
+fn stop_ask(event: &Event, reason: String) -> Value {
+    let decision = if event.agy { "continue" } else { "block" };
+    json!({"decision": decision, "reason": reason})
 }
 
 #[cfg(windows)]
@@ -520,6 +565,7 @@ fn handle(state: &Path, s: &Settings, event: &Value) -> Result<Option<Value>> {
                 crate::projects::seen(state, &project, if top.is_empty() { &e.cwd } else { &top });
             embed_in_background(s, &db)?;
             st.handoff_asked = false; // after a compaction the context is small again
+            st.turn_prompt_hash = None;
             if db.exists() {
                 let conn = crate::app::open(&db, false)?;
                 let mut memories = crate::memory::pack(&conn, Some(&project), 3000)?;
@@ -553,39 +599,57 @@ fn handle(state: &Path, s: &Settings, event: &Value) -> Result<Option<Value>> {
                         format!("{text}\n\n{line}")
                     };
                 }
-                out = context(&e.name, text);
+                out = context(&e, text);
             }
         }
-        "UserPromptSubmit" => {
-            st.turns = st.turns.saturating_add(1);
-            st.embed |= e.prompt.trim().to_lowercase().starts_with("/remember");
-            if db.exists() && !e.prompt.trim().is_empty() && !e.prompt.starts_with('/') {
-                // Search accepts at most 512 bytes, not characters. Never cut a UTF-8 code point.
-                let query = &e.prompt[..e.prompt.floor_char_boundary(500.min(e.prompt.len()))];
-                // Twice the limit, so memories already shown in this session do not leave the prompt short.
-                let mut hits = timed(state, s.metrics, "hook.recall", false, || {
-                    recall(s, &db, &project, query, (s.recall_limit * 2).min(20))
-                })?;
-                if let Some(list) = hits["memories"].as_array_mut() {
-                    list.retain(|m| m["id"].as_i64().is_none_or(|id| !st.shown.contains(&id)));
-                    list.truncate(s.recall_limit);
+        "UserPromptSubmit" | "PreInvocation" => {
+            let same_turn = if e.name == "PreInvocation" {
+                let h = prompt_hash(&e.prompt);
+                if h.is_empty() || st.turn_prompt_hash.as_deref() == Some(h.as_str()) {
+                    true
+                } else {
+                    st.turn_prompt_hash = Some(h);
+                    false
                 }
-                st.shown.extend(ids(&hits));
-                note(s, &dir, "recall", &project, &hits);
-                out = context(
-                    &e.name,
-                    render(
-                        &hits,
-                        "Possibly relevant memories (… marks a cut text: footnote_get <id> gives all of it)",
-                        true,
-                    ),
-                );
+            } else {
+                false
+            };
+            if !same_turn {
+                st.turns = st.turns.saturating_add(1);
+                st.embed |= e.prompt.trim().to_lowercase().starts_with("/remember");
+                if db.exists() && !e.prompt.trim().is_empty() && !e.prompt.starts_with('/') {
+                    // Search accepts at most 512 bytes, not characters. Never cut a UTF-8 code point.
+                    let query = &e.prompt[..e.prompt.floor_char_boundary(500.min(e.prompt.len()))];
+                    // Twice the limit, so memories already shown in this session do not leave the prompt short.
+                    let mut hits = timed(state, s.metrics, "hook.recall", false, || {
+                        recall(s, &db, &project, query, (s.recall_limit * 2).min(20))
+                    })?;
+                    if let Some(list) = hits["memories"].as_array_mut() {
+                        list.retain(|m| m["id"].as_i64().is_none_or(|id| !st.shown.contains(&id)));
+                        list.truncate(s.recall_limit);
+                    }
+                    st.shown.extend(ids(&hits));
+                    note(s, &dir, "recall", &project, &hits);
+                    out = context(
+                        &e,
+                        render(
+                            &hits,
+                            "Possibly relevant memories (… marks a cut text: footnote_get <id> gives all of it)",
+                            true,
+                        ),
+                    );
+                }
             }
         }
         "Stop" => {
+            let agy_non_normal =
+                e.agy && !e.termination_reason.is_empty() && e.termination_reason != "NO_TOOL_CALL";
             if e.stop_active || st.embed {
                 st.embed = false;
+                st.turn_prompt_hash = None;
                 embed_in_background(s, &db)?;
+            } else if agy_non_normal {
+                st.turn_prompt_hash = None;
             } else if let Some(tokens) = (s.handoff_tokens > 0 && !st.handoff_asked)
                 .then(|| context_tokens(Path::new(&e.transcript)))
                 .flatten()
@@ -600,7 +664,7 @@ fn handle(state: &Path, s: &Settings, event: &Value) -> Result<Option<Value>> {
                     .replace("{today}", &today)
                     .replace("{project}", &project)
                     + &changed_hint(&git(&e.cwd, &["status", "--porcelain"]));
-                out = Some(json!({"decision": "block", "reason": reason}));
+                out = Some(stop_ask(&e, reason));
             } else if st.turns.saturating_sub(st.asked_at) >= s.every_turns {
                 st.asked_at = st.turns;
                 let today = time::OffsetDateTime::now_local()?.date().to_string();
@@ -608,7 +672,9 @@ fn handle(state: &Path, s: &Settings, event: &Value) -> Result<Option<Value>> {
                     .replace("{today}", &today)
                     .replace("{project}", &project)
                     + &changed_hint(&git(&e.cwd, &["status", "--porcelain"]));
-                out = Some(json!({"decision": "block", "reason": reason}));
+                out = Some(stop_ask(&e, reason));
+            } else {
+                st.turn_prompt_hash = None;
             }
         }
         _ => {}
@@ -622,10 +688,10 @@ fn handle(state: &Path, s: &Settings, event: &Value) -> Result<Option<Value>> {
 
 fn run_inner(state: &Path, embed: bool) -> Result<()> {
     let s = Settings::load(state).context("settings")?;
-    if !s.enabled {
-        return Ok(()); // switched off: no context, no save request, no state written
-    }
     if embed {
+        if !s.enabled {
+            return Ok(());
+        }
         return timed(state, s.metrics, "hook.embed", true, || {
             crate::semantic::rebuild(&mut crate::app::open(&s.db(state), true)?, &s.models)?;
             Ok(())
@@ -644,8 +710,17 @@ fn run_inner(state: &Path, embed: bool) -> Result<()> {
         serde_json::from_str(&input).context("event JSON")?
     };
     ensure!(event.is_object(), "event must be an object");
+    let agy = Event::normalize(&event).agy;
+    if !s.enabled {
+        if agy {
+            println!("{{}}");
+        }
+        return Ok(()); // switched off: no context, no save request, no state written
+    }
     if let Some(out) = handle(state, &s, &event).context("event handling")? {
         println!("{out}");
+    } else if agy {
+        println!("{{}}");
     }
     Ok(())
 }

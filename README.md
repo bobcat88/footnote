@@ -145,7 +145,7 @@ Lexical search works without Python or models; hybrid search needs them. Re-run 
 ## Connect your agent
 
 ```bash
-footnote --db $DB install      # registers Footnote in Claude Code, Codex CLI and Gemini CLI if it finds them
+footnote --db $DB install      # registers Footnote in Claude Code, Codex CLI, Gemini CLI and Antigravity if it finds them
 ```
 
 For any other MCP host, add this entry to its MCP settings:
@@ -159,6 +159,7 @@ For any other MCP host, add this entry to its MCP settings:
 | Claude Code | `install`, or `claude mcp add footnote -- /path/to/footnote --db /path/to/knowledge.db mcp` |
 | Codex CLI | `install`, or `codex mcp add footnote -- /path/to/footnote --db /path/to/knowledge.db mcp` |
 | Gemini CLI | `install` (writes `~/.gemini/settings.json`) |
+| Antigravity (`agy`) | `install` (writes `~/.gemini/config/mcp_config.json`) |
 | Hermes | add the same command and args under `mcp_servers:` in `config.yaml` |
 | Cursor, Windsurf, Zed, VS Code, Cline | paste the JSON entry above into the host's MCP settings |
 
@@ -184,7 +185,7 @@ The previous `borg_*` tool names keep working as aliases.
 
 Besides your documents, Footnote can remember what an assistant learns while working with you: your preferences, project decisions and dates, problems and their fixes, what each session achieved. Memories live in their own database (`memory.db` in Footnote's per-user state folder), never in a corpus, and are searched with the same hybrid engine.
 
-`footnote install --memory` sets it up for every detected agent: Claude Code, Codex, Grok and DeepSeek Harness. It creates the memory database, registers its MCP server, adds the hook and a `/remember` command, backs up each file it edits, and leaves existing entries alone. The agent itself writes its memories; no second model reads your conversation. A hook (`footnote hook`, [src/hook.rs](src/hook.rs)) organizes it:
+`footnote install --memory` sets it up for every detected agent: Claude Code, Codex, Grok, DeepSeek Harness, Gemini CLI (MCP) and Antigravity (`agy` CLI / IDE: `~/.gemini/config/mcp_config.json`, `hooks.json` and `skills/remember/SKILL.md`). It creates the memory database, registers its MCP server, adds the hook and a `/remember` command, backs up each file it edits, and leaves existing entries alone. The agent itself writes its memories; no second model reads your conversation. A hook (`footnote hook`, [src/hook.rs](src/hook.rs)) organizes it:
 - at session start it injects your preferences and the project's memories;
 - on each prompt it adds the memories relevant to it;
 - every 10 prompts, at the end of a turn, it asks the agent once to save what it learned with `footnote_remember`, and `/remember` does the same on demand.

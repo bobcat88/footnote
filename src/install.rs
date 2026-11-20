@@ -253,17 +253,19 @@ pub fn run(db: &Option<PathBuf>, dry_run: bool) -> Result<Value> {
     let claude = home.join(".claude.json");
     let codex = home.join(".codex/config.toml");
     let gemini = home.join(".gemini/settings.json");
+    let agy = home.join(".gemini/config/mcp_config.json");
 
     let targets: Vec<(&str, PathBuf)> = vec![
         ("claude-code", claude),
         ("codex", codex),
         ("gemini-cli", gemini),
+        ("antigravity", agy),
     ];
     for (agent, path) in targets {
-        let detected = if agent == "claude-code" {
-            path.exists() || home.join(".claude").exists()
-        } else {
-            path.parent().map(|p| p.exists()).unwrap_or(false)
+        let detected = match agent {
+            "claude-code" => path.exists() || home.join(".claude").exists(),
+            "antigravity" => has_antigravity(&home),
+            _ => path.parent().map(|p| p.exists()).unwrap_or(false),
         };
         if !detected {
             report.push(json!({"agent": agent, "status": "not detected", "path": portable(&path)}));
@@ -285,6 +287,13 @@ pub fn run(db: &Option<PathBuf>, dry_run: bool) -> Result<Value> {
         "daemon": register_daemon(&db, dry_run),
         "note": "each agent runs `footnote --db <DB> mcp`; the daemon, token and audit log are automatic. An entry named `borg` from before the rename still points at the old executable: delete it from the agent config",
     }))
+}
+
+fn has_antigravity(home: &Path) -> bool {
+    let g = home.join(".gemini");
+    g.join("config").exists()
+        || g.join("antigravity").exists()
+        || g.join("antigravity-cli").exists()
 }
 
 #[cfg(feature = "memory")]
@@ -367,6 +376,24 @@ fn add_hooks(
             }
         }
         Ok(changed)
+    })
+}
+
+#[cfg(feature = "memory")]
+/// Add or update the named `"footnote-memory"` hook entry in Antigravity's `~/.gemini/config/hooks.json`
+/// (flat handler arrays for `SessionStart`, `PreInvocation` and `Stop`), leaving all other named hooks untouched.
+fn add_agy_hooks(path: &Path, command: &str, dry_run: bool) -> Result<&'static str> {
+    let desired = json!({
+        "SessionStart": [{"type": "command", "command": command, "timeout": 15}],
+        "PreInvocation": [{"type": "command", "command": command, "timeout": 10}],
+        "Stop": [{"type": "command", "command": command, "timeout": 5}],
+    });
+    merge_json(path, dry_run, |root| {
+        if root.get(MEMORY_SERVER) == Some(&desired) {
+            return Ok(false);
+        }
+        root.insert(MEMORY_SERVER.to_string(), desired);
+        Ok(true)
     })
 }
 
@@ -532,6 +559,33 @@ pub fn memory(dry_run: bool) -> Result<Value> {
             "mcp server",
             &gemini,
             add_server(&gemini, MEMORY_SERVER, &entry, dry_run),
+        )?;
+    }
+    if has_antigravity(&home) {
+        let cfg = home.join(".gemini/config");
+        let mcp = cfg.join("mcp_config.json");
+        add(
+            "antigravity",
+            "mcp server",
+            &mcp,
+            add_server(&mcp, MEMORY_SERVER, &entry, dry_run),
+        )?;
+        let hooks = cfg.join("hooks.json");
+        add(
+            "antigravity",
+            "hooks",
+            &hooks,
+            add_agy_hooks(&hooks, &command, dry_run),
+        )?;
+        let skill = cfg.join("skills/remember/SKILL.md");
+        let agy_skill = format!(
+            "---\nname: remember\ndescription: >-\n  Save important preferences, project decisions, fixes and session summaries\n  from this conversation into Footnote Memory using footnote_remember.\n---\n\n{remember}"
+        );
+        add(
+            "antigravity",
+            "/remember",
+            &skill,
+            append_once(&skill, "Footnote", &agy_skill, dry_run),
         )?;
     }
     Ok(json!({
@@ -700,6 +754,29 @@ pub fn uninstall_memory(dry_run: bool) -> Result<Value> {
     )?;
     let gemini = home.join(".gemini/settings.json");
     add("gemini-cli", "mcp server", &gemini, remove_server(&gemini))?;
+    let agy_cfg = home.join(".gemini/config");
+    let agy_mcp = agy_cfg.join("mcp_config.json");
+    add(
+        "antigravity",
+        "mcp server",
+        &agy_mcp,
+        remove_server(&agy_mcp),
+    )?;
+    let agy_hooks = agy_cfg.join("hooks.json");
+    let agy_hooks_status = if !agy_hooks.exists() {
+        Ok("not present")
+    } else {
+        merge_json(&agy_hooks, dry_run, |root| {
+            Ok(root.remove(MEMORY_SERVER).is_some())
+        })
+    };
+    add("antigravity", "hooks", &agy_hooks, agy_hooks_status)?;
+    let agy_skill = agy_cfg.join("skills/remember/SKILL.md");
+    let agy_skill_status = edit_text(&agy_skill, dry_run, |text| {
+        text.contains("Footnote memory: save what is worth remembering")
+            .then(String::new)
+    });
+    add("antigravity", "/remember", &agy_skill, agy_skill_status)?;
     Ok(json!({
         "dry_run": dry_run,
         "targets": report,
@@ -764,6 +841,24 @@ pub fn memory_registrations() -> Result<Value> {
     }
     if home.join(".gemini").exists() {
         out.push(json!({"agent": "gemini-cli", "mcp_server": has_server(&home.join(".gemini/settings.json")), "hooks": false}));
+    }
+    if has_antigravity(&home) {
+        let cfg = home.join(".gemini/config");
+        let agy_hooks = json_file(&cfg.join("hooks.json"));
+        let hooks = agy_hooks.get(MEMORY_SERVER).is_some_and(|spec| {
+            spec.get("enabled").and_then(Value::as_bool) != Some(false)
+                && ["SessionStart", "PreInvocation", "Stop"].iter().any(|ev| {
+                    spec[ev].as_array().is_some_and(|list| {
+                        list.iter()
+                            .any(|h| h["command"].as_str().is_some_and(is_memory_hook))
+                    })
+                })
+        });
+        out.push(json!({
+            "agent": "antigravity",
+            "mcp_server": has_server(&cfg.join("mcp_config.json")),
+            "hooks": hooks,
+        }));
     }
     Ok(json!(out))
 }

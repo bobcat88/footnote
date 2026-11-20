@@ -485,3 +485,118 @@ fn five_pending_global_preferences_remind_the_user_at_session_start() {
         "{start}"
     );
 }
+
+#[test]
+fn antigravity_hooks_inject_steps_deduplicate_turn_and_use_continue_on_stop() {
+    let t = tempfile::tempdir().unwrap();
+    let state = t.path();
+    fs::write(state.join("memory.json"), r#"{"every_turns":2}"#).unwrap();
+    seed(state, &[]);
+
+    let agy_event = |name: &str, extra: Value| {
+        let mut v = json!({
+            "hookEventName": name,
+            "conversationId": "agy-conv-1",
+            "workspacePaths": [env!("CARGO_MANIFEST_DIR")],
+            "cwd": env!("CARGO_MANIFEST_DIR"),
+        });
+        if let Some(obj) = extra.as_object() {
+            for (k, val) in obj {
+                v[k] = val.clone();
+            }
+        }
+        v
+    };
+
+    // SessionStart emits Antigravity `injectSteps` with nested `systemMessage`.
+    let start: Value =
+        serde_json::from_str(&hook(state, agy_event("SessionStart", json!({})))).unwrap();
+    let pack = start["injectSteps"][0]["systemMessage"]["systemMessage"]
+        .as_str()
+        .unwrap();
+    assert!(pack.contains("relative % gaps"), "{start}");
+
+    // Another conversation gets PreInvocation recall once per user turn, not on every tool-loop step.
+    let pre1 = json!({
+        "hookEventName": "PreInvocation",
+        "conversationId": "agy-conv-2",
+        "cwd": env!("CARGO_MANIFEST_DIR"),
+        "invocationNum": 1,
+        "lastUserInput": "benchmark tables gaps secret-phrase",
+    });
+    let r1: Value = serde_json::from_str(&hook(state, pre1.clone())).unwrap();
+    assert!(
+        r1["injectSteps"][0]["systemMessage"]["systemMessage"]
+            .as_str()
+            .unwrap()
+            .contains("relative % gaps"),
+        "{r1}"
+    );
+    // Second model step inside the same turn: no-op `{}` and turn count stays 1.
+    let mut pre2 = pre1.clone();
+    pre2["invocationNum"] = json!(2);
+    assert_eq!(
+        serde_json::from_str::<Value>(&hook(state, pre2)).unwrap(),
+        json!({})
+    );
+    let st_raw = fs::read_to_string(state.join("memory-hook/agy-conv-2.json")).unwrap();
+    assert!(!st_raw.contains("secret-phrase"), "{st_raw}");
+    assert_eq!(serde_json::from_str::<Value>(&st_raw).unwrap()["turns"], 1);
+
+    // Normal Stop on turn 1 (< every_turns): `{}` and resets turn hash so the next turn counts even with same text.
+    let stop_ok = json!({
+        "hookEventName": "Stop",
+        "conversationId": "agy-conv-2",
+        "cwd": env!("CARGO_MANIFEST_DIR"),
+        "terminationReason": "NO_TOOL_CALL",
+        "continuationActive": false,
+    });
+    assert_eq!(
+        serde_json::from_str::<Value>(&hook(state, stop_ok.clone())).unwrap(),
+        json!({})
+    );
+
+    // Turn 2 with the exact same prompt text: counts as turn 2.
+    assert_eq!(
+        serde_json::from_str::<Value>(&hook(state, pre1.clone())).unwrap(),
+        json!({})
+    );
+    assert_eq!(read(&state.join("memory-hook/agy-conv-2.json"))["turns"], 2);
+
+    // USER_CANCELED never asks to continue.
+    let mut stop_cancel = stop_ok.clone();
+    stop_cancel["terminationReason"] = json!("USER_CANCELED");
+    assert_eq!(
+        serde_json::from_str::<Value>(&hook(state, stop_cancel)).unwrap(),
+        json!({})
+    );
+
+    // Turn 3 -> Stop with NO_TOOL_CALL asks Antigravity to `continue` (not `block`).
+    assert_eq!(
+        serde_json::from_str::<Value>(&hook(state, pre1.clone())).unwrap(),
+        json!({})
+    );
+    let ask: Value = serde_json::from_str(&hook(state, stop_ok.clone())).unwrap();
+    assert_eq!(ask["decision"], "continue", "{ask}");
+    assert!(
+        ask["reason"]
+            .as_str()
+            .unwrap()
+            .contains("footnote_remember")
+    );
+
+    // Continuation PreInvocation inside the save loop must not double-count turns.
+    assert_eq!(
+        serde_json::from_str::<Value>(&hook(state, pre1)).unwrap(),
+        json!({})
+    );
+    assert_eq!(read(&state.join("memory-hook/agy-conv-2.json"))["turns"], 3);
+
+    // Final Stop with continuationActive=true returns `{}`.
+    let mut stop_cont = stop_ok;
+    stop_cont["continuationActive"] = json!(true);
+    assert_eq!(
+        serde_json::from_str::<Value>(&hook(state, stop_cont)).unwrap(),
+        json!({})
+    );
+}

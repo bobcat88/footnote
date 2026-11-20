@@ -284,3 +284,112 @@ fn memory_uninstall_removes_only_what_install_added_and_keeps_memories() {
         "{again}"
     );
 }
+
+#[test]
+fn antigravity_memory_install_status_and_uninstall_preserve_existing_config() {
+    let t = tempfile::tempdir().unwrap();
+    let (home, state) = (t.path().join("home"), t.path().join("state"));
+    let python = t.path().join("python.exe");
+    fs::create_dir_all(home.join(".gemini/config")).unwrap();
+    let existing_mcp = json!({"mcpServers": {"playwright": {"command": "npx", "args": ["-y", "@playwright/mcp"]}}});
+    fs::write(
+        home.join(".gemini/config/mcp_config.json"),
+        existing_mcp.to_string(),
+    )
+    .unwrap();
+    let existing_hooks = json!({"lint": {"Stop": [{"type": "command", "command": "lint.sh"}]}});
+    fs::write(
+        home.join(".gemini/config/hooks.json"),
+        existing_hooks.to_string(),
+    )
+    .unwrap();
+
+    let first = install(&home, &state, &python, false);
+    assert!(
+        first["targets"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|t| t["agent"] == "antigravity")
+            .all(|t| t["status"] == "registered"),
+        "{first}"
+    );
+
+    let mcp = read(&home.join(".gemini/config/mcp_config.json"));
+    assert_eq!(
+        mcp["mcpServers"]["playwright"],
+        existing_mcp["mcpServers"]["playwright"]
+    );
+    assert_eq!(mcp["mcpServers"]["footnote-memory"]["args"][2], "mcp");
+
+    let hooks = read(&home.join(".gemini/config/hooks.json"));
+    assert_eq!(hooks["lint"], existing_hooks["lint"]);
+    for ev in ["SessionStart", "PreInvocation", "Stop"] {
+        assert!(
+            hooks["footnote-memory"][ev][0]["command"]
+                .as_str()
+                .unwrap()
+                .ends_with(" hook"),
+            "{ev}: {hooks}"
+        );
+    }
+
+    let skill = fs::read_to_string(home.join(".gemini/config/skills/remember/SKILL.md")).unwrap();
+    assert!(skill.starts_with("---\nname: remember\n") && skill.contains("footnote_remember"));
+
+    let status_out = Command::new(assert_cmd::cargo::cargo_bin!("footnote"))
+        .arg("status")
+        .env("USERPROFILE", &home)
+        .env("HOME", &home)
+        .env("FOOTNOTE_STATE_DIR", &state)
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let status: Value = serde_json::from_slice(&status_out).unwrap();
+    let agy = status["products"]["memory"]["agents"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|a| a["agent"] == "antigravity")
+        .unwrap();
+    assert_eq!(
+        (agy["mcp_server"].as_bool(), agy["hooks"].as_bool()),
+        (Some(true), Some(true))
+    );
+
+    // Second run is idempotent.
+    let second = install(&home, &state, &python, false);
+    assert!(
+        second["targets"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|t| t["agent"] == "antigravity")
+            .all(|t| t["status"] == "already registered"),
+        "{second}"
+    );
+
+    // Uninstall removes only Footnote's entries, preserving existing servers and hooks.
+    Command::new(assert_cmd::cargo::cargo_bin!("footnote"))
+        .args(["uninstall", "--memory"])
+        .env("USERPROFILE", &home)
+        .env("HOME", &home)
+        .env("FOOTNOTE_STATE_DIR", &state)
+        .assert()
+        .success();
+    assert_eq!(
+        read(&home.join(".gemini/config/mcp_config.json")),
+        existing_mcp
+    );
+    assert_eq!(
+        read(&home.join(".gemini/config/hooks.json")),
+        existing_hooks
+    );
+    assert!(
+        !home
+            .join(".gemini/config/skills/remember/SKILL.md")
+            .exists()
+    );
+}
