@@ -1,0 +1,20 @@
+10:33:01 flow: cpu% before 2,2490529190745 1,48461811544321 5,39074080792665
+10:33:07 flow: serde.rs keyword-ready at 5.5 s
+10:33:07 flow: first `find` answered at 5.9 s: '{"products":[{"product":"memory","results":[],"state":"empty"},{"corpora":1,"missing":0,"problems":[],"product":"library'
+10:33:11 flow: flask.palletsprojects.com keyword-ready at 9.7 s
+10:33:27 flow: docs.sqlalchemy.org keyword-ready at 25.5 s
+10:33:29 flow: requests.readthedocs.io keyword-ready at 27.8 s
+10:33:34 flow: jinja.palletsprojects.com keyword-ready at 32.3 s
+10:33:39 flow: pydantic.dev keyword-ready at 37.5 s
+10:33:43 flow: vite.dev keyword-ready at 41.3 s
+10:33:45 flow: tokio.rs keyword-ready at 44.1 s
+10:33:45 flow: ingest command returned at 44.1 s, exit 0
+10:33:52 flow: serde.rs fully embedded at 50.2 s
+10:33:55 flow: tokio.rs fully embedded at 53.2 s
+10:34:07 flow: vite.dev fully embedded at 65.3 s
+10:34:19 flow: jinja.palletsprojects.com fully embedded at 77.5 s
+10:34:28 flow: requests.readthedocs.io fully embedded at 86.6 s
+10:34:58 flow: flask.palletsprojects.com fully embedded at 117.0 s
+10:36:11 flow: pydantic.dev fully embedded at 190.0 s
+10:42:29 flow: docs.sqlalchemy.org fully embedded at 567.4 s
+10:42:29 flow: done, total 567.5 s
