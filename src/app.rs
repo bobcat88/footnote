@@ -68,6 +68,21 @@ struct Cli {
     #[command(subcommand)]
     command: Action,
 }
+#[cfg(feature = "code")]
+#[derive(Subcommand)]
+enum StackWrite {
+    /// Create the dependency file a project found only through its imports lacks. Shows the content and writes nothing
+    /// unless `--yes` is given; never overwrites an existing file; no network.
+    Write {
+        /// Project folder.
+        #[arg(default_value = ".")]
+        path: PathBuf,
+        /// Confirm: write the file.
+        #[arg(long)]
+        yes: bool,
+    },
+}
+
 #[derive(Subcommand)]
 enum Action {
     /// Experimental encrypted personal-store setup and recovery; not yet used by the agent hooks.
@@ -411,8 +426,10 @@ enum Action {
     },
     /// Footnote Code: the libraries a project uses, from its manifests and lockfiles, else from its imports, else one question.
     /// The result is recorded in Footnote Memory with exact versions where known; a re-run reports only the difference. Reads
-    /// files only: no network, and no dependency file is written.
+    /// files only: no network. When the stack came only from imports the result suggests the missing dependency file;
+    /// `footnote stack write` creates it.
     #[cfg(feature = "code")]
+    #[command(args_conflicts_with_subcommands = true)]
     Stack {
         /// Project folder.
         #[arg(default_value = ".")]
@@ -420,6 +437,8 @@ enum Action {
         /// What the project uses, when detection found nothing (repeatable): `cargo:serde@1`, `npm:react`, `pypi:flask`, `go:github.com/gin-gonic/gin`.
         #[arg(long)]
         library: Vec<String>,
+        #[command(subcommand)]
+        write: Option<StackWrite>,
     },
     /// Footnote Code: the impact radius of changing a symbol, its callers up to `depth` levels, the tests that reach it, the
     /// files and blocks affected, and the memories anchored to them.
@@ -657,7 +676,12 @@ fn execute(cli: Cli) -> Result<Value> {
             return Ok(map);
         }
         #[cfg(feature = "code")]
-        Action::Stack { path, library } => return crate::stack::run(path, library, true),
+        Action::Stack {
+            write: Some(StackWrite::Write { path, yes }),
+            ..
+        } => return crate::stack::write(path, *yes),
+        #[cfg(feature = "code")]
+        Action::Stack { path, library, .. } => return crate::stack::run(path, library, true),
         #[cfg(feature = "code")]
         Action::CodeImpact {
             name,

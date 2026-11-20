@@ -196,3 +196,82 @@ fn an_empty_folder_gets_one_question_and_an_answer_is_kept() {
     );
     assert_eq!(told["recorded"], true);
 }
+
+/// Imports only (flask + requests): the stack suggests requirements.txt; `write` shows it without `--yes`, writes with it,
+/// maps import names to packages, and never overwrites an existing file.
+#[test]
+fn write_needs_yes_shows_content_and_never_overwrites() {
+    let dir = tempfile::tempdir().unwrap();
+    let (state, p) = (dir.path().join("state"), dir.path().join("app"));
+    fs::create_dir_all(&p).unwrap();
+    fs::write(
+        p.join("app.py"),
+        "import flask\nimport requests\nimport yaml\nfrom PIL import Image\nimport cv2\nimport os\n",
+    )
+    .unwrap();
+    let root = p.to_str().unwrap();
+    let s = footnote(&state, &["stack", root]);
+    assert_eq!(s["suggestion"][0]["file"], "requirements.txt");
+    assert!(
+        s["suggestion"][0]["reason"]
+            .as_str()
+            .unwrap()
+            .contains("reproducible")
+    );
+
+    let shown = footnote(&state, &["stack", "write", root]);
+    assert_eq!(shown["written"], false);
+    assert_eq!(shown["files"][0]["status"], "preview");
+    let content = shown["files"][0]["content"].as_str().unwrap();
+    for pkg in ["flask", "requests", "pyyaml", "pillow", "opencv-python"] {
+        assert!(content.lines().any(|l| l == pkg), "{pkg} in {content}");
+    }
+    assert!(
+        !p.join("requirements.txt").exists(),
+        "no write without --yes"
+    );
+
+    let done = footnote(&state, &["stack", "write", root, "--yes"]);
+    assert_eq!(done["written"], true);
+    assert_eq!(
+        fs::read_to_string(p.join("requirements.txt")).unwrap(),
+        content
+    );
+
+    // A manifest now exists, so nothing more is suggested; an existing file is never touched.
+    fs::remove_file(p.join("requirements.txt")).unwrap();
+    fs::write(p.join("requirements.txt"), "# mine\n").unwrap();
+    let again = footnote(&state, &["stack", "write", root, "--yes"]);
+    assert_eq!(again["written"], false);
+    assert_eq!(
+        fs::read_to_string(p.join("requirements.txt")).unwrap(),
+        "# mine\n"
+    );
+}
+
+/// An existing pyproject.toml without dependencies does not block requirements.txt, but an existing requirements.txt
+/// that lists nothing keeps its file; Cargo.toml is explained, not written.
+#[test]
+fn cargo_is_skipped_with_a_note_and_an_empty_manifest_is_untouched() {
+    let dir = tempfile::tempdir().unwrap();
+    let (state, p) = (dir.path().join("state"), dir.path().join("app"));
+    fs::create_dir_all(&p).unwrap();
+    fs::write(p.join("main.rs"), "use serde::Serialize;\nfn main() {}\n").unwrap();
+    fs::write(p.join("requirements.txt"), "# nothing yet\n").unwrap();
+    fs::write(p.join("a.py"), "import flask\n").unwrap();
+    let out = footnote(&state, &["stack", "write", p.to_str().unwrap(), "--yes"]);
+    let status = |f: &str| {
+        out["files"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|x| x["file"] == f)
+            .map(|x| x["status"].clone())
+    };
+    assert_eq!(status("Cargo.toml"), Some("skipped".into()));
+    assert_eq!(status("requirements.txt"), Some("exists".into()));
+    assert_eq!(
+        fs::read_to_string(p.join("requirements.txt")).unwrap(),
+        "# nothing yet\n"
+    );
+}

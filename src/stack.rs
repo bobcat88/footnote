@@ -1,7 +1,8 @@
 //! `footnote stack` (#304): which libraries a project uses. Manifests and lockfiles first; when a project has none, the
 //! imports in its source (Footnote Code's parser); when that finds nothing, one short question instead of a guess. The
 //! result is recorded in Footnote Memory as proof of the selection, and a re-run reports only what changed. Reads files
-//! only: no network, and no dependency file is written (#305).
+//! only: no network. When the stack came only from imports it suggests the missing dependency file; `footnote stack write`
+//! creates it only with `--yes` and never overwrites one (#305).
 use anyhow::{Result, bail};
 use regex::Regex;
 use serde_json::{Value, json};
@@ -532,6 +533,179 @@ fn memory_items(root: &str, scope: &str, libs: &Libs, today: &str) -> Vec<Value>
         .collect()
 }
 
+/// The version of an installed package, found on disk without the network: `node_modules/<name>/package.json`, or a
+/// `<name>-<version>.dist-info` folder in the project's virtualenv. Unknown is `None` (the file stays unpinned).
+fn installed(root: &Path, eco: &str, name: &str) -> Option<String> {
+    if eco == "npm" {
+        let text = read(&root.join("node_modules").join(name).join("package.json"))?;
+        let v: Value = serde_json::from_str(&text).ok()?;
+        return v["version"].as_str().map(String::from);
+    }
+    let prefix = format!("{}-", name.replace('-', "_"));
+    for venv in [".venv", "venv"] {
+        let lib = root.join(venv).join("lib");
+        let sites = std::iter::once(root.join(venv).join("Lib").join("site-packages")).chain(
+            std::fs::read_dir(lib)
+                .into_iter()
+                .flatten()
+                .flatten()
+                .map(|e| e.path().join("site-packages")),
+        );
+        for site in sites {
+            for e in std::fs::read_dir(site).into_iter().flatten().flatten() {
+                let n = e
+                    .file_name()
+                    .to_string_lossy()
+                    .to_lowercase()
+                    .replace('-', "_");
+                if let Some(v) = n
+                    .strip_prefix(&prefix)
+                    .and_then(|r| r.strip_suffix(".dist-info"))
+                {
+                    return Some(v.into());
+                }
+            }
+        }
+    }
+    None
+}
+
+/// Folder name as a package name: lowercase letters, digits and `-`.
+fn project_name(root: &Path) -> String {
+    let n: String = root
+        .file_name()
+        .map(|n| n.to_string_lossy().to_lowercase())
+        .unwrap_or_default()
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
+        .collect();
+    let n = n.trim_matches('-');
+    if n.is_empty() { "app".into() } else { n.into() }
+}
+
+/// The dependency file a project found only through its imports lacks, one suggestion per ecosystem: the file, its proposed
+/// content (null when Footnote cannot write one) and why it helps. Nothing is suggested when a manifest exists.
+fn suggestions(root: &Path, libs: &Libs) -> Vec<Value> {
+    if !libs.values().any(|l| l.source == "import") || libs.values().any(|l| l.source == "manifest")
+    {
+        return vec![];
+    }
+    let why = "A dependency file makes the project reproducible, lets a teammate or CI install the same libraries with one command, and lets Footnote read the exact versions to fetch the right docs.";
+    let mut out = vec![];
+    for eco in ["pypi", "npm", "go", "cargo"] {
+        let names: Vec<&Lib> = libs.values().filter(|l| l.eco == eco).collect();
+        if names.is_empty() {
+            continue;
+        }
+        let (file, content, note) = match eco {
+            "pypi" => (
+                "requirements.txt",
+                Some(
+                    names
+                        .iter()
+                        .map(|l| match installed(root, eco, &l.name) {
+                            Some(v) => format!("{}=={v}\n", l.name),
+                            None => format!("{}\n", l.name),
+                        })
+                        .collect::<String>(),
+                ),
+                "Versions are unpinned unless the package is installed in a .venv; pin them with `pip freeze` once it works.",
+            ),
+            "npm" => {
+                let deps: serde_json::Map<String, Value> = names
+                    .iter()
+                    .map(|l| {
+                        let v =
+                            installed(root, eco, &l.name).map_or("*".into(), |v| format!("^{v}"));
+                        (l.name.clone(), Value::String(v))
+                    })
+                    .collect();
+                let doc =
+                    json!({"name": project_name(root), "private": true, "dependencies": deps});
+                (
+                    "package.json",
+                    Some(serde_json::to_string_pretty(&doc).unwrap_or_default() + "\n"),
+                    "`*` means any version; `npm install` fills in exact versions and writes a lockfile.",
+                )
+            }
+            "go" => (
+                "go.mod",
+                Some(format!("module {}\n", project_name(root))),
+                "Only the module line: run `go mod tidy` to add the required libraries with versions.",
+            ),
+            _ => (
+                "Cargo.toml",
+                None,
+                "Footnote does not write Cargo.toml: it needs a package name, edition and targets. Run `cargo init`, then `cargo add <crate>`.",
+            ),
+        };
+        out.push(json!({"ecosystem": eco, "file": file, "exists": root.join(file).exists(), "content": content,
+            "reason": why, "note": note}));
+    }
+    out
+}
+
+/// `footnote stack write`: create the suggested dependency files. Without `yes` it only shows them; it never overwrites.
+pub fn write(root: &Path, yes: bool) -> Result<Value> {
+    let root = std::path::absolute(root)?;
+    if !root.is_dir() {
+        bail!("{} is not a folder", root.display());
+    }
+    let libs = detect(&root, &[])?;
+    let mut files = vec![];
+    for s in suggestions(&root, &libs) {
+        let file = s["file"].as_str().unwrap_or_default();
+        let (status, content) = match (s["content"].as_str(), s["exists"] == true) {
+            (None, _) => ("skipped", None),
+            (_, true) => ("exists", None),
+            (Some(c), _) if !yes => ("preview", Some(c)),
+            (Some(c), _) => {
+                use std::io::Write;
+                let mut f = std::fs::OpenOptions::new()
+                    .write(true)
+                    .create_new(true)
+                    .open(root.join(file))?;
+                f.write_all(c.as_bytes())?;
+                ("written", Some(c))
+            }
+        };
+        files.push(json!({"file": file, "status": status, "content": content, "reason": s["reason"], "note": s["note"]}));
+    }
+    let wrote = |f: &&Value| f["status"] == "written";
+    let mut out = json!({"root": root.to_string_lossy(), "files": files, "written": files.iter().any(|f| wrote(&f))});
+    if files.is_empty() {
+        out["note"] = json!(
+            "Nothing to write: the project already has a manifest, or no library was found in its imports."
+        );
+    } else if !yes {
+        out["next"] = json!(
+            "Nothing was written. Run `footnote stack write <path> --yes` to create these files."
+        );
+    }
+    #[cfg(feature = "memory")]
+    if out["written"] == true {
+        let names: Vec<&str> = files
+            .iter()
+            .filter(wrote)
+            .filter_map(|f| f["file"].as_str())
+            .collect();
+        let state = crate::state::state_dir()?;
+        std::fs::create_dir_all(&state)?;
+        let root_s = root.to_string_lossy().to_string();
+        let mut c = crate::app::open(&crate::status::memory_db(&state)?, true)?;
+        let today = time::OffsetDateTime::now_utc().date().to_string();
+        crate::memory::remember(
+            &mut c,
+            &json!([{"text": format!("Wrote {} in {root_s} from the project's imports (no dependency file existed).", names.join(", ")),
+                "kind": "fact", "scope": crate::hook::project_of(&root_s), "observed_at": today}]),
+            &[],
+            "cli",
+        )?;
+        out["recorded"] = json!(true);
+    }
+    Ok(out)
+}
+
 /// `footnote stack`. `record`: write the result to Footnote Memory (the CLI); the MCP tool only reads.
 pub fn run(root: &Path, user: &[String], record: bool) -> Result<Value> {
     let root = std::path::absolute(root)?;
@@ -571,6 +745,10 @@ pub fn run(root: &Path, user: &[String], record: bool) -> Result<Value> {
             out["changes"] = changes;
         }
         out["recorded"] = json!(false);
+        let sug = suggestions(&root, &libs);
+        if !sug.is_empty() {
+            out["suggestion"] = json!(sug);
+        }
         if record && (first || !same) {
             std::fs::create_dir_all(&state)?;
             let mut c = crate::app::open(&db, true)?;
@@ -655,6 +833,19 @@ mod tests {
                 "pypi | rich | - | declared | manifest",
             ]
         );
+    }
+
+    #[test]
+    fn import_names_map_to_packages() {
+        for (m, p) in [
+            ("cv2", "opencv-python"),
+            ("PIL", "pillow"),
+            ("yaml", "pyyaml"),
+            ("sklearn", "scikit-learn"),
+            ("Flask", "flask"),
+        ] {
+            assert_eq!(pypi_name(m), p);
+        }
     }
 
     #[test]
