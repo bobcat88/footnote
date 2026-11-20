@@ -30,4 +30,4 @@ Keep the model in the README true. New tools must be read-only over MCP; anythin
 
 ## Pull requests
 
-One topic per pull request, tracked by a GitHub issue, with the evidence in the description. Commits follow `type(scope): summary` (`feat`, `fix`, `perf`, `bench`, `docs`). AI agents filing issues, comments, or PRs sign them with their agent name, model, and logo (see [.github/AGENT-SIGNATURES.md](.github/AGENT-SIGNATURES.md)).
+One topic per pull request, tracked by a GitHub issue, with the evidence in the description. Commits follow `type(scope): summary` (`feat`, `fix`, `perf`, `bench`, `docs`). Issue structure, Epic nesting, and AI attribution rules are documented in [docs/ISSUE-RULES.md](docs/ISSUE-RULES.md) and tracked with `python scripts/agent_metrics.py`; Rust code follows [docs/RUST-RULES.md](docs/RUST-RULES.md). AI agents filing issues, comments, or PRs sign them with their agent name, model, and logo (see [.github/AGENT-SIGNATURES.md](.github/AGENT-SIGNATURES.md)).

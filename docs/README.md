@@ -13,6 +13,8 @@ The product README is [../README.md](../README.md). This folder holds architectu
 | [`ARCHITECTURE.md`](ARCHITECTURE.md) | Engine schema, layers, and safety boundaries |
 | [`OPERATIONS.md`](OPERATIONS.md) | Limits, privacy, recovery, and the audit log |
 | [`DEFINITION-OF-DONE.md`](DEFINITION-OF-DONE.md) | Completion checklist for PRs and stories |
+| [`ISSUE-RULES.md`](ISSUE-RULES.md) | Issue structure, label taxonomy, Epic nesting, and AI ownership tracking |
+| [`RUST-RULES.md`](RUST-RULES.md) | Rust API, error handling, store discipline, and performance rules |
 | [`security/AUDIT-2026-11-18.md`](security/AUDIT-2026-11-18.md) | Internal security audit findings and fixes |
 | [`roadmap/BACKLOG.md`](roadmap/BACKLOG.md) | Planned features and open research tracks |
 | [`roadmap/EPICS.md`](roadmap/EPICS.md) | Epic structure matching GitHub Issues |
