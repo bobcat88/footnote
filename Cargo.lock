@@ -956,6 +956,7 @@ dependencies = [
  "anyhow",
  "dom_query",
  "dom_smoothie",
+ "flate2",
  "footnote-core",
  "footnote-search",
  "htmd",

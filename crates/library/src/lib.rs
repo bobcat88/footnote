@@ -12,6 +12,7 @@ use walkdir::WalkDir;
 
 pub mod crawl;
 pub mod extract;
+pub mod miss;
 
 use footnote_core::{metrics, state};
 

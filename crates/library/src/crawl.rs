@@ -262,6 +262,24 @@ fn sitemap(agent: &ureq::Agent, root: &Url) -> Vec<Url> {
     out.into_iter().map(normalize).collect()
 }
 
+/// A Sphinx site's `objects.inv` beside its start page, with the folder its URIs are relative to. Fetched like the sitemap.
+fn inventory(agent: &ureq::Agent, scope: &Url) -> Option<(Vec<crate::miss::Object>, Url)> {
+    let mut base = normalize(scope.clone());
+    base.set_path(&format!("{}/", scope_dir(scope)));
+    let inv = base.join("objects.inv").ok()?;
+    let mut r = agent.get(inv.as_str()).call().ok()?;
+    if !r.status().is_success() {
+        return None;
+    }
+    let bytes = r
+        .body_mut()
+        .with_config()
+        .limit(MAX_BYTES)
+        .read_to_vec()
+        .ok()?;
+    crate::miss::parse(&bytes).map(|o| (o, base))
+}
+
 fn robots(agent: &ureq::Agent, site: &Url) -> Option<texting_robots::Robot> {
     site.join("/robots.txt")
         .ok()
@@ -345,6 +363,13 @@ pub fn crawl(out: &Path, o: &Options, progress: &mut dyn FnMut(u64, u64)) -> Res
     seeds.extend(landing);
     seeds.push(start.clone());
     seeds.extend(from_sitemap);
+    // Sphinx: every documented object's page, so API pages nothing links to are still crawled.
+    if let Some((objects, base)) = inventory(&agent, &start) {
+        seeds.extend(crate::miss::pages(
+            objects.iter().map(|o| o.uri.as_str()),
+            &base,
+        ));
+    }
 
     let mut queue: VecDeque<Url> = VecDeque::new();
     let mut linked: VecDeque<Url> = VecDeque::new(); // links found on fetched pages
@@ -562,14 +587,51 @@ impl Client {
         let Ok(scope) = Url::parse(scope) else {
             return Vec::new();
         };
-        let robots = robots(&self.0, &scope);
-        let mut queue: VecDeque<Url> = seeds.into_iter().chain(sitemap(&self.0, &scope)).collect();
+        let queue = seeds.into_iter().chain(sitemap(&self.0, &scope)).collect();
+        self.fetch_new(&scope, known, queue, room, true)
+    }
+
+    /// Fetch on miss: the (at most `cap`) pages most likely to answer `query` that `known` lacks, fetched live. Candidates are
+    /// the pages of the objects the query names in the site's `objects.inv`, then sitemap pages whose path holds query terms.
+    /// Nothing outside `scope` is requested, robots.txt is honoured, links on the fetched pages are not followed.
+    pub fn fetch_on_miss(
+        &self,
+        scope: &str,
+        query: &str,
+        known: &HashSet<String>,
+        cap: usize,
+    ) -> Vec<Found> {
+        let Ok(scope) = Url::parse(scope) else {
+            return Vec::new();
+        };
+        let mut queue: VecDeque<Url> = VecDeque::new();
+        if let Some((objects, base)) = inventory(&self.0, &scope) {
+            queue.extend(crate::miss::resolve(&objects, query, &base, cap * 4));
+        }
+        queue.extend(crate::miss::rank_urls(
+            &sitemap(&self.0, &scope),
+            query,
+            cap * 4,
+        ));
+        self.fetch_new(&scope, known, queue, cap, false)
+    }
+
+    fn fetch_new(
+        &self,
+        scope: &Url,
+        known: &HashSet<String>,
+        mut queue: VecDeque<Url>,
+        room: usize,
+        expand: bool,
+    ) -> Vec<Found> {
+        let robots = robots(&self.0, scope);
         let mut seen: HashSet<String> = known.clone();
         let mut out = Vec::new();
         while out.len() < room
             && let Some(u) = queue.pop_front()
         {
-            if !in_scope(&u, &scope, &None)
+            let u = normalize(u);
+            if !in_scope(&u, scope, &None)
                 || !seen.insert(page_key(&u))
                 || robots.as_ref().is_some_and(|r| !r.allowed(u.as_str()))
             {
@@ -579,12 +641,14 @@ impl Client {
                 continue;
             };
             let last = normalize(last);
-            if !in_scope(&last, &scope, &None) || (last != u && !seen.insert(page_key(&last))) {
+            if !in_scope(&last, scope, &None) || (last != u && !seen.insert(page_key(&last))) {
                 continue;
             }
             let hash = footnote_core::hash(body.as_bytes());
             if let Some((text, found)) = text_of(body, &last, &kind) {
-                queue.extend(found);
+                if expand {
+                    queue.extend(found);
+                }
                 out.push(Found {
                     url: last,
                     text,

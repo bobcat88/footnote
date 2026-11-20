@@ -14,6 +14,8 @@ mod hardware;
 mod hook;
 mod install;
 mod mcp;
+#[cfg(feature = "library")]
+mod miss;
 mod models;
 #[cfg(all(feature = "encryption", windows))]
 mod personal;

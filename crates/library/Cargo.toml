@@ -28,3 +28,4 @@ dom_smoothie.workspace = true
 dom_query = "0.29"
 htmd.workspace = true
 texting_robots.workspace = true
+flate2 = { version = "1", default-features = false, features = ["rust_backend"] }

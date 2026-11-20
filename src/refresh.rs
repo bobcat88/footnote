@@ -71,18 +71,66 @@ impl ChangeJudge for TokenDiff {
 }
 
 #[derive(Serialize, Deserialize)]
-struct PageRec {
-    url: String,
-    validators: Validators,
+pub(crate) struct PageRec {
+    pub url: String,
+    pub validators: Validators,
 }
 
 #[derive(Serialize, Deserialize)]
-struct Sidecar {
-    scope: String,
-    max_pages: usize,
-    pages: BTreeMap<String, PageRec>,
+pub(crate) struct Sidecar {
+    pub scope: String,
+    pub max_pages: usize,
+    pub pages: BTreeMap<String, PageRec>,
     #[serde(default)]
-    refreshed_unix: u64,
+    pub refreshed_unix: u64,
+}
+
+impl Sidecar {
+    /// The page keys the entry already holds (see `crawl::key_of`).
+    pub fn known(&self) -> HashSet<String> {
+        self.pages
+            .values()
+            .filter_map(|p| crawl::key_of(&p.url))
+            .collect()
+    }
+
+    /// Write newly found pages beside the entry's others; returns how many.
+    pub fn add(&mut self, dir: &Path, found: Vec<crawl::Found>) -> Result<usize> {
+        let mut n = self
+            .pages
+            .keys()
+            .filter_map(|f| f.strip_suffix(".md")?.parse::<usize>().ok())
+            .max()
+            .unwrap_or(0);
+        let added = found.len();
+        for f in found {
+            n += 1;
+            std::fs::write(dir.join(format!("{n}.md")), &f.text)?;
+            self.pages.insert(
+                format!("{n}.md"),
+                PageRec {
+                    url: f.url.to_string(),
+                    validators: f.validators,
+                },
+            );
+        }
+        Ok(added)
+    }
+}
+
+/// Index the entry's page folder again (changed pages are re-chunked, removed ones dropped), keywords only.
+pub(crate) fn reindex(db: &Path, dir: &Path) -> Result<()> {
+    let mut c = crate::app::open(db, true)?;
+    footnote_library::index(
+        &mut c,
+        dir,
+        std::slice::from_ref(&dir.to_path_buf()),
+        100_000,
+        2_048,
+        &mut |_, _| {},
+    )?;
+    let _ = crate::lexical::sync(&c); // a failure only means searches fall back to FTS5, as for `add`
+    Ok(())
 }
 
 pub fn run(state: &Path, library: Option<&str>, judge: &dyn ChangeJudge, a: &Add) -> Result<Value> {
@@ -157,46 +205,16 @@ fn one(client: &Client, judge: &dyn ChangeJudge, db: &Path) -> Result<Value> {
             Recheck::Unreachable => unreachable += 1,
         }
     }
-    let known: HashSet<String> = side
-        .pages
-        .values()
-        .filter_map(|p| crawl::key_of(&p.url))
-        .collect();
+    let known = side.known();
     let room = side.max_pages.saturating_sub(side.pages.len());
     let found = if room > 0 {
         client.find_new(&side.scope, &known, seeds, room)
     } else {
         Vec::new()
     };
-    let mut n = side
-        .pages
-        .keys()
-        .filter_map(|f| f.strip_suffix(".md")?.parse::<usize>().ok())
-        .max()
-        .unwrap_or(0);
-    let added = found.len();
-    for f in found {
-        n += 1;
-        std::fs::write(dir.join(format!("{n}.md")), &f.text)?;
-        side.pages.insert(
-            format!("{n}.md"),
-            PageRec {
-                url: f.url.to_string(),
-                validators: f.validators,
-            },
-        );
-    }
+    let added = side.add(&dir, found)?;
     if changed + removed + added > 0 {
-        let mut c = crate::app::open(db, true)?;
-        footnote_library::index(
-            &mut c,
-            &dir,
-            std::slice::from_ref(&dir),
-            100_000,
-            2_048,
-            &mut |_, _| {},
-        )?;
-        let _ = crate::lexical::sync(&c); // a failure only means searches fall back to FTS5, as for `add`
+        reindex(db, &dir)?;
     }
     side.refreshed_unix = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)?

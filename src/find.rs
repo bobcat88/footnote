@@ -324,9 +324,31 @@ fn library(state: &Path, query: &str, limit: usize) -> Value {
         if list.is_empty() {
             return Ok(json!({"state": "empty", "results": [], "missing": missing.len()}));
         }
+        let mut found: Vec<(&PathBuf, Result<Vec<Value>>)> = list
+            .iter()
+            .map(|db| (db, search_db(db, query, limit)))
+            .collect();
+        // Fetch on miss: no corpus has a strong passage, so the missing pages of the cached docs sites are fetched live and the
+        // query is searched once more (see miss.rs).
+        let mut live = Vec::new();
+        if found
+            .iter()
+            .all(|(_, r)| r.as_ref().is_ok_and(|h| crate::miss::weak(query, h)))
+        {
+            for (db, r) in &mut found {
+                let room = crate::miss::CAP - live.len();
+                if room == 0 {
+                    break;
+                }
+                let urls = crate::miss::rescue(db, query, room);
+                if !urls.is_empty() {
+                    *r = search_db(db, query, limit);
+                    live.extend(urls);
+                }
+            }
+        }
         let (mut results, mut problems) = (Vec::new(), Vec::new());
-        for db in &list {
-            let found = search_db(db, query, limit);
+        for (db, found) in found {
             match found {
                 Ok(hits) => results.extend(hits.into_iter().map(|h| json!({
                     "id": h["id"], "title": text(if h["heading"].is_string() { &h["heading"] } else { &h["path"] }, 200),
@@ -344,9 +366,14 @@ fn library(state: &Path, query: &str, limit: usize) -> Value {
         } else {
             "nothing_found"
         };
-        Ok(
-            json!({"state": state, "results": results, "corpora": list.len(), "missing": missing.len(), "problems": problems}),
-        )
+        let mut v = json!({"state": state, "results": results, "corpora": list.len(), "missing": missing.len(), "problems": problems});
+        if !live.is_empty() {
+            v["live_fetch"] = json!({
+                "note": format!("Live fetch: the cached docs had no strong match for this query, so Footnote fetched {} page(s) from the docs site and searched again.", live.len()),
+                "pages": live,
+            });
+        }
+        Ok(v)
     })
 }
 
