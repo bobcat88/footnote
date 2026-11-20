@@ -43,7 +43,7 @@ fn check_identity(expected: &str, encoded: &Encoded) -> Result<()> {
     }
     Ok(())
 }
-fn identity(model: &Path) -> Result<(String, String)> {
+pub fn identity(model: &Path) -> Result<(String, String)> {
     footnote_core::no_links(model)?;
     let manifest = String::from_utf8(footnote_core::bounded_read(&model.join("manifest.json"))?)?;
     let runtime = serde_json::from_str::<Value>(&manifest)?["runtime"]

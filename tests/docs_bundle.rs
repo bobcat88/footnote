@@ -258,3 +258,75 @@ fn non_redistributable_or_unrecorded_licence_is_refused_at_build() {
     );
     assert!(msg.contains("no licence recorded"), "{msg}");
 }
+
+#[test]
+fn installed_bundle_is_searchable_and_installs_in_seconds() {
+    let (env, src, public) = setup(true);
+    let b = build(&env, &src);
+    let d = dest(&env);
+    let t = std::time::Instant::now();
+    ok(
+        &d,
+        &[
+            "docs",
+            "install",
+            b.to_str().unwrap(),
+            "--trust-key",
+            &public,
+        ],
+    );
+    let took = t.elapsed();
+    println!("bundle install took {took:?}");
+    assert!(took.as_secs() < 5, "{took:?}");
+    let hit = ok(&d, &["find", "connections pool"]).to_string();
+    assert!(hit.contains("reused from the pool"), "{hit}");
+}
+
+#[test]
+fn bundle_vectors_from_another_model_are_not_installed() {
+    let (env, src, public) = setup(true);
+    // Pretend the source index carries vectors from a model the destination has not selected.
+    let db = src.join("docs/acme/1.0.db");
+    let c = rusqlite::Connection::open(&db).unwrap();
+    let has: i64 = c
+        .query_row(
+            "SELECT count(*) FROM sqlite_master WHERE name='embedding_models'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(has, 1, "embedding tables exist even for --no-embed");
+    c.execute(
+        "INSERT INTO embedding_models VALUES('model-x','{}','h',2)",
+        [],
+    )
+    .unwrap();
+    c.execute(
+        "INSERT INTO embeddings VALUES('model-x','chunk',1,'s','[0.1,0.2]')",
+        [],
+    )
+    .unwrap();
+    drop(c);
+    let b = build(&env, &src);
+    let d = dest(&env);
+    let r = ok(
+        &d,
+        &[
+            "docs",
+            "install",
+            b.to_str().unwrap(),
+            "--trust-key",
+            &public,
+        ],
+    );
+    assert!(
+        r["embeddings"].as_str().unwrap().contains("docs embed"),
+        "{r}"
+    );
+    let c = rusqlite::Connection::open(d.join("docs/acme/1.0.db")).unwrap();
+    let n: i64 = c
+        .query_row("SELECT count(*) FROM embeddings", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(n, 0);
+    assert!(ok(&d, &["find", "pool"]).to_string().contains("pool"));
+}

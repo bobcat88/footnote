@@ -19,11 +19,16 @@ const MAGIC: &[u8] = b"FNBUNDLE1\n";
 const MAX_MANIFEST: usize = 64 * 1024;
 /// Largest bundle a URL install will download (shortcut: one fixed cap; raise it when a real bundle needs it).
 const MAX_DOWNLOAD: u64 = 1 << 30;
-/// Footnote's release verification keys (hex, ed25519). The matching private key is kept outside the repository.
+/// Footnote's release verification keys (hex, ed25519), current first; add the next key here before it signs anything.
+/// The matching private keys are kept outside the repository.
 const PINNED_KEYS: &[&str] = &["faae7862a8bf81d3b21a739e26039e00335399abc6ad3794473ee4b110ec17fd"];
+/// Key ids (see `key_id`) whose bundles are refused even when the key is pinned or passed with `--trust-key`.
+const REVOKED_KEY_IDS: &[&str] = &[];
 
 #[derive(Serialize, Deserialize)]
 struct Manifest {
+    /// Id of the signing key (`key_id`), inside the signed bytes, so install knows which pinned key to check.
+    key_id: String,
     library: String,
     site_url: String,
     version: String,
@@ -64,6 +69,54 @@ fn hex(b: &[u8]) -> String {
     b.iter().map(|x| format!("{x:02x}")).collect()
 }
 
+/// A key's id: the first 8 bytes of the sha256 of its public key, in hex.
+fn key_id(public: &[u8]) -> String {
+    hex(&Sha256::digest(public)[..8])
+}
+
+/// Check the manifest signature against the pinned and user-trusted keys: the manifest's `key_id` picks the key, a revoked id is refused.
+fn verify(
+    mj: &[u8],
+    sig: &[u8],
+    pinned: &[&str],
+    revoked: &[&str],
+    trust: &[String],
+) -> Result<()> {
+    let id = serde_json::from_slice::<Value>(mj)
+        .ok()
+        .and_then(|v| v["key_id"].as_str().map(String::from))
+        .unwrap_or_default();
+    ensure!(
+        !revoked.contains(&id.as_str()),
+        "signing key {id} is revoked: bundle rejected"
+    );
+    let key = pinned
+        .iter()
+        .copied()
+        .chain(trust.iter().map(String::as_str))
+        .filter_map(|k| unhex(k).ok())
+        .find(|k| key_id(k) == id)
+        .with_context(|| {
+            format!(
+                "signature key id {id:?} is unknown (no pinned or trusted key): bundle rejected"
+            )
+        })?;
+    UnparsedPublicKey::new(&ED25519, key)
+        .verify(mj, sig)
+        .map_err(|_| {
+            anyhow::anyhow!("signature does not verify against a trusted key: bundle rejected")
+        })
+}
+
+/// True when the vectors in a bundle were made with a model this machine has not selected (manifest ids are comma-joined).
+fn models_differ(manifest: &str, machine: &[String]) -> bool {
+    let mut a: Vec<&str> = manifest.split(',').filter(|x| !x.is_empty()).collect();
+    let mut b: Vec<&str> = machine.iter().map(String::as_str).collect();
+    a.sort_unstable();
+    b.sort_unstable();
+    !a.is_empty() && a != b
+}
+
 /// A new signing key written to `file` (hex PKCS#8, never overwrites); returns the public half to pin or `--trust-key`.
 pub fn keygen(file: &Path) -> Result<Value> {
     let pkcs8 = Ed25519KeyPair::generate_pkcs8(&ring::rand::SystemRandom::new())
@@ -76,7 +129,7 @@ pub fn keygen(file: &Path) -> Result<Value> {
     f.write_all(hex(pkcs8.as_ref()).as_bytes())?;
     let pair = Ed25519KeyPair::from_pkcs8(pkcs8.as_ref()).map_err(|e| anyhow::anyhow!("{e}"))?;
     Ok(
-        json!({"private_key_file": file, "public_key": hex(pair.public_key().as_ref()),
+        json!({"private_key_file": file, "public_key": hex(pair.public_key().as_ref()), "key_id": key_id(pair.public_key().as_ref()),
         "note": "keep the private key file out of any repository"}),
     )
 }
@@ -154,6 +207,7 @@ pub fn bundle(
         .duration_since(std::time::UNIX_EPOCH)?
         .as_secs();
     let m = Manifest {
+        key_id: key_id(pair.public_key().as_ref()),
         library: site.clone(),
         site_url: lic.url,
         version: version.clone(),
@@ -243,20 +297,7 @@ fn install_file(state: &Path, file: &Path, trust: &[String]) -> Result<Value> {
     f.read_exact(&mut mj).context("bundle truncated")?;
     let mut sig = [0u8; 64];
     f.read_exact(&mut sig).context("bundle truncated")?;
-    let verified = PINNED_KEYS
-        .iter()
-        .copied()
-        .chain(trust.iter().map(String::as_str))
-        .filter_map(|k| unhex(k).ok())
-        .any(|k| {
-            UnparsedPublicKey::new(&ED25519, k)
-                .verify(&mj, &sig)
-                .is_ok()
-        });
-    ensure!(
-        verified,
-        "signature does not verify against a trusted key: bundle rejected"
-    );
+    verify(&mj, &sig, PINNED_KEYS, REVOKED_KEY_IDS, trust)?;
     let m: Manifest = serde_json::from_slice(&mj).context("manifest")?;
     ensure!(m.redistributable, "bundle is not marked redistributable");
     ensure!(!m.licence.trim().is_empty(), "bundle has no licence");
@@ -321,8 +362,80 @@ fn install_file(state: &Path, file: &Path, trust: &[String]) -> Result<Value> {
             url: m.site_url.clone(),
         })?,
     )?;
+    // Never mix vectors from another model into this machine's search: keep the keyword index only.
+    let machine: Vec<String> = crate::models::in_use(state)?
+        .iter()
+        .filter_map(|p| footnote_search::semantic::identity(Path::new(p)).ok())
+        .map(|(id, _)| id)
+        .collect();
+    let stripped = models_differ(&m.embedding_model, &machine);
+    if stripped {
+        let c = crate::app::open(&db, true)?;
+        c.execute_batch("DELETE FROM embeddings; DELETE FROM embedding_models;")?;
+    }
     find::register(state, &db)?;
-    Ok(
-        json!({"installed": m.library, "version": m.version, "pages": m.pages, "licence": m.licence, "db": db}),
-    )
+    let mut r = json!({"installed": m.library, "version": m.version, "pages": m.pages, "licence": m.licence, "db": db});
+    if stripped {
+        r["embeddings"] = json!(
+            "not installed: the bundle's vectors come from a different model than the ones selected here; keyword search works now, run `footnote docs embed` to rebuild them"
+        );
+    }
+    Ok(r)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn pair() -> (Ed25519KeyPair, String) {
+        let p = Ed25519KeyPair::from_pkcs8(
+            Ed25519KeyPair::generate_pkcs8(&ring::rand::SystemRandom::new())
+                .unwrap()
+                .as_ref(),
+        )
+        .unwrap();
+        let h = hex(p.public_key().as_ref());
+        (p, h)
+    }
+    fn signed(p: &Ed25519KeyPair, id: &str) -> (Vec<u8>, Vec<u8>) {
+        let m = serde_json::to_vec(&json!({"key_id": id})).unwrap();
+        let s = p.sign(&m).as_ref().to_vec();
+        (m, s)
+    }
+
+    #[test]
+    fn second_pinned_key_accepted_revoked_and_unknown_rejected() {
+        let (a, ah) = pair();
+        let (b, bh) = pair();
+        let (ida, idb) = (
+            key_id(a.public_key().as_ref()),
+            key_id(b.public_key().as_ref()),
+        );
+        let pinned = [ah.as_str(), bh.as_str()];
+        let (m, s) = signed(&b, &idb);
+        verify(&m, &s, &pinned, &[], &[]).unwrap();
+        let e = verify(&m, &s, &pinned, &[idb.as_str()], &[])
+            .unwrap_err()
+            .to_string();
+        assert!(e.contains("revoked"), "{e}");
+        // Revocation also beats --trust-key.
+        assert!(verify(&m, &s, &[], &[idb.as_str()], std::slice::from_ref(&bh)).is_err());
+        let e = verify(&m, &s, &[ah.as_str()], &[], &[])
+            .unwrap_err()
+            .to_string();
+        assert!(e.contains("unknown"), "{e}");
+        // A manifest naming key a but signed by b does not verify.
+        let (m, s) = signed(&b, &ida);
+        let e = verify(&m, &s, &pinned, &[], &[]).unwrap_err().to_string();
+        assert!(e.contains("does not verify"), "{e}");
+    }
+
+    #[test]
+    fn model_mismatch_means_keyword_only() {
+        let m = |x: &str| x.to_string();
+        assert!(!models_differ("", &[m("a")]));
+        assert!(!models_differ("a,b", &[m("b"), m("a")]));
+        assert!(models_differ("a,b", &[m("a")]));
+        assert!(models_differ("a", &[]));
+    }
 }
