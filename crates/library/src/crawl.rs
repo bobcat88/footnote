@@ -114,16 +114,37 @@ fn page(r: &mut ureq::http::Response<ureq::Body>, url: &Url) -> Option<(String, 
     Some((body, last, kind))
 }
 
-/// Same host, under the start path, http(s), no fragment, not excluded.
-fn in_scope(u: &Url, start: &Url, exclude: &Option<regex::Regex>) -> bool {
-    // "/3/" and "/docs" keep their folder; "/guide/index.html" keeps "/guide".
+/// The start URL's folder: "/3/" and "/docs" keep theirs; "/guide/index.html" keeps "/guide".
+fn scope_dir(start: &Url) -> &str {
     let p = start.path();
     let last = p.rsplit('/').next().unwrap_or("");
-    let dir = if p.ends_with('/') || !last.contains('.') {
+    if p.ends_with('/') || !last.contains('.') {
         p.trim_end_matches('/')
     } else {
         p.rsplit_once('/').map_or("", |(d, _)| d)
-    };
+    }
+}
+
+/// Scope of a crawl whose start URL answered from `last`. Within the site the original URL stays the scope (tailwindcss.com/docs
+/// redirects to one page, /docs/installation/using-vite, and the scope must stay /docs). Another host is a move of the site
+/// (vitejs.dev/guide/ to vite.dev/guide/; docs.pydantic.dev/latest/ to pydantic.dev/docs/validation/latest/get-started/): the
+/// scope is the original folder as it sits in the target's path (/docs/validation/latest), or the target's own folder when the
+/// original folder does not appear there.
+fn redirect_scope(start: &Url, last: &Url) -> Url {
+    if last.host_str() == start.host_str() {
+        return start.clone();
+    }
+    let dir = scope_dir(start);
+    let mut scope = last.clone();
+    if let Some(at) = last.path().find(&format!("{dir}/")) {
+        scope.set_path(&format!("{}/", &last.path()[..at + dir.len()]).replace("//", "/"));
+    }
+    scope
+}
+
+/// Same host, under the start path, http(s), no fragment, not excluded.
+fn in_scope(u: &Url, start: &Url, exclude: &Option<regex::Regex>) -> bool {
+    let dir = scope_dir(start);
     matches!(u.scheme(), "http" | "https")
         && u.host_str() == start.host_str()
         && (u.path() == dir || u.path().starts_with(&format!("{dir}/"))) // "/3" must not take "/3.11/"
@@ -254,12 +275,14 @@ pub fn crawl(out: &Path, o: &Options, progress: &mut dyn FnMut(u64, u64)) -> Res
     }
     fs::create_dir_all(out)?;
     let agent = agent();
-    // The scope follows a redirect to another host (vitejs.dev/guide/ answers from vite.dev/guide/; docs.pydantic.dev/latest/
-    // from pydantic.dev/docs/validation/latest/) but not one within the site: tailwindcss.com/docs redirects to one page,
-    // /docs/installation/using-vite, and the scope must stay /docs.
+    let mut landing = None; // the page the start URL redirected to: it may sit outside a folder that has no page of its own
     let start = match get(&agent, &start) {
-        Some((_, last, _)) if last.host_str() != start.host_str() => normalize(last),
-        _ => start,
+        Some((_, last, _)) => {
+            let last = normalize(last);
+            landing = Some(last.clone());
+            redirect_scope(&start, &last)
+        }
+        None => start,
     };
     let robots = start
         .join("/robots.txt")
@@ -286,6 +309,7 @@ pub fn crawl(out: &Path, o: &Options, progress: &mut dyn FnMut(u64, u64)) -> Res
     }
     let from_sitemap = sitemap(&agent, &start);
     let via_sitemap = from_sitemap.len();
+    seeds.extend(landing);
     seeds.push(start.clone());
     seeds.extend(from_sitemap);
 
@@ -459,6 +483,87 @@ mod tests {
             &start,
             &fr
         ));
+    }
+
+    #[test]
+    fn redirect_scope_keeps_the_original_folder() {
+        let u = |s: &str| Url::parse(s).unwrap();
+        let r = |a: &str, b: &str| redirect_scope(&u(a), &u(b)).to_string();
+        assert_eq!(
+            r(
+                "https://docs.pydantic.dev/latest/",
+                "https://pydantic.dev/docs/validation/latest/get-started/"
+            ),
+            "https://pydantic.dev/docs/validation/latest/"
+        );
+        assert_eq!(
+            r("https://vitejs.dev/guide/", "https://vite.dev/guide/"),
+            "https://vite.dev/guide/"
+        );
+        assert_eq!(
+            r("https://x.dev/", "https://y.dev/en/start/"),
+            "https://y.dev/"
+        );
+        assert_eq!(
+            r("https://x.dev/a/", "https://y.dev/b/c/"),
+            "https://y.dev/b/c/"
+        );
+        // same site: the original scope stays
+        assert_eq!(
+            r(
+                "https://tailwindcss.com/docs",
+                "https://tailwindcss.com/docs/installation/using-vite"
+            ),
+            "https://tailwindcss.com/docs"
+        );
+    }
+
+    /// The start page answers from another host (localhost to 127.0.0.1) with a redirect to a child page; its siblings are crawled.
+    #[test]
+    fn crawl_follows_a_redirect_to_a_child_page() {
+        use std::io::{Read, Write};
+        let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = l.local_addr().unwrap().port();
+        thread::spawn(move || {
+            for mut c in l.incoming().flatten() {
+                let mut buf = [0u8; 2048];
+                let n = c.read(&mut buf).unwrap_or(0);
+                let req = String::from_utf8_lossy(&buf[..n]);
+                let path = req.split_whitespace().nth(1).unwrap_or("/").to_string();
+                let text = "A documentation page with enough words to count as content. ".repeat(5);
+                let head = |status: &str, extra: &str, len: usize| {
+                    format!(
+                        "HTTP/1.1 {status}\r\n{extra}Content-Length: {len}\r\nConnection: close\r\n\r\n"
+                    )
+                };
+                let reply = match path.as_str() {
+                    "/latest/" => head(
+                        "301 Moved",
+                        &format!("Location: http://127.0.0.1:{port}/docs/latest/start/\r\n"),
+                        0,
+                    ),
+                    "/docs/latest/start/" | "/docs/latest/concepts/" | "/docs/latest/api/" => {
+                        let body = format!(
+                            "<html><body><main><p>{text}</p><a href=\"/docs/latest/concepts/\">c</a> <a href=\"/docs/latest/api/\">a</a> <a href=\"/docs/other/\">o</a></main></body></html>"
+                        );
+                        head("200 OK", "Content-Type: text/html\r\n", body.len()) + &body
+                    }
+                    _ => head("404 Not Found", "", 0),
+                };
+                let _ = c.write_all(reply.as_bytes());
+            }
+        });
+        let out = std::env::temp_dir().join(format!("footnote-crawl-redirect-{port}"));
+        let start = format!("http://localhost:{port}/latest/");
+        let o = Options {
+            start: &start,
+            max_pages: 10,
+            exclude: None,
+            concurrency: 1,
+        };
+        let r = crawl(&out, &o, &mut |_, _| {}).unwrap();
+        let _ = fs::remove_dir_all(&out);
+        assert_eq!(r["pages"], 3, "{r}"); // start, concepts, api; /docs/other/ is outside the scope
     }
 
     #[test]
