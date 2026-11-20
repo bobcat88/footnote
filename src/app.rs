@@ -402,6 +402,18 @@ enum Action {
         #[arg(long, default_value_t = 50)]
         limit: usize,
     },
+    /// Footnote Code: the libraries a project uses, from its manifests and lockfiles, else from its imports, else one question.
+    /// The result is recorded in Footnote Memory with exact versions where known; a re-run reports only the difference. Reads
+    /// files only: no network, and no dependency file is written.
+    #[cfg(feature = "code")]
+    Stack {
+        /// Project folder.
+        #[arg(default_value = ".")]
+        path: PathBuf,
+        /// What the project uses, when detection found nothing (repeatable): `cargo:serde@1`, `npm:react`, `pypi:flask`, `go:github.com/gin-gonic/gin`.
+        #[arg(long)]
+        library: Vec<String>,
+    },
     /// Footnote Code: the impact radius of changing a symbol, its callers up to `depth` levels, the tests that reach it, the
     /// files and blocks affected, and the memories anchored to them.
     #[cfg(feature = "code")]
@@ -588,6 +600,8 @@ fn execute(cli: Cli) -> Result<Value> {
             crate::find::add_block_memories(&mut map);
             return Ok(map);
         }
+        #[cfg(feature = "code")]
+        Action::Stack { path, library } => return crate::stack::run(path, library, true),
         #[cfg(feature = "code")]
         Action::CodeImpact {
             name,
@@ -857,7 +871,8 @@ fn execute(cli: Cli) -> Result<Value> {
         | Action::Code { .. }
         | Action::CodeMap { .. }
         | Action::CodeImpact { .. }
-        | Action::CodeUnresolved { .. } => {
+        | Action::CodeUnresolved { .. }
+        | Action::Stack { .. } => {
             unreachable!("dispatched before the database is opened")
         }
         Action::Audit { .. }
@@ -1031,6 +1046,8 @@ fn action_name(a: &Action) -> &'static str {
         Action::CodeImpact { .. } => "code-impact",
         #[cfg(feature = "code")]
         Action::CodeUnresolved { .. } => "code-unresolved",
+        #[cfg(feature = "code")]
+        Action::Stack { .. } => "stack",
         #[cfg(feature = "code")]
         Action::CodeMap { .. } => "code-map",
         Action::Options => "options",

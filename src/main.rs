@@ -15,6 +15,8 @@ mod personal;
 mod projects;
 #[cfg(feature = "memory")]
 mod review;
+#[cfg(feature = "code")]
+mod stack;
 mod status;
 mod update;
 mod usage;

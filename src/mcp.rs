@@ -590,6 +590,11 @@ fn dispatch(db: &Path, name: &str, args: &Value) -> Result<Value> {
                     root.display()
                 );
             }
+            // `stack`: the libraries the project uses, from manifests, else imports; reports the difference from the recorded
+            // stack but records nothing (recording is `footnote stack` on the command line).
+            if args["stack"] == true {
+                return crate::stack::run(&root, &[], false);
+            }
             // `outline`: a file's definitions and line ranges, to read one of them instead of the whole file (#240).
             if let Some(path) = args["outline"].as_str().filter(|p| !p.is_empty()) {
                 return footnote_code::outline(&app::code_db(&root)?, path);
@@ -1189,6 +1194,7 @@ fn tool_definitions() -> Value {
                     "body": {"type": "boolean", "description": "Also return each definition's source lines (at most 150)"},
                     "outline": {"type": "string", "description": "Instead of a name: a file path (relative to root) whose definitions to list"},
                     "unresolved": {"type": "string", "description": "Instead of a name: a file path (relative to root) or a function name whose calls the graph could not link; each comes with the call site and the project definitions sharing the callee's name (grep those), or none when the callee is outside the project"},
+                    "stack": {"type": "boolean", "description": "Instead of a name: the libraries the project uses (manifests and lockfiles, else imports) with versions, ecosystem and the source of the evidence; or a `needs_answer` question when nothing is found. Read-only: nothing is recorded"},
                     "root": {"type": "string", "description": "Project folder; default: the server's working folder"},
                     "limit": {"type": "integer", "minimum": 1, "maximum": 100, "default": 30},
                     "impact": {"type": "integer", "minimum": 1, "maximum": 6, "description": "Before changing the symbol: its impact radius instead, callers up to this many levels with each link's grade (compiler or resolved), the tests that reach it, the files and blocks affected, and memories anchored to them. 3 is a good start."}

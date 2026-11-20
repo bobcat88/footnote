@@ -2120,6 +2120,149 @@ fn package_of(l: Lang, module: &str) -> String {
     .replace(' ', "_")
 }
 
+const PY_STDLIB: &str = "abc argparse array ast asyncio atexit base64 binascii bisect builtins bz2 calendar cmath cmd code codecs collections colorsys concurrent configparser contextlib contextvars copy csv ctypes curses dataclasses datetime dbm decimal difflib dis doctest email encodings enum errno faulthandler fcntl filecmp fileinput fnmatch fractions ftplib functools gc getopt getpass gettext glob graphlib grp gzip hashlib heapq hmac html http imaplib importlib inspect io ipaddress itertools json keyword linecache locale logging lzma mailbox marshal math mimetypes mmap msvcrt multiprocessing netrc numbers operator optparse os pathlib pdb pickle pkgutil platform plistlib poplib posixpath pprint profile pstats pty pwd queue random re readline reprlib resource runpy sched secrets select selectors shelve shlex shutil signal site smtplib socket socketserver sqlite3 ssl stat statistics string struct subprocess sys sysconfig syslog tarfile tempfile termios textwrap threading time timeit tkinter token tokenize tomllib trace traceback tracemalloc tty turtle types typing unicodedata unittest urllib uuid venv warnings wave weakref webbrowser winreg wsgiref xml xmlrpc zipapp zipfile zipimport zlib zoneinfo __future__";
+const NODE_BUILTINS: &str = "assert async_hooks buffer child_process cluster console constants crypto dgram diagnostics_channel dns domain events fs http http2 https inspector module net os path perf_hooks process punycode querystring readline repl stream string_decoder sys timers tls trace_events tty url util v8 vm wasi worker_threads zlib";
+
+/// The outside packages the project's source imports, as (language, package name as its manager names it), for the stack
+/// detector (#304). Standard library and the project's own modules are left out; Java is not covered. Same parser and the
+/// same notion of "local" as the code graph.
+pub fn imports(root: &Path) -> Vec<(&'static str, String)> {
+    let all = candidates(root);
+    let mut files: Vec<(Lang, Vec<u8>)> = Vec::new();
+    for rel in &all {
+        let Some(l) = lang_of(rel).filter(|l| *l != Lang::Java) else {
+            continue;
+        };
+        let path = root.join(rel);
+        if files.len() < MAX_FILES
+            && std::fs::metadata(&path).is_ok_and(|m| m.is_file() && m.len() <= MAX_FILE)
+            && let Ok(b) = std::fs::read(&path)
+        {
+            files.push((l, b));
+        }
+    }
+    let stems: HashSet<String> = all
+        .iter()
+        .flat_map(|p| {
+            p.split('/')
+                .map(|s| s.split('.').next().unwrap_or(s).replace('-', "_"))
+        })
+        .collect();
+    // The project's own names: Rust workspace crates (as code spells them) and the Go module path.
+    let own: HashSet<String> = all
+        .iter()
+        .filter(|p| p.ends_with("Cargo.toml") || p.ends_with("go.mod"))
+        .filter_map(|p| std::fs::read_to_string(root.join(p)).ok())
+        .flat_map(|t| {
+            t.lines()
+                .filter_map(|l| {
+                    let l = l.trim();
+                    if let Some(m) = l.strip_prefix("module ") {
+                        return Some(m.trim().to_string());
+                    }
+                    let (k, v) = l.split_once('=')?;
+                    (k.trim() == "name").then(|| v.trim().trim_matches('"').replace('-', "_"))
+                })
+                .collect::<Vec<_>>()
+        })
+        .collect();
+    let js = tree_sitter_javascript::LANGUAGE.into();
+    let require = Query::new(
+        &js,
+        "(call_expression function: (identifier) @f arguments: (arguments . (string) @s))",
+    )
+    .ok();
+    let mut found: std::collections::BTreeSet<(&'static str, String)> = Default::default();
+    let mut parser = Parser::new();
+    for (l, src) in &files {
+        let (lang, _, imp) = grammar(*l);
+        let Ok(q) = Query::new(&lang, imp) else {
+            continue;
+        };
+        if parser.set_language(&lang).is_err() {
+            continue;
+        }
+        let Some(tree) = parser.parse(src, None) else {
+            continue;
+        };
+        let mut modules: Vec<String> = Vec::new();
+        let mut cur = QueryCursor::new();
+        let mut it = cur.matches(&q, tree.root_node(), src.as_slice());
+        while let Some(m) = it.next() {
+            for c in m.captures() {
+                if let Ok(text) = c.node.utf8_text(src) {
+                    modules.extend(bindings(*l, text).into_iter().map(|(_, m)| m));
+                }
+            }
+        }
+        // CommonJS `require("x")`; the JavaScript grammar parses a TypeScript file's calls the same way.
+        if let (Some(rq), Lang::Js | Lang::Ts | Lang::Tsx) = (&require, *l)
+            && parser.set_language(&js).is_ok()
+            && let Some(tree) = parser.parse(src, None)
+        {
+            let mut cur = QueryCursor::new();
+            let mut it = cur.matches(rq, tree.root_node(), src.as_slice());
+            while let Some(m) = it.next() {
+                let t: Vec<&str> = m
+                    .captures()
+                    .iter()
+                    .map(|c| c.node.utf8_text(src).unwrap_or(""))
+                    .collect();
+                if let [f, s] = t[..]
+                    && f == "require"
+                {
+                    modules.push(s.trim_matches(['"', '\'', '`']).to_string());
+                }
+            }
+        }
+        for m in modules {
+            let head = first(&m);
+            let outside = !m.is_empty()
+                && !m.starts_with(['.', '/', '~', '#'])
+                && !m.starts_with("@/")
+                && !stems.contains(&head.replace('-', "_"));
+            let (name, outside) = match l {
+                Lang::Rust => (
+                    "rust",
+                    outside
+                        && ![
+                            "crate",
+                            "self",
+                            "super",
+                            "std",
+                            "core",
+                            "alloc",
+                            "proc_macro",
+                            "test",
+                        ]
+                        .contains(&head)
+                        && !own.contains(&head.replace('-', "_")),
+                ),
+                Lang::Python => (
+                    "python",
+                    outside && !PY_STDLIB.split(' ').any(|s| s == head),
+                ),
+                Lang::Go => (
+                    "go",
+                    outside
+                        && m.split('/').next().is_some_and(|h| h.contains('.'))
+                        && !own.iter().any(|o| m.starts_with(o.as_str())),
+                ),
+                _ => (
+                    "javascript",
+                    outside
+                        && !m.starts_with("node:")
+                        && !NODE_BUILTINS.split(' ').any(|s| s == head),
+                ),
+            };
+            if outside {
+                found.insert((name, package_of(*l, &m)));
+            }
+        }
+    }
+    found.into_iter().collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

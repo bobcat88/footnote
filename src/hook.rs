@@ -190,7 +190,7 @@ fn changed_hint(status: &str) -> String {
     )
 }
 
-fn project_of(cwd: &str) -> String {
+pub(crate) fn project_of(cwd: &str) -> String {
     let remote = git(cwd, &["remote", "get-url", "origin"]);
     let name = remote
         .trim_end_matches('/')

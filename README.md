@@ -226,7 +226,10 @@ footnote code-index .          # build the graph of the project here (seconds; r
 footnote code lookup           # the symbol `lookup`: signature, file and lines, callers with call-site lines, callees
 footnote code-map               # architecture map: folders as blocks, links between them, outside packages used
 footnote code-impact <name>     # before a change: callers up to 3 levels, tests reached, files and memories affected
+footnote stack [path]            # the libraries the project uses: manifests and lockfiles, else imports, else one question; recorded in Memory, a re-run shows only what changed
 ```
+
+`footnote stack` reads Cargo.toml/Cargo.lock, package.json/package-lock.json, pyproject.toml/requirements*.txt/poetry.lock/uv.lock and go.mod (versions are exact when a lockfile or `==` pins them, `exact: false` otherwise); with none of those it reads the imports (standard library and your own modules left out, no versions). Each library carries `name`, `version`, `ecosystem` and `source` (`manifest`, `import` or `user`). An empty folder gets `needs_answer` with one question; answer with `--library pypi:flask@3.0.0`. It reads files only, uses no network and writes no dependency file. Agents get the stack, read-only, with `footnote_code` `stack: true`.
 
 Agents get the same answer through `footnote_code`; files changed since indexing come back in `stale`. The tool reads only projects Footnote has recorded (every folder an agent session starts in) and refuses any other folder. Index only code you trust: for Rust, rust-analyzer builds the project, which runs its build scripts and procedural macros (scip-typescript and scip-python only read the code; the parser graph runs no project code). Design: [docs/CODE-GRAPH-DESIGN.md](docs/CODE-GRAPH-DESIGN.md).
 
