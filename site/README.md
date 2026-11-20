@@ -1,46 +1,53 @@
-# Footnote landing page
+# Footnote One website
 
-A static page (no framework, no third-party requests) deployed as a Cloudflare Worker with static assets.
+A static four-page site (Launcher/Install at `/`, plus `/library`, `/memory`, `/code` marked soon — no framework, no third-party requests) deployed as a Cloudflare Worker with static assets.
 
 ```
-site/src/      source: index.html, 404.html, styles.css, app.js, stream.js, fonts/, icons, _headers, robots.txt, sitemap.xml, .well-known/
-site/build.mjs copies src/ to dist/, hashes css/js/fonts, rewrites references, asserts the CSP rules (no inline script/style, no third-party URL)
-site/dist/     build output (git-ignored); this is what wrangler serves
-wrangler.jsonc worker name `footnote`, assets = site/dist, not_found_handling = 404-page, no worker script
+site/pages.mjs         single source of metadata (titles, descriptions, OG/Twitter tags, social card copy, llms.txt lines)
+site/src/pages/*.html  <main> bodies for index, library, memory, code
+site/src/partials/     shared defs.html, nav.html, footer.html (so pages cannot drift)
+site/md.mjs            HTML-to-Markdown converter used by build.mjs
+site/build.mjs         builds dist/: wraps pages, emits /llms.txt, /llms-full.txt, /*.md twins, sitemap.xml; hashes css/js/fonts; asserts CSP, links, anchors, single h1 and social cards (<300 KB)
+site/dist/             build output (git-ignored); this is what wrangler serves
+wrangler.jsonc         worker name `footnote`, assets = site/dist, not_found_handling = 404-page, no worker script
 ```
 
 ## Build and test locally
 
-```
+```sh
 node site/build.mjs
-npx wrangler@latest dev         # http://localhost:8787, headers from _headers apply
-curl -sI http://localhost:8787/ # check headers
+npx wrangler@latest dev          # http://localhost:8787, headers from _headers apply
+curl -sI http://localhost:8787/  # check CSP, HSTS, Link: </llms.txt>; rel="llms-txt", nosniff
+curl -sI http://localhost:8787/index.md # Content-Type: text/markdown; charset=utf-8
 ```
 
-## Deploy (needs Johan's go; not done yet)
+## Noindexed preview deploy
 
-```
-node site/build.mjs
-npx wrangler@latest deploy      # -> https://footnote.johanproust.workers.dev
+```sh
+PREVIEW=1 node site/build.mjs
+npx wrangler@latest deploy --name footnote-preview
 ```
 
-Then verify the headers on the live URL: `curl -sI https://footnote.johanproust.workers.dev/` and an asset under `/assets/` (must say `immutable`). Local `wrangler dev` cannot prove HSTS, the HTTPS upgrade or Cloudflare compression.
+`PREVIEW=1` sets `SITE_URL` to `https://footnote-preview.johanproust.workers.dev`, adds `X-Robots-Tag: noindex, nofollow` to `dist/_headers` and switches `dist/robots.txt` to `Disallow: /` (with the `llms.txt` pointer). The files in `src/` stay production-ready.
+
+## Production deploy (needs Johan's go)
+
+```sh
+SITE_URL=https://<canonical-domain> node site/build.mjs
+npx wrangler@latest deploy
+```
+
+Then verify live headers on `/` (HSTS, CSP, `Link: </llms.txt>; rel="llms-txt"`), `/assets/*` (`immutable`), `/index.md` (`text/markdown; charset=utf-8` + `nosniff`), `/llms.txt`, `/llms-full.txt`, and `/og.png` (`200 image/png`).
 
 ## Before the site is public
 
-1. **security.txt**: contact is the Footnote support address, `Expires` is 2027-11-20; move `Expires` forward before then.
-2. **Canonical URL**: defaults to `https://footnote.johanproust.workers.dev`. When a custom domain exists, run `SITE_URL=https://example.com node site/build.mjs` and redeploy. The URL feeds canonical, Open Graph, JSON-LD, sitemap, robots and security.txt.
-3. **HSTS preload**: the header is `max-age=63072000; includeSubDomains` (2 years). Do not add `preload` on `workers.dev`. With a custom domain, add `; preload` in `src/_headers` and submit it at hstspreload.org only once every subdomain is HTTPS.
-4. **Benchmark link**: the results section says the procedure and disclaimers will be published with the repository; replace it with a real link once the repository is public.
-5. The Results numbers were not changed; check them against `FINAL-RANKING.md` (issue #327) before launch.
+1. **security.txt**: contact is `johan.velocity.lab@pm.me`, `Expires` is `2027-11-20`; move `Expires` forward before then.
+2. **Canonical URL**: `src/` keeps `%SITE_URL%` placeholders; `build.mjs` defaults to `https://footnote.johanproust.workers.dev`. Pass `SITE_URL=https://example.com` once a custom domain exists.
+3. **HSTS preload**: `_headers` sets `max-age=63072000; includeSubDomains`. Do not add `preload` on `workers.dev`. With a custom domain, add `; preload` and submit at hstspreload.org only once every subdomain is HTTPS.
+4. **Screen-reader pass**: automated axe-core and keyboard Tab checks are verified; a manual NVDA/VoiceOver pass is still open.
 
 ## Changing things
 
 - Fonts: `python site/scripts/subset-fonts.py <dir with node_modules/@fontsource-variable> site/src/fonts` (Latin subset, narrowed weight axis; SIL OFL).
-- Icons and social image: `site/scripts/make-assets.mjs` (outputs are committed).
+- Icons and social cards (`og.png`, `og-library.png`, `og-memory.png`, `og-code.png`): `site/scripts/make-assets.mjs` (outputs are committed).
 - Every reference uses a root-absolute path so `404.html` works at any depth.
-- The page moved from `design/site/index.html` to `site/src/index.html`; the prototypes and lab stay in `design/site/`.
-
-## Noindexed preview
-
-`PREVIEW=1 SITE_URL=https://footnote-preview.johanproust.workers.dev node site/build.mjs && npx wrangler deploy --name footnote-preview` builds a copy with `X-Robots-Tag: noindex, nofollow` and `Disallow: /` in robots.txt. The files in `src/` stay production-ready.

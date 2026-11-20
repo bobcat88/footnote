@@ -1,0 +1,89 @@
+  <div class="wrap rel">
+    <canvas id="stream" aria-hidden="true"></canvas>
+    <span class="focus glass" aria-hidden="true"></span>
+    <div class="hero">
+      <div>
+        <h1><span class="w">Your</span> <span class="w d1">agent</span> <span class="w d2">stops</span> <em><span class="w d3">starting</span> <span class="w d4">from</span> <span class="w d5">zero.</span></em></h1>
+        <p class="sub">Local memory your coding agents can cite.</p>
+        <p class="lead">Footnote One gives your coding agent a memory of your documents, your past work and your code. Every answer says where it came from: the file, the line, and whether the file changed since.</p>
+        <div class="cta"><a class="btn primary" href="#install">Install Footnote One</a><a class="btn" href="#products">See the products</a></div>
+        <p class="hint">runs on your machine · no account · no telemetry</p>
+      </div>
+      <p class="lensnote">your documents and decisions, <b>in focus</b></p>
+    </div>
+  </div>
+
+  <section id="products" class="wrap">
+    <div class="intro">
+      <h2 class="blocks"><span>Three products,</span><span>one engine.</span><span>Use one, or all.</span></h2>
+      <p>Each one works on its own. They share one binary, one way of citing sources and one security model.</p>
+    </div>
+    <div class="cards">
+      <article class="pcard">
+        <div class="head"><h3><a class="stretch" href="/library"><span>Footnote</span> Library</a></h3><span class="tag on">available</span></div>
+        <div class="stage" aria-hidden="true"><span class="lens glass"><svg class="mk"><use href="#m-lib"/></svg></span></div>
+        <p>Search your own notes, PDFs and the documentation of the libraries you use. Each result names the file, the line and whether the file changed since.</p>
+        <div class="meta"><span>Markdown · text · PDF · library docs</span></div>
+      </article>
+      <article class="pcard">
+        <div class="head"><h3><a class="stretch" href="/memory"><span>Footnote</span> Memory</a></h3><span class="tag on">available</span></div>
+        <div class="stage" aria-hidden="true"><span class="lens glass"><svg class="mk"><use href="#m-mem"/></svg></span></div>
+        <p>Your agent saves what it learns, such as preferences, decisions and fixes, in one file on your machine, and gets the relevant ones back when a session starts.</p>
+        <div class="meta"><span>footnote install --memory</span></div>
+      </article>
+      <article class="pcard">
+        <div class="head"><h3><a class="stretch" href="/code"><span>Footnote</span> Code</a></h3><span class="tag">soon</span></div>
+        <div class="stage" aria-hidden="true"><span class="lens glass"><svg class="mk"><use href="#m-code"/></svg></span></div>
+        <p>Ask who calls a function and what it calls. The answer comes from the compiler's own index, not from a guess.</p>
+        <div class="meta"><span>coming soon</span></div>
+      </article>
+    </div>
+  </section>
+
+  <section id="launcher" class="wrap">
+    <div class="intro">
+      <div>
+        <p class="label">Launcher</p>
+        <h2 class="t mt14">One small window for all three.</h2>
+      </div>
+      <p>A desktop window with a tray icon. Switch a product on or off, search Library, Memory and Code at once, see your projects and models, and check how many tokens your agents used.</p>
+    </div>
+    <ul class="facts">
+      <li><b>Windows only for now.</b> Linux and macOS builds are not done.</li>
+      <li><b>No installer yet.</b> You build it from source, next to the command line tool.</li>
+      <li><b>It does little.</b> It runs a short list of read commands, a product's switch and a model install. Nothing else.</li>
+    </ul>
+  </section>
+
+  <section id="install" class="wrap">
+    <p class="label">Install</p>
+    <h2 class="blocks mt14"><span>Three steps, from source.</span></h2>
+    <p class="note">There is no installer and no prebuilt download yet; this is the developer path. You need Rust 1.92 or later, Python 3.10 or later (once, to download models and read PDFs) and about 200 MB of disk for two models.</p>
+    <div class="install">
+      <div class="step"><h3>1 · Build</h3><p>One Rust binary. Put <code>target/release</code> on your PATH.</p><div class="cmd"><code tabindex="0">git clone https://github.com/bobcat88/footnote &amp;&amp; cd footnote &amp;&amp; cargo build --release</code><button class="copy" type="button" aria-label="Copy the build commands">Copy</button></div></div>
+      <div class="step"><h3>2 · Models</h3><p>A one-time download of two small public models, checked by hash.</p><div class="cmd"><code tabindex="0">python tools/provision_embeddings.py bekko-a8m gte-small</code><button class="copy" type="button" aria-label="Copy the model download command">Copy</button></div></div>
+      <div class="step"><h3>3 · Connect</h3><p>Sets up Memory, its hooks and /remember in every supported agent it finds.</p><div class="cmd"><code tabindex="0">footnote install --memory</code><button class="copy" type="button" aria-label="Copy the Memory install command">Copy</button></div></div>
+    </div>
+    <p class="tnote">Update with <code>footnote update --from &lt;binary&gt;</code>, go back with <code>footnote rollback</code>, remove the hooks with <code>footnote uninstall --memory</code>. Your data stays in its own folder. Something failed? <a href="https://github.com/bobcat88/footnote/issues">Open an issue on GitHub</a> or write to <a href="mailto:johan.velocity.lab@pm.me">johan.velocity.lab@pm.me</a>.</p>
+    <p class="tnote">Next: <a href="/library">index your documents</a>, <a href="/memory">see what Memory saves</a>.</p>
+  </section>
+
+  <section id="evidence" class="wrap">
+    <h2 class="label">How we know</h2>
+    <div class="proof">
+      <div>
+        <div class="big">24 of 26</div>
+        <p>comparisons against mem0, Cognee and ICM where Footnote ranks better. The other two are ties.</p>
+        <p class="src">nDCG@10 on five test sets, 95% interval above zero · one run each, 13 and 14 Nov 2026, one machine · we ran every tool ourselves · mem0 without LLM extraction, Cognee on its chunk index, ICM keyword-only</p>
+        <div class="mini"><div><b>0.747</b><span>SciFact nDCG@10 (published BM25: 0.665)</span></div><div><b>52 ms</b><span>median search at 100,000 chunks; random vectors, so speed only</span></div></div>
+      </div>
+      <div class="bars" role="img" aria-label="nDCG@10 on the mixed French and English corpus: Footnote 0.489, mem0 0.343, ICM 0.342, Cognee failed on this corpus">
+        <div class="bar us"><span>Footnote</span><i class="w1"></i><span>0.489</span></div>
+        <div class="bar"><span>mem0</span><i class="w2"></i><span>0.343</span></div>
+        <div class="bar"><span>ICM</span><i class="w3"></i><span>0.342</span></div>
+        <div class="bar"><span>Cognee</span><span class="na">failed on this corpus</span></div>
+      </div>
+    </div>
+    <p class="tnote">Bars: mixed French and English documents, 3,039 questions. Where we lose: Footnote builds its index more slowly than mem0 and ICM, about 1.7 to 7 times. Public test sets may overlap with data the models were trained on. Competitor versions are snapshots.</p>
+    <p class="tnote">All tables, intervals and files: <a href="/library#quality">Library results</a>, <a href="/memory#recall">Memory results</a>, <a href="https://github.com/bobcat88/footnote/tree/main/bench">benchmarks on GitHub</a>.</p>
+  </section>

@@ -1,0 +1,92 @@
+  <div class="wrap phero">
+    <div>
+      <p class="label">Footnote Library · available</p>
+      <h1>Search your docs and notes. See the source.</h1>
+      <p class="sub">Every result says where it came from.</p>
+      <p class="lead">Library indexes the Markdown, text and PDF files you allow, and the documentation of the libraries your project uses. Your agent asks it over MCP and gets back the file, the line and whether the file changed since.</p>
+      <div class="cta"><a class="btn primary" href="#start">Index your docs</a><a class="btn" href="#quality">Read the numbers</a></div>
+      <p class="hint">runs on your machine · French and English</p>
+    </div>
+    <span class="lens glass big" aria-hidden="true"><svg class="mk"><use href="#m-lib"/></svg></span>
+  </div>
+
+  <section id="result" class="wrap">
+    <h2 class="t">What a result contains</h2>
+    <ul class="facts">
+      <li><b>Where.</b> File path, heading, page and line.</li>
+      <li><b>Which bytes.</b> A SHA-256 of the exact text the result came from, and a revision number.</li>
+      <li><b>Still true?</b> <code>current</code>, <code>stale</code> (the file changed since it was indexed) or <code>missing_or_unreadable</code>.</li>
+      <li><b>Read-only.</b> An agent can recall and fetch. It cannot write to your documents. Every call goes into a tamper-evident audit log.</li>
+    </ul>
+    <div class="bleed">
+      <div class="palette glass" role="img" aria-label="An example answer with two documents from Footnote Library, one marked current and one marked changed since">
+        <div class="q"><span class="t">recall</span><span class="text">Why do WAL checkpoints stall under write load?</span></div>
+        <div class="hits">
+          <div class="hit sel"><span class="lens" aria-hidden="true"><svg class="mk"><use href="#m-lib"/></svg></span><span><b>A checkpoint cannot pass a reader that started before it</b><small>notes/sqlite.md · WAL · line 42 · rev 4</small></span><span class="chip cur">current</span></div>
+          <div class="hit"><span class="lens" aria-hidden="true"><svg class="mk"><use href="#m-lib"/></svg></span><span><b>Run a passive checkpoint before the batch job starts</b><small>ops/runbook.md · page 3 · rev 1</small></span><span class="chip stale">changed since</span></div>
+        </div>
+        <div class="pfoot"><span>2 documents</span><span>example data, not a measurement</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="stack" class="wrap">
+    <h2 class="t">The documentation of your stack</h2>
+    <p class="prose"><code>footnote docs ingest --project .</code> finds the libraries your project imports and indexes their docs, the most used first. Search works as soon as the keyword index exists; meaning-based search switches on by itself when the background embedding finishes.</p>
+    <ul class="facts">
+      <li><b>Time to first answer.</b> 8 libraries, 507 pages, one run on CPU, 20 Nov 2026: the first search worked after 5.9 s and all eight were searchable by keyword after 44.1 s. Embedding finished at 567.5 s. The total did not get shorter than before (548 s), so we claim the early answer, not a faster ingest.</li>
+      <li><b>Against Grounded Docs 3.4.1.</b> Crawl and index: 10.1 s against 160.6 s on the Scrapy docs, 7.6 s against 121.8 s on the pytest docs. Median query 1.15 s against 1.83 s. Two sites, 40 questions, a protocol sealed before the run. Footnote stored 200 pytest pages against 95.</li>
+      <li><b>Quality against Grounded Docs: inconclusive.</b> On those 40 questions nDCG@5 was 0.768 against 0.721, inside the noise (95% interval -0.054 to +0.155). On an earlier set of 59 questions we scored lower, 0.564 against 0.635.</li>
+      <li><b>Prebuilt docs bundles.</b> The command exists. None are shipped or hosted yet.</li>
+    </ul>
+  </section>
+
+  <section id="quality" class="wrap">
+    <h2 class="t">Retrieval quality</h2>
+    <p class="prose">nDCG@10 on the official test splits, through the shipped binary over MCP, 14 Nov 2026, one machine, one run per tool. Higher is better.</p>
+    <div class="tablebox" tabindex="0" role="region" aria-label="Quality per corpus">
+      <table>
+        <thead><tr><th>Corpus</th><th>Footnote</th><th>mem0</th><th>ICM</th><th>Cognee</th></tr></thead>
+        <tbody>
+          <tr><td>Mixed French + English · 3,039 q</td><td class="us">0.489</td><td>0.343<span class="d">+42 %</span></td><td>0.342<span class="d">+43 %</span></td><td>failed</td></tr>
+          <tr><td>Alloprof, French · 2,316 q</td><td class="us">0.478</td><td>0.360<span class="d">+33 %</span></td><td>0.333<span class="d">+44 %</span></td><td>0.305<span class="d">+57 %</span></td></tr>
+          <tr><td>Syntec, French · 100 q</td><td class="us">0.795</td><td>0.745<span class="d">+7 %</span></td><td>0.657<span class="d">+21 %</span></td><td>0.700<span class="d">+14 %</span></td></tr>
+          <tr><td>SciFact, English · 300 q</td><td class="us">0.747</td><td>0.729<span class="d">tie</span></td><td>0.664<span class="d">+12 %</span></td><td>0.719<span class="d">+4 %</span></td></tr>
+          <tr><td>NFCorpus, English · 323 q</td><td class="us">0.368</td><td>0.357<span class="d">tie</span></td><td>0.307<span class="d">+20 %</span></td><td>0.338<span class="d">+9 %</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <ul class="facts">
+      <li><b>Published reference.</b> BM25 from the BEIR paper scores 0.665 on SciFact and 0.325 on NFCorpus.</li>
+      <li><b>Caveats.</b> We ran every tool ourselves. mem0 ran without LLM extraction, Cognee on its chunk index, ICM keyword-only. Cognee failed on the mixed set. Public test sets may overlap with data the models were trained on. Competitor versions are snapshots.</li>
+      <li><b>Where we lose.</b> Building the index takes Footnote 280 s against 162 s for mem0 on SciFact, and 712 s against 336 s on the mixed set. ICM builds 6 to 7 times faster.</li>
+    </ul>
+  </section>
+
+  <section id="speed" class="wrap">
+    <h2 class="t">Speed</h2>
+    <ul class="facts">
+      <li><b>Search.</b> Median 20 ms at 5,183 chunks, 45 ms at 40,018 and 52 ms at 100,044 (95th percentile 79 ms), end to end over MCP, 300 real queries. The two larger rows use random vectors: they show speed, not precision.</li>
+      <li><b>Keyword index alone.</b> 3.0 ms against 423 ms for SQLite FTS5 at 1,000,000 synthetic documents cut from real text. Speed only; the two stores are not the same size or content.</li>
+    </ul>
+  </section>
+
+  <section id="limits" class="wrap">
+    <h2 class="t">Limits</h2>
+    <ul class="facts">
+      <li>The English stemmer is also used on French text. It beat the alternatives we tried on a mixed index.</li>
+      <li>We have not measured precision at 100,000 chunks.</li>
+      <li>PDF text and OCR need the Python helpers.</li>
+      <li>Meaning-based search needs the two models (about 200 MB). Without them you still get keyword search.</li>
+    </ul>
+  </section>
+
+  <section id="start" class="wrap">
+    <p class="label">Start</p>
+    <h2 class="blocks mt14"><span>Index your docs.</span></h2>
+    <p class="note">You need Footnote installed first: see <a href="/#install">install</a>.</p>
+    <div class="install two">
+      <div class="step"><h3>Your folders</h3><p>Index a folder you allow.</p><div class="cmd"><code tabindex="0">footnote --db kb.db index --root ./docs --allow ./docs</code><button class="copy" type="button" aria-label="Copy the folder index command">Copy</button></div></div>
+      <div class="step"><h3>Your stack</h3><p>Index the docs of the libraries this project imports.</p><div class="cmd"><code tabindex="0">footnote docs ingest --project .</code><button class="copy" type="button" aria-label="Copy the docs ingest command">Copy</button></div></div>
+    </div>
+  </section>

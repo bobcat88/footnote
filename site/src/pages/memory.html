@@ -1,0 +1,72 @@
+  <div class="wrap phero">
+    <div>
+      <p class="label">Footnote Memory · available</p>
+      <h1>What your agent learns stays with you.</h1>
+      <p class="sub">Saved once, recalled in every session.</p>
+      <p class="lead">Memory lets your coding agent save preferences, decisions and fixes in one file on your machine. The relevant ones come back when a session starts and on each prompt.</p>
+      <div class="cta"><a class="btn primary" href="#start">Turn on Memory</a><a class="btn" href="#control">See and delete it</a></div>
+      <p class="hint">one local file · no account · no telemetry</p>
+    </div>
+    <span class="lens glass big" aria-hidden="true"><svg class="mk"><use href="#m-mem"/></svg></span>
+  </div>
+
+  <section id="how" class="wrap">
+    <h2 class="t">What is saved, and when it comes back</h2>
+    <ul class="facts">
+      <li><b>Saved by your agent.</b> Preferences, decisions, fixes and sessions. The agent writes them itself, in its own session. No second model reads your conversation.</li>
+      <li><b>At session start</b> Footnote adds your preferences and the project's memories.</li>
+      <li><b>On each prompt</b> it adds the memories that match the prompt.</li>
+      <li><b>Every 10 prompts</b>, at the end of a turn, it asks the agent once to save what it learned. <code>/remember</code> does the same on demand.</li>
+      <li><b>Agents.</b> Memory hooks work with Claude Code, Codex, Grok and DeepSeek Harness. Search over your documents works in any MCP host, Gemini CLI included.</li>
+    </ul>
+  </section>
+
+  <section id="control" class="wrap">
+    <h2 class="t">See it, change it, delete it</h2>
+    <p class="prose">Control is the reason to trust it, so it comes first. A global preference saved by an agent waits for your review before any agent sees it.</p>
+    <ul class="facts">
+      <li><code>footnote memory-list</code> lists what is stored.</li>
+      <li><code>footnote memory-review</code> lists the memories worth a second look, and the preferences waiting for you. <code>footnote memory-restore &lt;id&gt;</code> approves one.</li>
+      <li><code>footnote forget &lt;id&gt;</code> deletes one, or rejects a pending preference.</li>
+      <li>The Launcher shows recent memory activity and token use.</li>
+    </ul>
+  </section>
+
+  <section id="recall" class="wrap">
+    <h2 class="t">Recall quality</h2>
+    <p class="prose">LongMemEval-S, retrieval only, at session level: 500 questions, the shipped binary, 14 Nov 2026. These numbers measure finding the right session. We have no number yet for whether an agent saves the right things.</p>
+    <div class="tablebox" tabindex="0" role="region" aria-label="LongMemEval-S recall">
+      <table>
+        <thead><tr><th>Tool</th><th>any@5</th><th>all@5</th><th>nDCG@10</th></tr></thead>
+        <tbody>
+          <tr><td>Footnote</td><td class="us">0.978</td><td class="us">0.908</td><td class="us">0.939</td></tr>
+          <tr><td>ICM, keyword-only</td><td>0.952</td><td>0.820</td><td>0.875</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <ul class="facts">
+      <li><b>Intervals.</b> Every difference above has a 95% interval that excludes zero.</li>
+      <li><b>Caveat.</b> We did not run ICM's local hybrid mode. Against ICM's own published hybrid numbers, Footnote is better on all@10 and nDCG@10 and tied on the rest.</li>
+      <li><b>Same documents, other tools.</b> On our five document-retrieval sets we rank above mem0 and Cognee as well; see <a href="/library#quality">Library results</a>. Those sets test document search, not memory extraction.</li>
+    </ul>
+  </section>
+
+  <section id="privacy" class="wrap">
+    <h2 class="t">What stays on your machine</h2>
+    <ul class="facts">
+      <li>Memories live in one SQLite file. There is no telemetry.</li>
+      <li>Three commands you run use the network: <code>footnote models install</code>, <code>footnote docs add</code> and <code>footnote crawl</code>. Search and memory open no outbound connection.</li>
+      <li>An encrypted store exists, but it is experimental and Windows only.</li>
+      <li>The memories an agent receives are in its prompt, so the agent's own transcripts keep them in plain text. Encryption protects Footnote's store, not what agents write down.</li>
+    </ul>
+  </section>
+
+  <section id="start" class="wrap">
+    <p class="label">Start</p>
+    <h2 class="blocks mt14"><span>Turn on Memory.</span></h2>
+    <p class="note">You need Footnote installed first: see <a href="/#install">install</a>. The command backs up each settings file it edits and leaves your existing entries alone.</p>
+    <div class="install two">
+      <div class="step"><h3>Turn on</h3><p>Registers Memory, its hooks and /remember in every supported agent found.</p><div class="cmd"><code tabindex="0">footnote install --memory</code><button class="copy" type="button" aria-label="Copy the Memory install command">Copy</button></div></div>
+      <div class="step"><h3>Turn off</h3><p>Removes the hooks and MCP server. Your memories and settings are kept.</p><div class="cmd"><code tabindex="0">footnote uninstall --memory</code><button class="copy" type="button" aria-label="Copy the Memory uninstall command">Copy</button></div></div>
+    </div>
+  </section>

@@ -1,0 +1,11 @@
+<svg class="defs" aria-hidden="true" focusable="false">
+  <filter id="refract" x="0" y="0" width="100%" height="100%">
+    <feTurbulence type="fractalNoise" baseFrequency="0.008 0.02" numOctaves="2" seed="7" result="n"/>
+    <feGaussianBlur in="n" stdDeviation="2" result="nb"/>
+    <feDisplacementMap in="SourceGraphic" in2="nb" scale="22" xChannelSelector="R" yChannelSelector="G"/>
+  </filter>
+  <!-- Product marks (WIP placeholders): Library = database of documents, Memory = brain of connected nodes, Code = {x} -->
+  <symbol id="m-lib" viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="7" ry="2.6"/><path d="M5 6v12c0 1.45 3.1 2.6 7 2.6s7-1.15 7-2.6V6"/><path d="M5 12c0 1.45 3.1 2.6 7 2.6s7-1.15 7-2.6"/><path d="M9 5.4h4.5M9.8 6.8h4.6" stroke-width="1.2"/><path d="M8.5 17.6h4M8.5 19h2.5" stroke-width="1.2" stroke-opacity=".7"/></symbol>
+  <symbol id="m-mem" viewBox="0 0 24 24"><path d="M12 5.2C10.6 3.7 8.2 3.8 7.2 5.4 5.4 5.5 4.3 7 4.6 8.6 3.2 9.5 3 11.6 4.2 12.7c-.7 1.7.2 3.6 2 3.9.4 1.9 2.4 2.8 4.1 2.1.6.7 1.2.9 1.7.8 .5.1 1.1-.1 1.7-.8 1.7.7 3.7-.2 4.1-2.1 1.8-.3 2.7-2.2 2-3.9 1.2-1.1 1-3.2-.4-4.1.3-1.6-.8-3.1-2.6-3.2C15.8 3.8 13.4 3.7 12 5.2z" stroke-opacity=".5"/><path d="M8 8.2l4 2.2 4-2.2M12 10.4v4.4M7.2 13.6l4.8 1.2 4.8-1.2M8 8.2l-.8 5.4M16 8.2l.8 5.4"/><g fill="#5fd3c3" stroke="none"><circle cx="8" cy="8.2" r="1.25"/><circle cx="16" cy="8.2" r="1.25"/><circle cx="12" cy="10.4" r="1.25"/><circle cx="12" cy="14.8" r="1.25"/><circle cx="7.2" cy="13.6" r="1.25"/><circle cx="16.8" cy="13.6" r="1.25"/></g></symbol>
+  <symbol id="m-code" viewBox="0 0 24 24"><path d="M8 4.5c-1.8 0-2.4 .9-2.4 2.6v2.1c0 1.3-.6 2.1-2 2.8 1.4.7 2 1.5 2 2.8v2.1c0 1.7.6 2.6 2.4 2.6"/><path d="M16 4.5c1.8 0 2.4 .9 2.4 2.6v2.1c0 1.3.6 2.1 2 2.8-1.4.7-2 1.5-2 2.8v2.1c0 1.7-.6 2.6-2.4 2.6"/><path d="M9.8 9.6l4.4 4.8M14.2 9.6l-4.4 4.8"/></symbol>
+</svg>

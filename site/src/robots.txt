@@ -2,3 +2,5 @@ User-agent: *
 Allow: /
 
 Sitemap: %SITE_URL%/sitemap.xml
+
+# LLM-readable index: %SITE_URL%/llms.txt

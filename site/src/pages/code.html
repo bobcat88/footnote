@@ -1,0 +1,82 @@
+  <div class="wrap phero">
+    <div>
+      <p class="label">Footnote Code · coming soon</p>
+      <h1>Who calls this function? Not a guess.</h1>
+      <p class="sub">Answered from the compiler's own index.</p>
+      <p class="lead">Code reads the index your language tools already build and links a symbol to its callers and callees. It would rather show no caller than a wrong one.</p>
+      <div class="cta"><a class="btn primary" href="#how">See how it works</a><a class="btn" href="#precision">Read the numbers</a></div>
+      <p class="hint">Rust · TypeScript · JavaScript · Python · less proven: Java</p>
+    </div>
+    <span class="lens glass big" aria-hidden="true"><svg class="mk"><use href="#m-code"/></svg></span>
+  </div>
+
+  <section id="status" class="wrap">
+    <h2 class="t">Why it says soon</h2>
+    <p class="prose">The commands below run in the source build today. We mark Code as coming soon because the links from a symbol to Library docs and Memory fixes are designed but not finished, the Java and parser-graph tiers are less proven, and there is no installer yet.</p>
+  </section>
+
+  <section id="how" class="wrap">
+    <h2 class="t">How it works</h2>
+    <p class="prose">Footnote uses rust-analyzer for Rust, scip-typescript for TypeScript and JavaScript and scip-python for Python. Agents get the same answers through the <code>footnote_code</code> tool; files changed since indexing come back marked <code>stale</code>.</p>
+    <ul class="facts">
+      <li><code>footnote code-index .</code> builds the graph of the project in the current folder, in seconds. Rebuild after big changes.</li>
+      <li><code>footnote code lookup</code> shows the symbol <code>lookup</code>: signature, file and lines, callers with call-site lines, and callees.</li>
+      <li><code>footnote code-map</code> draws the architecture: folders as blocks, links between them, outside packages used.</li>
+      <li><code>footnote code-impact &lt;name&gt;</code> lists, before a change, the callers up to 3 levels, the tests reached, and the files and memories affected.</li>
+    </ul>
+  </section>
+
+  <section id="precision" class="wrap">
+    <h2 class="t">Precision and recall</h2>
+    <p class="prose">Held-out links checked against a compiler's own index, 18 and 19 Nov 2026. Recall always sits beside precision, because the tool refuses when it is unsure.</p>
+    <div class="tablebox" tabindex="0" role="region" aria-label="Code links checked against compiler truth">
+      <table>
+        <thead><tr><th>Language</th><th>Projects</th><th>Truth from</th><th>Links the compiler contradicts</th><th>Precision / recall</th></tr></thead>
+        <tbody>
+          <tr><td>Rust</td><td>15</td><td>rust-analyzer</td><td>28 of 7,707 (0.4 %)</td><td>recall 0.04 to 0.20, calls only</td></tr>
+          <tr><td>TypeScript, Python</td><td>6</td><td>scip-typescript, scip-python</td><td>6 of 13,449 (0.04 %)</td><td>TS 0.934 / 0.581, Python 0.865 / 0.455</td></tr>
+          <tr><td>Java</td><td>3</td><td>javac</td><td>not counted</td><td>1.00 / 0.70 to 0.85</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <ul class="facts">
+      <li><b>Two different numbers.</b> The conflict rate counts links the compiler contradicts. Precision and recall are the default tier, analyzed. Do not mix them.</li>
+      <li><b>Rust recall is low.</b> It links calls only, against every compiler reference, and refuses when unsure.</li>
+      <li><b>Small sets.</b> Java is a parser graph on three projects (gson, jsoup, commons-lang). The Rust no-edge review was done by the implementing agent; an independent review is open.</li>
+    </ul>
+  </section>
+
+  <section id="others" class="wrap">
+    <h2 class="t">Against other tools: one repository</h2>
+    <p class="prose">On one Rust repository, 37 files without tests, one run: Footnote has fewer wrong links and slightly lower recall than CodeGraph. It is the repository our rules were tuned on, so read this as a data point, not a ranking.</p>
+    <div class="tablebox" tabindex="0" role="region" aria-label="Rust, one repository, without tests">
+      <table>
+        <thead><tr><th>Tool</th><th>Precision</th><th>Recall</th></tr></thead>
+        <tbody>
+          <tr><td>Footnote</td><td class="us">0.98</td><td class="us">0.50</td></tr>
+          <tr><td>CodeGraph 1.6.3</td><td>0.88</td><td>0.55</td></tr>
+          <tr><td>codebase-memory-mcp 0.12.1</td><td>0.61</td><td>0.41</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="next" class="wrap">
+    <h2 class="t">Not here yet</h2>
+    <ul class="facts">
+      <li>A symbol linked to its Library docs and the Memory fixes about it. A <code>related</code> field exists; we have not measured the links.</li>
+      <li>A map of a project's inputs and outputs.</li>
+      <li>We have not measured whether reading the graph first saves tokens. We make no claim about cost.</li>
+    </ul>
+    <p class="note">For Rust, rust-analyzer builds the project, which runs its build scripts and procedural macros. Index only code you trust. scip-typescript and scip-python only read the code.</p>
+  </section>
+
+  <section id="start" class="wrap">
+    <p class="label">Try it</p>
+    <h2 class="blocks mt14"><span>Index this folder.</span></h2>
+    <p class="note">You need Footnote installed first: see <a href="/#install">install</a>. The language tools must be installed too.</p>
+    <div class="install two">
+      <div class="step"><h3>Index</h3><p>Builds the graph for the project here.</p><div class="cmd"><code tabindex="0">footnote code-index .</code><button class="copy" type="button" aria-label="Copy the code index command">Copy</button></div></div>
+      <div class="step"><h3>Ask</h3><p>Callers and callees of a symbol.</p><div class="cmd"><code tabindex="0">footnote code lookup</code><button class="copy" type="button" aria-label="Copy the code lookup command">Copy</button></div></div>
+    </div>
+  </section>

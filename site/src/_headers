@@ -8,6 +8,7 @@
   Permissions-Policy: accelerometer=(), autoplay=(), browsing-topics=(), camera=(), display-capture=(), encrypted-media=(), fullscreen=(), geolocation=(), gyroscope=(), hid=(), idle-detection=(), magnetometer=(), microphone=(), midi=(), payment=(), publickey-credentials-get=(), screen-wake-lock=(), serial=(), usb=(), xr-spatial-tracking=()
   Cross-Origin-Opener-Policy: same-origin
   Cross-Origin-Resource-Policy: same-origin
+  Link: </llms.txt>; rel="llms-txt"
 
 /assets/*
   Cache-Control: public, max-age=31536000, immutable
@@ -16,4 +17,25 @@
   Cache-Control: no-cache
 
 /*.html
+  Cache-Control: no-cache
+
+/library
+  Cache-Control: no-cache
+
+/memory
+  Cache-Control: no-cache
+
+/code
+  Cache-Control: no-cache
+
+/*.md
+  Content-Type: text/markdown; charset=utf-8
+  Cache-Control: no-cache
+
+/llms.txt
+  Content-Type: text/plain; charset=utf-8
+  Cache-Control: no-cache
+
+/llms-full.txt
+  Content-Type: text/plain; charset=utf-8
   Cache-Control: no-cache
