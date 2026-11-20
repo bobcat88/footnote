@@ -224,6 +224,8 @@ with a temporary compatibility fix for its invalid path-separator regex ([upstre
 The installed package is never edited. A fixed upstream regex is left unchanged; the native constructor is restored after
 loading. Tested with scip-python 0.6.8 on Windows, including cross-file references and project paths with spaces.
 
+`footnote code-index --deep` insists on the compiler graph: it checks that the project's indexer (`scip-typescript`, Apache-2.0, or `scip-python`, MIT, both from npm; `rust-analyzer` through rustup) is installed and, if not, prints the install command and asks before running it. Footnote never installs anything unasked: without a terminal, or with `--no-install`, it only reports; `--yes` runs the printed command. A failing, malformed or oversized index is reported and the parser graph is built instead. Every indexer run has a 30-minute timeout and capped output. On the six benchmark projects the compiler graph takes 2 to 19 times as long as the parser graph ([report](bench/experiments/CODE-DEEP-2026-11-20.md)); the compiler graph was already used whenever its indexer is on `PATH`.
+
 ```sh
 footnote code-index .          # build the graph of the project here (seconds; rebuild after big changes)
 footnote code lookup           # the symbol `lookup`: signature, file and lines, callers with call-site lines, callees

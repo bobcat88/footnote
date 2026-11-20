@@ -128,6 +128,7 @@ Do not quote: L9, L10, L11, M3, M5, C5, T3, T6, T7 (ledger grade N) and anything
 | COD-06 | 2026-11-20 | Overloaded definitions as one symbol (#299) | Goal (#299): raise recall without lowering the default tier's precision. | CURRENT | [CODE-OVERLOADS-2026-11-20.md:3](experiments/CODE-OVERLOADS-2026-11-20.md#L3) |
 | COD-07 | 2026-11-14 | Three tools, clean truth: Footnote against CodeGraph and codebase-memory-mcp on one Rust repository (section, 17 Nov) | **Three tools, clean truth (17 November 2026).** Once a repository is graphed with rust-analyzer installed, its graph also holds | CURRENT | [CODE-GRAPH-DESIGN.md:305](../docs/CODE-GRAPH-DESIGN.md#L305) |
 | COD-08 | 2026-11-15 | Code graph study: plan and decision rule | Footnote Code is built only to meet all of these on the three repositories: | CURRENT | [CODE-GRAPH-STUDY.md:63](../docs/research/CODE-GRAPH-STUDY.md#L63) |
+| COD-09 | 2026-11-20 | `footnote code-index --deep`: default tier vs deep tier on six projects (#299) | **Finding that changes the premise:** the compiler graph was already what `code-index` builds whenever the indexer is on PATH | CURRENT | [CODE-DEEP-2026-11-20.md:7](experiments/CODE-DEEP-2026-11-20.md#L7) |
 
 ### Lean and tokens
 

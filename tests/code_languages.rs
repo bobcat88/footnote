@@ -157,6 +157,17 @@ fn a_python_project_gets_normalized_paths_and_cross_file_references() {
         eprintln!("scip-python not installed: skipped");
         return;
     }
+    // scip-python needs a real interpreter: `python3` as the Windows Store stub does not count (#332); the indexer falls back to `python`.
+    let runs = |p: &str| {
+        std::process::Command::new(p)
+            .args(["-c", "pass"])
+            .output()
+            .is_ok_and(|o| o.status.success())
+    };
+    if !["python3", "python"].iter().any(|p| runs(p)) {
+        eprintln!("no real python interpreter (python3 is the Microsoft Store stub?): skipped");
+        return;
+    }
     let t = tempfile::tempdir_in(env!("CARGO_TARGET_TMPDIR")).unwrap();
     let root = t.path().join("python project with spaces");
     fs::create_dir_all(root.join("pkg")).unwrap();

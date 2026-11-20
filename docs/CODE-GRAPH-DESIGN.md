@@ -456,3 +456,13 @@ written: `x = Foo()`, `new Foo()`, an annotated parameter or local, `self`/`this
 definitions of `make` (overloads) and a function imported from outside the project stay unresolved. Same six fixtures: precision
 unchanged (0.864 Python, 0.938 TypeScript), Python recall 0.458 to 0.460, TypeScript unchanged (its new links are in files the
 compiler graph does not cover). Most of the unknown-receiver bucket is values whose type is not written anywhere local.
+
+**`code-index --deep` (#299, 20 November 2026).** Report: `bench/experiments/CODE-DEEP-2026-11-20.md`. The compiler graph was already
+built whenever its indexer is on PATH; `--deep` makes it a stated request. It looks for the indexer of the project's top folder
+(`scip-typescript`, `scip-python`, `rust-analyzer`), and when it is missing prints the one command that installs it with its
+licence and upstream, then asks on the terminal. Footnote never installs on its own: no terminal or `--no-install` only reports,
+`--yes` runs the printed command (no shell, constant arguments). The answer gains `deep: {indexers, compiler_graph}`; a failing,
+malformed or oversized (over 512 MiB) index is reported in `upgrade` and the parser graph is built instead. Every indexer run now has
+a 30-minute timeout (`FOOTNOTE_CODE_INDEXER_TIMEOUT_SECS`) and capped output, and scip-python no longer fails on the Windows Store
+`python3` stub (#332: its folder is hidden from scip-python's PATH, so it falls back to `python`). Not covered: Rust crates in
+subfolders are not checked before the run, scip-java is read through `FOOTNOTE_CODE_SCIP`.

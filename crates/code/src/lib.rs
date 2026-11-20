@@ -1,6 +1,7 @@
 //! Footnote Code, stage 1: the precise pass of docs/CODE-GRAPH-DESIGN.md (section 5). A compiler-grade indexer writes SCIP
 //! (`rust-analyzer scip` for Rust); Footnote keeps the project's definitions, references and who calls whom in one SQLite file.
 //! Every edge says how it was made (`origin`: `compiler` here); the tree-sitter pass for other languages comes later.
+pub mod deep;
 pub mod scip;
 mod ts;
 pub use ts::{import_counts, imports};
@@ -401,13 +402,35 @@ fn precise(root: &Path, scip_file: &Path) -> Result<(String, Vec<scip::Document>
     Ok((names.join(" + "), docs, report))
 }
 
+/// scip-python asks for `python3` first, and on Windows that is often the Microsoft Store stub, which exits 9009 (#332). When it
+/// does not run, the PATH for scip-python without the stub's folder, so it falls back to `python`; otherwise nothing changes.
+fn without_python_stub() -> Option<std::ffi::OsString> {
+    if !cfg!(windows) {
+        return None;
+    }
+    let path = std::env::var_os("PATH")?;
+    let dirs: Vec<_> = std::env::split_paths(&path).collect();
+    let stub = dirs.iter().find(|d| d.join("python3.exe").is_file())?;
+    let runs = deep::run_limited(
+        std::process::Command::new(stub.join("python3.exe")).args(["-c", "pass"]),
+        std::time::Duration::from_secs(30),
+    )
+    .is_ok_and(|o| o.status.success());
+    (!runs).then(|| std::env::join_paths(dirs.iter().filter(|d| *d != stub)).ok())?
+}
+
 /// One compiler indexer run in `root`, its SCIP output read back.
 fn precise_at(root: &Path, scip_file: &Path) -> Result<(&'static str, Vec<scip::Document>)> {
     let ix = indexer(root, scip_file)?;
-    let out = std::process::Command::new(ix.program)
-        .args(&ix.args)
-        .current_dir(root)
-        .output();
+    let mut cmd = std::process::Command::new(ix.program);
+    cmd.args(&ix.args).current_dir(root);
+    if let Some(path) = (ix.name == "scip-python")
+        .then(without_python_stub)
+        .flatten()
+    {
+        cmd.env("PATH", path);
+    }
+    let out = deep::run_limited(&mut cmd, deep::timeout());
     let out = match out {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => bail!(ix.install),
         r => r.with_context(|| format!("run {}", ix.name))?,
@@ -424,6 +447,16 @@ fn precise_at(root: &Path, scip_file: &Path) -> Result<(&'static str, Vec<scip::
             err.into_owned()
         };
         bail!("{} failed: {}", ix.name, msg.trim());
+    }
+    // The index is data from another program: refuse a huge one, and a bad one is an error the caller reports (never a panic).
+    let size = std::fs::metadata(scip_file)?.len();
+    if size > deep::MAX_INDEX_BYTES {
+        let _ = std::fs::remove_file(scip_file);
+        bail!(
+            "{} wrote an index of {size} bytes, over the {} byte limit",
+            ix.name,
+            deep::MAX_INDEX_BYTES
+        );
     }
     let bytes = std::fs::read(scip_file)?;
     let _ = std::fs::remove_file(scip_file);

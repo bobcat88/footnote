@@ -390,6 +390,17 @@ enum Action {
         /// Project folder.
         #[arg(default_value = ".")]
         root: PathBuf,
+        /// Compiler-grade graph: check that the project's indexer (scip-typescript, scip-python, rust-analyzer) is installed and
+        /// say how to install it if not. Footnote installs nothing unless you confirm (or pass --yes); a failing or oversized
+        /// index is reported, and the parser graph is built instead.
+        #[arg(long)]
+        deep: bool,
+        /// With --deep: run the install command without asking (for scripts).
+        #[arg(long, requires = "deep", conflicts_with = "no_install")]
+        yes: bool,
+        /// With --deep: only report what is missing, never ask or install (the default when there is no terminal).
+        #[arg(long, requires = "deep")]
+        no_install: bool,
     },
     /// Footnote Code: the architecture map, blocks (folders) with symbol counts, links between them counted in references,
     /// and the outside packages each block uses.
@@ -727,8 +738,29 @@ fn execute(cli: Cli) -> Result<Value> {
         }
         Action::Audit { action } => return audit_command(action),
         #[cfg(feature = "code")]
-        Action::CodeIndex { root } => {
-            return footnote_code::index(&canonical(root)?, &code_db(root)?);
+        Action::CodeIndex {
+            root,
+            deep,
+            yes,
+            no_install,
+        } => {
+            use std::io::IsTerminal;
+            let (abs, mut report) = (canonical(root)?, vec![]);
+            if *deep {
+                let mode = if *yes {
+                    footnote_code::deep::Mode::Yes
+                } else if *no_install || !std::io::stdin().is_terminal() {
+                    footnote_code::deep::Mode::Report
+                } else {
+                    footnote_code::deep::Mode::Ask
+                };
+                report = footnote_code::deep::prepare(&abs, mode, &mut footnote_code::deep::System);
+            }
+            let mut out = footnote_code::index(&abs, &code_db(root)?)?;
+            if *deep {
+                out["deep"] = serde_json::json!({"indexers": report, "compiler_graph": out["origin"] == "compiler"});
+            }
+            return Ok(out);
         }
         #[cfg(feature = "code")]
         Action::CodeMap { root, depth } => {
