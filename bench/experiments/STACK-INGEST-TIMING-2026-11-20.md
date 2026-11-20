@@ -1,7 +1,7 @@
 # Stack ingest timing: crawl, keyword index and embeddings for 8 libraries (issue #308)
 
 Not a quality benchmark. Question: how long does it take to ingest the docs of a realistic web-app stack, and how much of that is embedding?
-Harness: [stack_ingest_timing.py](stack_ingest_timing.py); raw timestamps in [STACK-INGEST-TIMING-2026-11-20.log.txt](STACK-INGEST-TIMING-2026-11-20.log.txt).
+Harness: [stack_ingest_timing.py](stack_ingest_timing.py); raw timestamps in [STACK-INGEST-TIMING-2026-11-20.log.txt](../archive/STACK-INGEST-TIMING-2026-11-20.log.txt).
 
 ## Setup
 

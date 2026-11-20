@@ -3,6 +3,10 @@
 Status: **protocol v1, harness built and validated, optimization sweeps in progress**. The rules below were written before the first result so they cannot bend to fit the numbers.
 Written 2026-11-11. Nothing here is a claim of superiority; it is how we find out.
 
+> **Start at [INDEX.md](INDEX.md).** It lists every benchmark and report in the repository with its headline, status and a link to the exact line, and holds the figures the website may quote.
+>
+> **Convention for a new report:** add one row to `INDEX.md` in the same PR (stable id, date, question, headline copied from the source, status, line link). Name files `<TOPIC>-YYYY-MM-DD.md`. When a newer result replaces an older one, change the older row to `SUPERSEDED by <id>`; never delete rows or results. Move raw logs and scratch output to `archive/` with `git mv`, not into a new report. `python scripts/check_bench_index.py` (run by `scripts/check.sh`) fails if a `*RESULTS*`, `*REPORT*` or `*STATUS*` file under `experiments/` is not indexed or a link or line anchor no longer matches.
+
 ## What is in this folder
 
 | Path | Role |
@@ -13,6 +17,7 @@ Written 2026-11-11. Nothing here is a claim of superiority; it is how we find ou
 | `engines.py`, `run.py`, `run_lme.py`, `run_suite.py` | Product engines (CLI as shipped) and the receipt-writing runners |
 | `lab/` | Lab engine (resident ONNX encoders, own BM25, chunkers, fusion, cross-encoder rerank), model registry with hash lock, `check_model.py` validation gate |
 | `sweep.py`, `sweeps/*.jsonl` | Tuning runs on dev splits (append-only rows) |
+| `INDEX.md`, `archive/` | Index of all reports; moved raw logs and stale progress notes |
 | `receipts/` | Immutable, reportable results (test split) ; `receipts/dev/` tuning receipts |
 | `report.py`, `RESULTS.md`, `test_validation.py` | Report generator and the harness validation gate |
 

@@ -20,4 +20,5 @@ rtk cargo build --locked --release
 "$PY" tests/hybrid_metrics_test.py
 rtk uv pip check --python "$PY"
 "$PY" -c 'import ast; from pathlib import Path; files=list(Path("tools").glob("*.py"))+list(Path("tests").glob("*.py"));[ast.parse(p.read_text(encoding="utf-8"),filename=str(p)) for p in files];print("Python AST checked:",len(files))'
+"$PY" scripts/check_bench_index.py
 rtk git diff --check

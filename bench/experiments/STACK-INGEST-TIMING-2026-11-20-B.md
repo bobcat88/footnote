@@ -1,7 +1,7 @@
 # Stack ingest timing B: the keyword-first, batched, import-ordered flow on the same 8 libraries (issue #307)
 
 Not a quality benchmark. Question for the last box of #307: does a project get keyword-searchable docs within seconds while the embeddings finish in the background, and what does the flow do to the total time recorded in [STACK-INGEST-TIMING-2026-11-20.md](STACK-INGEST-TIMING-2026-11-20.md) (548 s, embedding 91.7%)?
-Harness: `stack_ingest_timing.py <run-dir> <footnote.exe> --flow <project-folder>` ([script](stack_ingest_timing.py)); raw timestamps in [STACK-INGEST-TIMING-2026-11-20-B.log.txt](STACK-INGEST-TIMING-2026-11-20-B.log.txt).
+Harness: `stack_ingest_timing.py <run-dir> <footnote.exe> --flow <project-folder>` ([script](stack_ingest_timing.py)); raw timestamps in [STACK-INGEST-TIMING-2026-11-20-B.log.txt](../archive/STACK-INGEST-TIMING-2026-11-20-B.log.txt).
 
 ## Setup
 

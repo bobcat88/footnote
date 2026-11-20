@@ -1,6 +1,6 @@
-# Bench progress (resume here)
+# Bench progress (archived 2026-11-20, stale; current state is in ../INDEX.md)
 
-Updated 2026-11-13. The protocol and rules are in `README.md`; dated sections below preserve the earlier work.
+Updated 2026-11-13. The protocol and rules are in `../README.md`; dated sections below preserve the earlier work.
 
 ## Current queue, 2026-11-13
 
@@ -15,11 +15,11 @@ These processes are already launched. Do not start another heavy benchmark or du
 
 ## Current evidence and implementation
 
-- [Competitor report](experiments/HEADTOHEAD.md), with receipt links, missing cases, scopes and storage parts. Regenerate with `rtk proxy python -B bench/experiments/headtohead_table.py --since 20261113T070000Z`.
-- [Interim paired intervals](experiments/HEADTOHEAD-INTERVALS.md). Ten receipt rankings were re-scored and checked against their recorded hashes. NFCorpus Footnote versus mem0 is not resolved by its paired interval.
+- [Competitor report](../experiments/HEADTOHEAD.md), with receipt links, missing cases, scopes and storage parts. Regenerate with `rtk proxy python -B bench/experiments/headtohead_table.py --since 20261113T070000Z`.
+- [Interim paired intervals](../experiments/HEADTOHEAD-INTERVALS.md). Ten receipt rankings were re-scored and checked against their recorded hashes. NFCorpus Footnote versus mem0 is not resolved by its paired interval.
 - Quality blocker discovered at 10:05 local time: `20261113T083346Z-nfcorpus-cognee-lexical.json` reports different rankings across its two passes, checked on 200 queries. The receipt is retained as failure evidence. The global receipt validation gate fails on this case; its point score must not be treated as a reproducible result. Investigate adapter behavior and tie ordering before attributing the failure to the product.
-- [Matched backend protocol](experiments/LANCEDB-MATCHED.md), frozen before judged-corpus results. Seven backend/export tests pass. These use one model to isolate backend effects; they are not a production-pair comparison.
-- [Environment snapshots](environments/README.md). Competitor model-weight file hashes are still missing from their receipts; version snapshots do not close that reproducibility gap.
+- [Matched backend protocol](../experiments/LANCEDB-MATCHED.md), frozen before judged-corpus results. Seven backend/export tests pass. These use one model to isolate backend effects; they are not a production-pair comparison.
+- [Environment snapshots](../environments/README.md). Competitor model-weight file hashes are still missing from their receipts; version snapshots do not close that reproducibility gap.
 - All four candidate models pass the published-score reproduction gate in `lab/model_checks.jsonl`. The heldout confirmation runner applies the original +0.01 dev bar to both corpora of a language group and never changes product defaults.
 
 At queue completion, the reports include `HEADTOHEAD.md`, `LANCEDB-RESULTS.md`, `MODEL-CANDIDATES.md`, `MODEL-LATENCY.md` and `MODEL-CONFIRMATION.md` under `experiments/`. Read source receipts and cost measurements before proposing a winner. Full production integration, memory budgets, crash safety and consequential licensing decisions remain separate gates. No push or production-default change is part of this queue.
