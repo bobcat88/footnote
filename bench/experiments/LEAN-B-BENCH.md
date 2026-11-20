@@ -1,7 +1,7 @@
 # Lean B bench plan (#239)
 
-Question: does `rules/lean/LEAN-B.md` lower **cost per accepted task** against Ponytail and Caveman? Not run yet. No
-result below is a measurement.
+Question: does `rules/lean/LEAN-B.md` lower **cost per accepted task** against Ponytail and Caveman? First pilot run: see LEAN-B-RESULTS-2026-11-20.md. No
+result in this plan is a measurement.
 
 ## Arms
 `bare`, `ponytail` (installed plugin, ultra and full), `caveman`, `lean-b-code` (sections 1 to 3 only), `lean-b-full`
