@@ -14,7 +14,7 @@ to be the page that answers the question. The questions were written by Claude f
 had run on either site, and no result of either was seen. Never tuned on.
 
 - dataset.yaml sha256 `b5a53b5c9df3c1d251fd839e461727d07775eff9b6875e350e307ca47f932483`
-- recipe.json sha256 `25822c90354c47990b2dee89d0d017ccb2f24c52e22160b6426e09fc8c882551` (cap 200 pages per site, `llms-*.txt` excluded, as in the earlier recipes)
+- recipe.json sha256 `38f9d095d483b1a30eca472e459b5fcad63b8b02c18163049c8283d641761440` (cap 200 pages per site, `llms-*.txt` excluded, as in the earlier recipes)
 - Not used: Flask, Python, Django, Jinja (earlier sets); Sphinx's own site (blocks Grounded Docs from this IP).
 
 ## Systems and harness (unchanged from DOCS-SPHINX-2026-11-19.md)
@@ -38,3 +38,9 @@ had run on either site, and no result of either was seen. Never tuned on.
   run, what failed and what caused it is recorded and the sealed set is **not** rerun silently: stop and report.
 - No coloured winners unless the earlier rematches' rule allows it (colour once all engines of the #84 comparison are benched).
 - No new third-party library or tool.
+
+## Recorded before the run: recipe.json correction
+
+The first commit (`ed27580`) held a recipe.json with an invalid JSON escape (`\.` instead of `\.`), so the harness crashed at import
+before it contacted any site, crawled, indexed or searched anything. Only the recipe's exclude pattern was corrected; the dataset
+(questions and judged URLs) is unchanged and its sha256 above is the committed one. The recipe sha256 above is the corrected file's.
