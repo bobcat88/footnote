@@ -1,0 +1,5 @@
+# Placeholder: replace Contact and Expires before the site is public. See site/README.md.
+Contact: mailto:security@example.invalid
+Expires: 2027-11-20T00:00:00.000Z
+Preferred-Languages: en
+Canonical: %SITE_URL%/.well-known/security.txt
