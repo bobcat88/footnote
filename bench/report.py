@@ -49,7 +49,7 @@ def main() -> None:
     full = [json.loads(f.read_text(encoding="utf-8")) for f in lme]
     full = [r for r in full if not r.get("partial") and r["protocol"] == "v1"]
     if full:
-        lines += ["## longmemeval_s (retrieval only, session level)", "", "| System | recall_any@5 | recall_any@10 | recall_all@5 | nDCG@10 |", "|---|---|---|---|---|"]
+        lines += ["## longmemeval_s (retrieval only, session level)", "", '> Earlier run, 12 November 2026: 470 questions (abstention-tagged ones excluded), a fresh process per query and AND lexical matching, with a single embedding model per row (MiniLM-L12 or e5-small). The current figure for the shipped binary is any@5 0.978, all@5 0.908 on all 500 questions, run on 14 November: see [`experiments/LONGMEM-ICM.md`](experiments/LONGMEM-ICM.md). The two runs differ in question set and engine, so they are not directly comparable.', "", "| System | recall_any@5 | recall_any@10 | recall_all@5 | nDCG@10 |", "|---|---|---|---|---|"]
         for r in full:
             m = r["metrics"]
             lines.append(f"| `{r['engine']['id']}` | {m['recall_any@5']:.3f} | {m['recall_any@10']:.3f} | {m['recall_all@5']:.3f} | {m['ndcg@10']:.3f} |")
