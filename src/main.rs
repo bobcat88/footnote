@@ -25,6 +25,7 @@ mod projects;
 mod refresh;
 #[cfg(feature = "memory")]
 mod review;
+mod run;
 #[cfg(feature = "code")]
 mod stack;
 mod status;

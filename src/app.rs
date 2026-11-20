@@ -481,6 +481,44 @@ enum Action {
         #[command(subcommand)]
         action: AuditAction,
     },
+    /// Run a shell command with preservation-first output filtering and reversible local handle storage (#243).
+    Run {
+        /// Pass raw output through unchanged (bypass filtering and handle storage).
+        #[arg(long)]
+        raw: bool,
+        /// Do not persist full raw output to the local handle store even when shortened.
+        #[arg(long)]
+        no_store: bool,
+        /// Filter text read from stdin instead of spawning a command (for testing and benchmarks).
+        #[arg(long, hide = true)]
+        stdin: bool,
+        /// Check whether a raw shell command is safely rewritable to `footnote run -- <cmd>` (exits 0 with rewritten command, else 1).
+        #[arg(long)]
+        rewrite: Option<String>,
+        /// Override automatic command-family detection (`cargo-test`, `cargo-build`, `tests`, `git`, `search`, `linter`, `generic`).
+        #[arg(long, value_parser = ["cargo-test", "cargo-build", "tests", "git", "search", "linter", "generic"])]
+        family: Option<String>,
+        /// Command and arguments to execute (after `--`).
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        command: Vec<String>,
+    },
+    /// Inspect or search the full raw output stored by `footnote run` under a local handle id (#243).
+    Output {
+        /// Output handle id (e.g. `h-a1b2c3d4e5f6`).
+        id: String,
+        /// Keep only lines matching this regular expression (or substring).
+        #[arg(long)]
+        grep: Option<String>,
+        /// Return at most the first N matching lines.
+        #[arg(long, conflicts_with = "tail")]
+        head: Option<usize>,
+        /// Return at most the last N matching lines.
+        #[arg(long, conflicts_with = "head")]
+        tail: Option<usize>,
+        /// 1-based inclusive line range `start:end` (or `start-end`).
+        #[arg(long)]
+        lines: Option<String>,
+    },
 }
 #[cfg(feature = "memory")]
 #[derive(Clone, clap::ValueEnum)]
@@ -737,6 +775,22 @@ fn execute(cli: Cli) -> Result<Value> {
             };
         }
         Action::Audit { action } => return audit_command(action),
+        Action::Run { .. } => unreachable!("run is dispatched before JSON output"),
+        Action::Output {
+            id,
+            grep,
+            head,
+            tail,
+            lines,
+        } => {
+            return crate::run::output_cli(&crate::run::OutputQuery {
+                id: id.clone(),
+                grep: grep.clone(),
+                head: *head,
+                tail: *tail,
+                lines: lines.clone(),
+            });
+        }
         #[cfg(feature = "code")]
         Action::CodeIndex {
             root,
@@ -1161,7 +1215,9 @@ fn execute(cli: Cli) -> Result<Value> {
         Action::Install { .. }
         | Action::Embed { .. }
         | Action::Update { .. }
-        | Action::Rollback => {
+        | Action::Rollback
+        | Action::Run { .. }
+        | Action::Output { .. } => {
             unreachable!("dispatched before the database is opened")
         }
         #[cfg(feature = "metrics")]
@@ -1309,6 +1365,8 @@ fn action_name(a: &Action) -> &'static str {
         #[cfg(feature = "memory")]
         Action::Hook { .. } => "hook",
         Action::Audit { .. } => "audit",
+        Action::Run { .. } => "run",
+        Action::Output { .. } => "output",
         #[cfg(feature = "code")]
         Action::CodeIndex { .. } => "code-index",
         #[cfg(feature = "code")]
@@ -1415,6 +1473,31 @@ pub fn run() {
     #[cfg(feature = "memory")]
     if let Action::Hook { step } = &cli.command {
         crate::hook::run(step.is_some());
+        return;
+    }
+    // `footnote run` emits the filtered/raw command output directly and preserves the exact child exit code.
+    if let Action::Run {
+        raw,
+        no_store,
+        stdin,
+        rewrite,
+        family,
+        command,
+    } = &cli.command
+    {
+        let code = crate::run::run_cli(&crate::run::RunOptions {
+            raw: *raw,
+            no_store: *no_store,
+            stdin_mode: *stdin,
+            rewrite: rewrite.clone(),
+            family_override: family
+                .as_deref()
+                .and_then(crate::run::CommandFamily::parse_override),
+            command: command.clone(),
+        });
+        if code != 0 {
+            std::process::exit(code);
+        }
         return;
     }
     // In MCP mode stdout belongs to the JSON-RPC transport: a serve-level

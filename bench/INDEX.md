@@ -135,6 +135,7 @@ Do not quote: L9, L10, L11, M3, M5, C5, T3, T6, T7 (ledger grade N) and anything
 | LEAN-01 | 2026-11-19 | Does LEAN-B lower cost per accepted task against Ponytail and Caveman? (plan) | Question: does `rules/lean/LEAN-B.md` lower **cost per accepted task** against Ponytail and Caveman? First pilot run: see LEAN-B-RESULTS-2026-11-20.md. No | CURRENT | [LEAN-B-BENCH.md:3](experiments/LEAN-B-BENCH.md#L3) |
 | LEAN-02 | 2026-11-20 | Lean B pilot on ladder L1 and L2 with Opus 5.5 | Output tokens drop 20 to 34% in every treatment arm, and runs are 15 to 22% faster. Output is a small part of the total, so total tokens move only 0 to 7%. | CURRENT | [LEAN-B-RESULTS-2026-11-20.md:28](experiments/LEAN-B-RESULTS-2026-11-20.md#L28) |
 | LEAN-03 | 2026-11-18 | Token economy layer: research and plan | 18 November 2026. Plan for a layer that saves input and output tokens, especially on code work, in the spirit of RTK | CURRENT | [TOKEN-ECONOMY-PLAN.md:3](../docs/research/TOKEN-ECONOMY-PLAN.md#L3) |
+| LEAN-04 | 2026-11-20 | Lean D (`footnote run`): preservation-first shell output vs RTK 1.2.0 (#243) | All 6 shipped families pass the pre-registered gate (`>= 99.0%` marker recall, `>= 20.0%` byte saving, 0 bloat, 0 credential leaks): overall **100.0% marker recall (99/99)** across 13 cases with savings from **22.5% (`search`) to 88.8% (`cargo-test`)**. | CURRENT | [LEAN-D-RESULTS-2026-11-20.md:3](experiments/LEAN-D-RESULTS-2026-11-20.md#L3) |
 
 ### Infrastructure
 
