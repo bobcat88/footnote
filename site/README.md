@@ -28,7 +28,7 @@ Then verify the headers on the live URL: `curl -sI https://footnote.johanproust.
 
 ## Before the site is public
 
-1. **security.txt**: `src/.well-known/security.txt` has a placeholder contact (`security@example.invalid`). Put the real address (or a report URL) in it and move `Expires` forward. No personal address is committed.
+1. **security.txt**: contact is the Footnote support address, `Expires` is 2027-11-20; move `Expires` forward before then.
 2. **Canonical URL**: defaults to `https://footnote.johanproust.workers.dev`. When a custom domain exists, run `SITE_URL=https://example.com node site/build.mjs` and redeploy. The URL feeds canonical, Open Graph, JSON-LD, sitemap, robots and security.txt.
 3. **HSTS preload**: the header is `max-age=63072000; includeSubDomains` (2 years). Do not add `preload` on `workers.dev`. With a custom domain, add `; preload` in `src/_headers` and submit it at hstspreload.org only once every subdomain is HTTPS.
 4. **Benchmark link**: the results section says the procedure and disclaimers will be published with the repository; replace it with a real link once the repository is public.
@@ -40,3 +40,7 @@ Then verify the headers on the live URL: `curl -sI https://footnote.johanproust.
 - Icons and social image: `site/scripts/make-assets.mjs` (outputs are committed).
 - Every reference uses a root-absolute path so `404.html` works at any depth.
 - The page moved from `design/site/index.html` to `site/src/index.html`; the prototypes and lab stay in `design/site/`.
+
+## Noindexed preview
+
+`PREVIEW=1 SITE_URL=https://footnote-preview.johanproust.workers.dev node site/build.mjs && npx wrangler deploy --name footnote-preview` builds a copy with `X-Robots-Tag: noindex, nofollow` and `Disallow: /` in robots.txt. The files in `src/` stay production-ready.

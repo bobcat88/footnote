@@ -42,4 +42,9 @@ for (const f of readdirSync(out).filter(f => f.endsWith(".html"))) {
 }
 assert(!/https?:\/\//.test(css), "css has an absolute URL");
 for (const n of hashed.values()) assert(statSync(join(out, "assets", n)).size > 0);
+// Preview deploys (PREVIEW=1) are kept out of search engines; production files in src/ are untouched.
+if (process.env.PREVIEW) {
+  writeFileSync(join(out, "robots.txt"), "User-agent: *\nDisallow: /\n");
+  writeFileSync(join(out, "_headers"), readFileSync(join(out, "_headers"), "utf8").replace(/^\/\*\r?$/m, "/*\n  X-Robots-Tag: noindex, nofollow"));
+}
 console.log("built", out, "->", SITE_URL, "\n" + [...hashed.values()].join("\n"));

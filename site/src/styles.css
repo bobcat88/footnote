@@ -1,5 +1,5 @@
-@font-face{font-family:"Plus Jakarta Sans";src:url(fonts/plus-jakarta-sans.woff2) format("woff2");font-weight:300 700;font-display:swap}
-@font-face{font-family:"Hanken Grotesk";src:url(fonts/hanken-grotesk.woff2) format("woff2");font-weight:400 600;font-display:swap}
+@font-face{font-family:"Plus Jakarta Sans";src:url(fonts/plus-jakarta-sans.woff2) format("woff2");font-weight:300 700;font-display:optional}
+@font-face{font-family:"Hanken Grotesk";src:url(fonts/hanken-grotesk.woff2) format("woff2");font-weight:400 600;font-display:optional}
 @font-face{font-family:"JetBrains Mono";src:url(fonts/jetbrains-mono.woff2) format("woff2");font-weight:400 600;font-display:swap}
 /* Footnote landing page. Layout: data streams from the left into a glass lens where it comes into focus; pale mint blocks interlock over the dark ground
    for the statements; tall product cards; an orbit beside a glass panel that runs off the edge. Tokens: DESIGN.md (WIP), dark only. */
