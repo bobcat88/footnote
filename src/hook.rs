@@ -329,7 +329,7 @@ fn windows_arg(arg: &std::ffi::OsStr) -> Vec<u16> {
 }
 
 #[cfg(windows)]
-fn spawn_background(command: &mut Command) -> Result<()> {
+pub(crate) fn spawn_background(command: &mut Command) -> Result<()> {
     use std::os::windows::ffi::OsStrExt;
     use windows_sys::Win32::{
         Foundation::CloseHandle,
@@ -380,7 +380,7 @@ fn spawn_background(command: &mut Command) -> Result<()> {
 }
 
 #[cfg(not(windows))]
-fn spawn_background(command: &mut Command) -> Result<()> {
+pub(crate) fn spawn_background(command: &mut Command) -> Result<()> {
     command
         .stdin(Stdio::null())
         .stdout(Stdio::null())

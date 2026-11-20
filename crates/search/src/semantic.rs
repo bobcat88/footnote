@@ -290,6 +290,15 @@ fn record_text(payload: &str) -> Result<String> {
 }
 
 pub fn rebuild(c: &mut Connection, models: &[PathBuf]) -> Result<Value> {
+    rebuild_with(c, models, &mut |_, _| {})
+}
+
+/// `rebuild` that reports `(entries handled, entries in total)` for the model being embedded.
+pub fn rebuild_with(
+    c: &mut Connection,
+    models: &[PathBuf],
+    progress: &mut dyn FnMut(usize, usize),
+) -> Result<Value> {
     if models.is_empty() || models.len() > MAX_MODELS {
         bail!("give 1 to {MAX_MODELS} --model directories");
     }
@@ -341,6 +350,12 @@ pub fn rebuild(c: &mut Connection, models: &[PathBuf]) -> Result<Value> {
                 by_text.entry(signature).or_insert(vector);
             }
         }
+        let total = tx.query_row::<i64, _, _>(
+            "SELECT (SELECT count(*) FROM chunks c JOIN sources s ON s.id=c.source_id WHERE s.status='indexed')+(SELECT count(*) FROM records)",
+            [],
+            |r| r.get(0),
+        )? as usize;
+        let mut seen = 0usize;
         let mut live: HashSet<(String, i64)> = HashSet::new();
         let (mut embedded, mut reused, mut truncated) = (0usize, 0usize, 0usize);
         let mut batch: Vec<(String, i64, String, String)> = Vec::new(); // kind, id, signature, text
@@ -368,6 +383,8 @@ pub fn rebuild(c: &mut Connection, models: &[PathBuf]) -> Result<Value> {
             while let Some(r) = rows.next()? {
                 let (id, sha, revision, heading, text): (i64, String, i64, String, String) =
                     (r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?);
+                seen += 1;
+                progress(seen - batch.len(), total);
                 let text = chunk_text(&heading, &text);
                 let signature = chunk_signature(&text);
                 live.insert(("chunk".into(), id));
@@ -402,6 +419,8 @@ pub fn rebuild(c: &mut Connection, models: &[PathBuf]) -> Result<Value> {
                 let (id, sha, revision, payload): (i64, String, i64, String) =
                     (r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?);
                 let signature = format!("{sha}:{revision}");
+                seen += 1;
+                progress(seen - batch.len(), total);
                 live.insert(("record".into(), id));
                 if have.get(&("record".to_string(), id)) == Some(&signature) {
                     reused += 1;

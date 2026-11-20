@@ -476,8 +476,32 @@ enum DocsAction {
         version: Option<String>,
         #[arg(long, default_value_t = 1000)]
         max_pages: usize,
+        /// Embedding model folder for the background step; repeat for an ensemble (default: the models Footnote Memory uses).
+        #[arg(long)]
+        model: Vec<PathBuf>,
+        /// Keyword index only: skip the background embedding.
+        #[arg(long)]
+        no_embed: bool,
     },
-    /// Cached documentation: site, version, pages, size and date.
+    /// Several libraries: each is searchable by keywords once indexed; embeddings follow in the background, largest last.
+    Ingest {
+        #[arg(required = true)]
+        urls: Vec<String>,
+        #[arg(long, default_value_t = 1000)]
+        max_pages: usize,
+        #[arg(long)]
+        model: Vec<PathBuf>,
+        #[arg(long)]
+        no_embed: bool,
+    },
+    /// The background embedding worker that `add` and `ingest` start (one job per database).
+    #[command(hide = true)]
+    Embed {
+        #[arg(long, required = true)]
+        model: Vec<PathBuf>,
+        dbs: Vec<PathBuf>,
+    },
+    /// Cached documentation: site, version, keyword-only / embedding n/m / ready, pages, size and date.
     List,
     /// Delete every version older than the newest of its site.
     Prune,
@@ -719,6 +743,8 @@ fn execute(cli: Cli) -> Result<Value> {
                     site,
                     version,
                     max_pages,
+                    model,
+                    no_embed,
                 } => crate::docs::add(
                     &state,
                     &crate::docs::Add {
@@ -727,8 +753,29 @@ fn execute(cli: Cli) -> Result<Value> {
                         site: site.as_deref(),
                         version: version.as_deref(),
                         max_pages: *max_pages,
+                        models: model,
+                        no_embed: *no_embed,
                     },
                 ),
+                DocsAction::Ingest {
+                    urls,
+                    max_pages,
+                    model,
+                    no_embed,
+                } => crate::docs::ingest(
+                    &state,
+                    urls,
+                    &crate::docs::Add {
+                        url: None,
+                        from: None,
+                        site: None,
+                        version: None,
+                        max_pages: *max_pages,
+                        models: model,
+                        no_embed: *no_embed,
+                    },
+                ),
+                DocsAction::Embed { model, dbs } => crate::docs::embed(&state, dbs, model),
                 DocsAction::List => crate::docs::list(&state),
                 DocsAction::Prune => crate::docs::prune(&state),
             };

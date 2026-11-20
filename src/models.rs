@@ -167,7 +167,7 @@ pub fn models_dir(state: &Path) -> PathBuf {
 }
 
 /// Models the memory hook uses (memory.json `models`), as written there.
-fn in_use(state: &Path) -> Result<Vec<String>> {
+pub(crate) fn in_use(state: &Path) -> Result<Vec<String>> {
     let s = footnote_core::config::product_settings(state, "memory")?;
     Ok(s["models"]
         .as_array()
