@@ -172,6 +172,22 @@ fn links(text: &str, base: &Url) -> Vec<Url> {
         .collect()
 }
 
+/// Next page to fetch: the sitemap's order and the links found on fetched pages take turns, so a page cap is spent on both. The
+/// sitemap alone can fill it with an alphabetical corner of a big site (Django: 0.435 of the judged pages in 200); links alone
+/// miss pages nothing links to (DOCS-SPHINX-CRAWL-2026-11-19.md).
+fn next_url(
+    listed: &mut VecDeque<Url>,
+    linked: &mut VecDeque<Url>,
+    turn: &mut usize,
+) -> Option<Url> {
+    *turn += 1;
+    if (*turn).is_multiple_of(2) {
+        linked.pop_front().or_else(|| listed.pop_front())
+    } else {
+        listed.pop_front().or_else(|| linked.pop_front())
+    }
+}
+
 /// Page URLs listed by the sitemap (`<loc>` entries; nested sitemap indexes are followed once).
 fn sitemap(agent: &ureq::Agent, root: &Url) -> Vec<Url> {
     let loc = regex::Regex::new(r"<loc>\s*([^<\s]+)\s*</loc>").expect("valid pattern");
@@ -274,6 +290,10 @@ pub fn crawl(out: &Path, o: &Options, progress: &mut dyn FnMut(u64, u64)) -> Res
     seeds.extend(from_sitemap);
 
     let mut queue: VecDeque<Url> = VecDeque::new();
+    let mut linked: VecDeque<Url> = VecDeque::new(); // links found on fetched pages
+    let mut turn = 0usize;
+    let mut linked_seen: HashSet<String> = HashSet::new();
+    let mut taken: HashSet<String> = HashSet::new(); // fetched or being fetched (a page can sit in both queues)
     let mut seen: HashSet<String> = HashSet::new();
     let mut written: HashSet<String> = HashSet::new(); // page keys already saved (llms.txt `.md` first, then HTML)
     for u in seeds {
@@ -293,11 +313,14 @@ pub fn crawl(out: &Path, o: &Options, progress: &mut dyn FnMut(u64, u64)) -> Res
     } else {
         o.concurrency.clamp(1, MAX_CONCURRENCY)
     };
-    while !queue.is_empty() && pages < o.max_pages {
+    while !(queue.is_empty() && linked.is_empty()) && pages < o.max_pages {
         let mut batch = Vec::new();
         while batch.len() < level
-            && let Some(u) = queue.pop_front()
+            && let Some(u) = next_url(&mut queue, &mut linked, &mut turn)
         {
+            if !taken.insert(u.to_string()) {
+                continue;
+            }
             if allowed(&u) {
                 batch.push(u);
             } else {
@@ -317,7 +340,8 @@ pub fn crawl(out: &Path, o: &Options, progress: &mut dyn FnMut(u64, u64)) -> Res
                 Fetch::SlowDown(w) => {
                     slowed += 1;
                     wait = Some(wait.map_or(w, |x: Duration| x.max(w)));
-                    queue.push_back(u); // asked again later, at a lower level
+                    taken.remove(u.as_str());
+                    queue.push_front(u); // asked again later, at a lower level
                     continue;
                 }
                 Fetch::Failed => {
@@ -335,8 +359,13 @@ pub fn crawl(out: &Path, o: &Options, progress: &mut dyn FnMut(u64, u64)) -> Res
             }
             let text = if kind.contains("html") {
                 for l in links(&body, &last) {
-                    if in_scope(&l, &start, &o.exclude) && seen.insert(l.to_string()) {
-                        queue.push_back(l);
+                    // a link to a page the sitemap lists is queued again, so it is fetched early
+                    if in_scope(&l, &start, &o.exclude)
+                        && !taken.contains(l.as_str())
+                        && linked_seen.insert(l.to_string())
+                    {
+                        seen.insert(l.to_string());
+                        linked.push_back(l);
                     }
                 }
                 markdown(&body, &last)
@@ -376,7 +405,7 @@ pub fn crawl(out: &Path, o: &Options, progress: &mut dyn FnMut(u64, u64)) -> Res
     }
     fs::write(out.join("urls.json"), serde_json::to_string_pretty(&urls)?)?;
     Ok(
-        json!({"pages": pages, "bytes": bytes, "skipped": skipped, "queued_left": queue.len(),
+        json!({"pages": pages, "bytes": bytes, "skipped": skipped, "queued_left": queue.len() + linked.len(),
         "discovered": {"llms_txt": via_llms, "sitemap": via_sitemap}, "out": out, "robots_txt": robots.is_some(),
         "concurrency": level, "slowed_down": slowed}),
     )
@@ -389,6 +418,18 @@ mod tests {
     #[test]
     fn crawler_keeps_the_tls_stack_cloudflare_lets_through() {
         assert_eq!(TLS_PROVIDER, ureq::tls::TlsProvider::Rustls);
+    }
+
+    #[test]
+    fn links_and_sitemap_take_turns() {
+        let u = |s: &str| Url::parse(&format!("https://x.dev/{s}")).unwrap();
+        let mut listed: VecDeque<Url> = ["a", "b", "c"].map(u).into();
+        let mut linked: VecDeque<Url> = ["l1", "l2"].map(u).into();
+        let mut turn = 0;
+        let order: Vec<_> = std::iter::from_fn(|| next_url(&mut listed, &mut linked, &mut turn))
+            .map(|x| x.path().to_string())
+            .collect();
+        assert_eq!(order, ["/a", "/l1", "/b", "/l2", "/c"]);
     }
 
     #[test]
