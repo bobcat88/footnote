@@ -2,6 +2,8 @@
 mod activity;
 mod app;
 mod daemon;
+#[cfg(feature = "library")]
+mod docs;
 mod find;
 mod hardware;
 #[cfg(feature = "memory")]

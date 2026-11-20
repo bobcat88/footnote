@@ -300,6 +300,13 @@ enum Action {
         #[arg(long, value_parser = clap::value_parser!(u8).range(1..=8))]
         concurrency: Option<u8>,
     },
+    /// One shared documentation index per site and version on this machine (`<state>/docs/<site>/<version>.db`), found by
+    /// Search. `add` crawls a site (or indexes a folder with `--from`) unless that site and version is already there.
+    #[cfg(feature = "library")]
+    Docs {
+        #[command(subcommand)]
+        action: DocsAction,
+    },
     /// What is installed, on, registered and running, and what memory did this week.
     Status,
     /// Running and recent long steps (downloads, indexing) with their progress, whoever started them.
@@ -439,6 +446,31 @@ enum ModelsAction {
     /// Recommend models from this machine (CPU, RAM, GPU) and, with --db, the corpus language.
     Recommend,
 }
+#[cfg(feature = "library")]
+#[derive(Subcommand)]
+enum DocsAction {
+    /// Index a site's docs once per machine: reuse the cached database for that site and version, else crawl and index.
+    Add {
+        /// Documentation start page (omit with `--from`).
+        url: Option<String>,
+        /// Index this folder of Markdown files instead of crawling.
+        #[arg(long)]
+        from: Option<PathBuf>,
+        /// Cache name; defaults to the start URL's host.
+        #[arg(long)]
+        site: Option<String>,
+        /// Library version; defaults to `latest`. A new version is a new database; old ones are kept until `prune`.
+        #[arg(long)]
+        version: Option<String>,
+        #[arg(long, default_value_t = 1000)]
+        max_pages: usize,
+    },
+    /// Cached documentation: site, version, pages, size and date.
+    List,
+    /// Delete every version older than the newest of its site.
+    Prune,
+}
+
 #[derive(Subcommand)]
 enum CorporaAction {
     /// Add a corpus database to the list.
@@ -663,6 +695,30 @@ fn execute(cli: Cli) -> Result<Value> {
                 None => crate::usage::usage(*days),
             };
         }
+        #[cfg(feature = "library")]
+        Action::Docs { action } => {
+            let state = crate::state::state_dir()?;
+            return match action {
+                DocsAction::Add {
+                    url,
+                    from,
+                    site,
+                    version,
+                    max_pages,
+                } => crate::docs::add(
+                    &state,
+                    &crate::docs::Add {
+                        url: url.as_deref(),
+                        from: from.as_deref(),
+                        site: site.as_deref(),
+                        version: version.as_deref(),
+                        max_pages: *max_pages,
+                    },
+                ),
+                DocsAction::List => crate::docs::list(&state),
+                DocsAction::Prune => crate::docs::prune(&state),
+            };
+        }
         Action::Find { query, limit } => return crate::find::find(query, usize::from(*limit)),
         Action::Corpora { action } => {
             return crate::find::corpora_command(match action {
@@ -852,6 +908,8 @@ fn execute(cli: Cli) -> Result<Value> {
         }
         #[cfg(feature = "library")]
         Action::Crawl { .. } => unreachable!("dispatched before the database is opened"),
+        #[cfg(feature = "library")]
+        Action::Docs { .. } => unreachable!("dispatched before the database is opened"),
         #[cfg(feature = "code")]
         Action::CodeIndex { .. }
         | Action::Code { .. }
@@ -1045,6 +1103,8 @@ fn action_name(a: &Action) -> &'static str {
         Action::Usage { .. } => "usage",
         Action::Find { .. } => "find",
         Action::Corpora { .. } => "corpora",
+        #[cfg(feature = "library")]
+        Action::Docs { .. } => "docs",
         #[cfg(feature = "memory")]
         Action::MemoryList { .. } => "memory-list",
         Action::Models { .. } => "models",

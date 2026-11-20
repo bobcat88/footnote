@@ -230,6 +230,10 @@ footnote code-impact <name>     # before a change: callers up to 3 levels, tests
 
 Agents get the same answer through `footnote_code`; files changed since indexing come back in `stale`. The tool reads only projects Footnote has recorded (every folder an agent session starts in) and refuses any other folder. Index only code you trust: for Rust, rust-analyzer builds the project, which runs its build scripts and procedural macros (scip-typescript and scip-python only read the code; the parser graph runs no project code). Design: [docs/CODE-GRAPH-DESIGN.md](docs/CODE-GRAPH-DESIGN.md).
 
+### Shared documentation cache
+
+`footnote docs add <start-url> [--site NAME] [--version V]` indexes a documentation site once per machine into `<state>/docs/<site>/<version>.db` and lists it in `footnote corpora`, so Search finds it from every project. Asking again for the same site and version reuses the database without crawling; a different version creates a new one. `--from <folder>` indexes a folder of Markdown instead of crawling. Site and version are lowercased and reduced to `a-z 0-9 . _ -` (anything else becomes `-`, leading dots are dropped), so a name cannot leave the cache folder. Old versions are kept until `footnote docs prune`, which deletes, per site, every version older than the newest (numbers compare as numbers, so 10.0 is newer than 9.2; a non-numeric version such as `latest` counts as newest). `footnote docs list` shows site, version, pages, size and date.
+
 ### Desktop window
 
 `apps/launcher` is Footnote One's window (Tauri 2): an overview of the three products with their on/off switches, one search
@@ -245,7 +249,7 @@ Footnote is built on the assumption that retrieved text may contain instructions
 
 - **Untrusted by default.** Every retrieved passage is labelled as data. Nothing in a document can make the server do anything.
 - **Read-only documents.** No MCP tool can write to a document corpus. The only write tools add or retire agent memories, and they refuse any database that holds documents before touching it. Proposals are refused and logged.
-- **Network only when asked.** Search, memory and the MCP tools open no outbound connection. Two commands you run do: `footnote models install` downloads a model and checks its hash, and `footnote crawl <url>` fetches pages of that one site (same host, under the start path, http or https; robots.txt rules and `Crawl-delay` honoured; at most `--max-pages`, 1000 by default; up to 8 requests in flight, starting at 2 and halving on 429, 503 or timeouts; 30 s per request).
+- **Network only when asked.** Search, memory and the MCP tools open no outbound connection. Three commands you run do: `footnote models install` downloads a model and checks its hash, `footnote docs add <url>` crawls a site the first time (see below), and `footnote crawl <url>` fetches pages of that one site (same host, under the start path, http or https; robots.txt rules and `Crawl-delay` honoured; at most `--max-pages`, 1000 by default; up to 8 requests in flight, starting at 2 and halving on 429, 503 or timeouts; 30 s per request).
 - **Private state.** The audit log, its MAC key and the daemon token live in a user-only folder created on first use.
 - **Authenticated daemon.** The shared daemon listens on a local socket only, with a mutual HMAC handshake; agents never see the token.
 - **Tamper-evident audit.** Every call is appended to a hash-chained, MAC-signed log. `footnote audit verify --file <audit.jsonl> --mac-key <audit.key>` verifies it offline. A chain proves that no entry was changed or removed in the middle; it cannot show that the newest entries were cut off the end. To catch that, keep a copy of the last verified entry (or its hash) somewhere the agent cannot write.

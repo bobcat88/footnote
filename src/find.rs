@@ -33,7 +33,19 @@ pub fn record_corpus(db: &Path) {
     }
 }
 
-fn write(state: &Path, list: &[PathBuf]) -> Result<()> {
+/// Register a database wherever it lives (`record_corpus` skips the temp folder; the docs cache is explicit).
+#[cfg(feature = "library")]
+pub fn register(state: &Path, db: &Path) -> Result<()> {
+    let db = std::path::absolute(db)?;
+    let mut list = corpora(state);
+    if !list.contains(&db) {
+        list.push(db);
+        write(state, &list)?;
+    }
+    Ok(())
+}
+
+pub fn write(state: &Path, list: &[PathBuf]) -> Result<()> {
     let tmp = state.join(format!(".{LIST}.{}.tmp", std::process::id()));
     crate::state::ensure_private_dir(state)?;
     std::fs::write(&tmp, serde_json::to_vec_pretty(list)?)?;
