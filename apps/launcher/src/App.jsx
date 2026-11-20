@@ -175,8 +175,7 @@ function Overview({ status, projects, refresh }) {
         <Card {...sw("library", "Library")} big={p && (p.library?.built ? (p.library.enabled === false ? "Off" : "On") : "–")}
           sub={p && (p.library?.built ? "Your folders and docs, searched by any agent" : "")} />
         <Card {...sw("code", "Code")} big={code && (code.built ? num(code.graphs) : "–")}
-          sub={code && (!code.built ? "" : code.rust_indexer ? `project ${code.graphs === 1 ? "graph" : "graphs"} · rust-analyzer found`
-            : <span className="warn">Install rust-analyzer to build graphs</span>)} />
+          sub={code && (!code.built ? "" : `project ${code.graphs === 1 ? "graph" : "graphs"}${code.rust_indexer ? " · rust-analyzer found" : ""}`)} />
       </div>
       <h2 className="section">Projects agents worked in</h2>
       <Projects list={projects?.projects} />
@@ -328,9 +327,9 @@ function Activity({ activity }) {
           {activity.most_used.slice(0, 6).map((m) => (
             <div className="ev" key={m.id}>
               <span className="mono id">#{m.id}</span>
-              <div title={m.memory.text}>
-                <span className="clamp">{m.memory.text}</span>
-                <span className="dimmed">{num(m.times)} times · {m.memory.scope}</span>
+              <div title={m.memory?.text ?? ""}>
+                {m.memory ? <span className="clamp">{m.memory.text}</span> : <span className="dimmed">no longer in memory</span>}
+                <span className="dimmed">{num(m.times)} times{m.memory?.scope ? ` · ${m.memory.scope}` : ""}</span>
               </div>
             </div>
           ))}

@@ -19,7 +19,7 @@ use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent}
 fn allowed(args: &[String]) -> bool {
     let a: Vec<&str> = args.iter().map(String::as_str).collect();
     match a.as_slice() {
-        ["status"] | ["projects"] | ["activity"] | ["models", "list"] => true,
+        ["status"] | ["projects"] | ["activity"] | ["jobs"] | ["models", "list"] => true,
         ["code", name, "--root", _] => !name.starts_with('-'),
         ["activity" | "usage", "--days", d] => d.parse::<u16>().is_ok(),
         ["code-map", "--root", _] => true,
@@ -252,10 +252,12 @@ mod tests {
     fn only_read_commands_pass() {
         assert!(
             ok("status")
+                && ok("jobs")
                 && ok("models list")
                 && ok("code lookup --root D:/p")
                 && ok("code-map --root . --depth 2")
         );
+        assert!(!ok("jobs --bad"));
         assert!(!ok("forget 12") && !ok("install --memory") && !ok("models remove jina-v5-nano"));
         assert!(!ok("code --root . --root") && !ok("code-map --root . --depth 2;rm"));
         assert!(ok("usage --days 30") && ok("activity --days 7") && !ok("usage --days x"));

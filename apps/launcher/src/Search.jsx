@@ -80,6 +80,16 @@ function Product({ p }) {
       ) : (
         <p className="empty">{p.state === "empty" ? EMPTY[p.product] : WHY[p.state] ?? p.state}</p>
       )}
+      {p.live_fetch && (
+        <div className="dimmed small" role="status">
+          {p.live_fetch.note && <p>{p.live_fetch.note}</p>}
+          {p.live_fetch.pages?.length > 0 && (
+            <ul className="plain">
+              {p.live_fetch.pages.map((url) => <li key={url} className="mono">{url}</li>)}
+            </ul>
+          )}
+        </div>
+      )}
       {p.problems?.length > 0 && (
         <p className="warn small">{p.problems.length} {p.problems.length === 1 ? "corpus" : "corpora"} could not be read: {p.problems.map((x) => x.source).join(", ")}</p>
       )}

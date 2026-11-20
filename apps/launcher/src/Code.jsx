@@ -14,7 +14,7 @@ export default function Code({ projects, view, go }) {
     return (
       <div className="body">
         <p className="empty">
-          No code graph yet. In a Rust project, run <code>footnote code-index</code>; its map and symbols then show here.
+          No code graph yet. In a project folder, run <code>footnote code-index</code>; its map and symbols then show here.
         </p>
       </div>
     );

@@ -81,6 +81,8 @@ fn browse_activity_and_jobs_show_what_memory_did_without_prompts() {
         log.contains("\"recall\"") && !log.contains("zebra"),
         "{log}"
     );
+    let st = footnote(state, &["status"], None);
+    assert_eq!(st["products"]["memory"]["recalls_last_7_days"], 1, "{st}");
     let act = footnote(state, &["activity", "--days", "3"], None);
     let days = act["days"].as_array().unwrap();
     assert_eq!(days.len(), 3);

@@ -110,8 +110,8 @@ export function Models() {
   return (
     <div className="body">
       <p className="dimmed">
-        Embedding models run on this computer. Installing one is the only step that uses the network: it downloads the pinned
-        files from Hugging Face and checks their hashes.
+        Embedding models run locally on this computer. Installing one downloads the pinned files from Hugging Face and checks
+        their hashes; documentation crawling and live doc rescue are the only other network steps.
       </p>
       <table className="tbl">
         <thead>
@@ -204,9 +204,9 @@ export function Activity() {
             {data.most_used.length === 0 ? <p className="dimmed">No memory recalled yet.</p> : (
               <ul className="plain">
                 {data.most_used.map((m) => (
-                  <li key={m.id} className="place" title={m.memory.text}>
-                    <span><span className="mono id">#{m.id}</span> {m.memory.text}</span>
-                    <span className="dimmed">{num(m.times)} times · {m.memory.kind} · {m.memory.scope}</span>
+                  <li key={m.id} className="place" title={m.memory?.text ?? ""}>
+                    <span><span className="mono id">#{m.id}</span> {m.memory ? m.memory.text : <span className="dimmed">no longer in memory</span>}</span>
+                    <span className="dimmed">{num(m.times)} times{m.memory ? ` · ${m.memory.kind} · ${m.memory.scope}` : ""}</span>
                   </li>
                 ))}
               </ul>

@@ -55,7 +55,7 @@ export default function Mini() {
           </>
         )}
       </svg>
-      {lens("lib", "≡", "Library", p ? (p.library?.built ? "On" : "Off") : null)}
+      {lens("lib", "≡", "Library", p ? (p.library?.built && p.library.enabled !== false ? "On" : "Off") : null)}
       {lens("mem", "◎", "Memory", p?.memory && num(p.memory.memories), p?.memory && `${num(p.memory.recalls_last_7_days)} recalls`)}
       {lens("code", "{x}", "Code", p?.code && num(p.code.graphs), p?.code && (p.code.graphs === 1 ? "graph" : "graphs"))}
       <div className="minibar">

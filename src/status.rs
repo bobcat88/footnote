@@ -91,11 +91,11 @@ fn memory(state: &Path) -> Result<Value> {
     Ok(out)
 }
 
-/// Prompts that received memories this week, from the metrics file; null when metrics are off (nothing else records them).
+/// Prompts that received memories this week, from the hook's activity log.
 #[cfg(feature = "memory")]
 fn recalls_last_week(state: &Path) -> Value {
-    let Ok(text) = std::fs::read_to_string(state.join("metrics.jsonl")) else {
-        return Value::Null;
+    let Ok(text) = std::fs::read_to_string(state.join("memory-hook/activity.jsonl")) else {
+        return json!(0);
     };
     let now_ms = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -104,11 +104,7 @@ fn recalls_last_week(state: &Path) -> Value {
     let n = text
         .lines()
         .filter_map(|l| serde_json::from_str::<Value>(l).ok())
-        .filter(|v| {
-            v["span"] == "hook.recall"
-                && v["ok"] == true
-                && v["t"].as_u64().is_some_and(|t| t >= since)
-        })
+        .filter(|v| v["event"] == "recall" && v["t"].as_u64().is_some_and(|t| t >= since))
         .count();
     json!(n)
 }
