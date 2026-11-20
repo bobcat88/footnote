@@ -195,6 +195,20 @@ fn a_weak_search_fetches_the_missing_page_once_and_a_strong_one_fetches_nothing(
     let r = library(&state, "outside");
     assert!(r.get("live_fetch").is_none(), "{r}");
     assert_eq!(count(&log, "/outside/"), 0);
+
+    // FOOTNOTE_NO_LIVE_FETCH=1: three widget pages are still missing, yet nothing is requested.
+    let before = count(&log, "/docs/w");
+    let out = Command::new(assert_cmd::cargo::cargo_bin!("footnote"))
+        .env("FOOTNOTE_STATE_DIR", &state)
+        .env("FOOTNOTE_NO_LIVE_FETCH", "1")
+        .args(["find", "widget"])
+        .output()
+        .unwrap();
+    assert!(
+        !String::from_utf8_lossy(&out.stdout).contains("live_fetch"),
+        "{out:?}"
+    );
+    assert_eq!(count(&log, "/docs/w"), before);
 }
 
 #[test]

@@ -592,6 +592,26 @@ fn parse(root: &Path, project: &str) -> anyhow::Result<(Vec<Document>, usize, Ve
             _ => None,
         }
     };
+    // One definition, or the first of several in one file with one owner in Python, TypeScript and JavaScript: `@overload`
+    // signatures and property setters are one symbol there. Java and Rust overloads are different functions: abstain.
+    let pick = |found: &[usize]| -> Option<usize> {
+        match found {
+            [one] => Some(*one),
+            [first, rest @ ..]
+                if matches!(
+                    files[defs[*first].file].1,
+                    Lang::Python | Lang::Ts | Lang::Tsx | Lang::Js
+                ) && rest.iter().all(|&d| {
+                    defs[d].file == defs[*first].file
+                        && defs[d].owner == defs[*first].owner
+                        && defs[d].kind == defs[*first].kind
+                }) =>
+            {
+                Some(*first)
+            }
+            _ => None,
+        }
+    };
     // The method of that type, or else of the nearest ancestors that define the name: one of them, or none.
     let method = |ty: &str, name: &str, file: usize, args: Option<usize>| {
         let mut level = vec![owner(ty, file)?];
@@ -606,10 +626,7 @@ fn parse(root: &Path, project: &str) -> anyhow::Result<(Vec<Document>, usize, Ve
                     .iter()
                     .flat_map(|v| narrow(&defs, v, args))
                     .collect();
-                return match found.as_slice() {
-                    [one] => Some(*one),
-                    _ => None,
-                };
+                return pick(&found);
             }
             // A field of that name (`match = match` in a class) hides the base's method: unknown, not the base's.
             if level
@@ -795,10 +812,7 @@ fn parse(root: &Path, project: &str) -> anyhow::Result<(Vec<Document>, usize, Ve
                 .copied()
                 .filter(|d| homes.contains(&defs[*d].file))
                 .collect();
-            match narrow(&defs, &in_homes, c.args).as_slice() {
-                [one] => Some(*one),
-                _ => None,
-            }
+            pick(&narrow(&defs, &in_homes, c.args))
         };
         // Each link names the rule that made it, so its precision can be measured per rule (FOOTNOTE_CODE_RULES below).
         let typed = c
@@ -861,10 +875,7 @@ fn parse(root: &Path, project: &str) -> anyhow::Result<(Vec<Document>, usize, Ve
                 }
                 None => in_module(cands, module),
             };
-            match narrow(&defs, &found, c.args).as_slice() {
-                [one] => Some((*one, "import")),
-                _ => None,
-            }
+            pick(&narrow(&defs, &found, c.args)).map(|d| (d, "import"))
         } else if c.member {
             None // a method on some value: its type is unknown here, and std or a dependency may define it
         } else if let Some(one) = if rust {

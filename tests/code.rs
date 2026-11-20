@@ -7,6 +7,10 @@ fn footnote(state: &Path, args: &[&str]) -> Value {
     let out = Command::new(assert_cmd::cargo::cargo_bin!("footnote"))
         .env("FOOTNOTE_STATE_DIR", state)
         .env("FOOTNOTE_POLICY_FILE", state.join("no-policy.json"))
+        // A pre-push hook sets GIT_DIR and GIT_WORK_TREE; rust-analyzer would inherit them and read the wrong repo.
+        .env_remove("GIT_DIR")
+        .env_remove("GIT_WORK_TREE")
+        .env_remove("GIT_INDEX_FILE")
         .args(args)
         .timeout(Duration::from_secs(300))
         .output()
@@ -567,4 +571,48 @@ fn an_existing_scip_index_is_the_compiler_graph_when_asked() {
         "{with}"
     );
     assert_eq!(run(false)["origin"], "resolved");
+}
+
+/// `@overload` signatures are one function: an imported name with three definitions in one file is linked (rule `import`),
+/// while the same shape from two different files stays unlinked.
+#[test]
+fn overloaded_definitions_in_one_file_are_one_symbol() {
+    let dir = tempfile::tempdir().unwrap();
+    let project = dir.path().join("proj");
+    fs::create_dir_all(&project).unwrap();
+    fs::write(project.join("requirements.txt"), "").unwrap();
+    fs::write(
+        project.join("globals.py"),
+        "from typing import overload
+
+@overload
+def current(a: int) -> int: ...
+@overload
+def current(a: str) -> str: ...
+def current(a):
+    return a
+",
+    )
+    .unwrap();
+    fs::write(
+        project.join("app.py"),
+        "from .globals import current
+
+def run():
+    return current(1)
+",
+    )
+    .unwrap();
+    let rules = dir.path().join("rules.tsv");
+    let out = std::process::Command::new(assert_cmd::cargo::cargo_bin!("footnote"))
+        .env("FOOTNOTE_STATE_DIR", dir.path().join("state"))
+        .env("FOOTNOTE_POLICY_FILE", dir.path().join("no-policy.json"))
+        .env("FOOTNOTE_CODE_RULES", &rules)
+        .env("PATH", dir.path().join("empty"))
+        .args(["code-index", project.to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "{out:?}");
+    let tsv = fs::read_to_string(&rules).unwrap();
+    assert!(tsv.contains("app.py	4	current	globals.py	import"), "{tsv}");
 }

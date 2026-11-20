@@ -331,9 +331,11 @@ fn library(state: &Path, query: &str, limit: usize) -> Value {
         // Fetch on miss: no corpus has a strong passage, so the missing pages of the cached docs sites are fetched live and the
         // query is searched once more (see miss.rs).
         let mut live = Vec::new();
-        if found
-            .iter()
-            .all(|(_, r)| r.as_ref().is_ok_and(|h| crate::miss::weak(query, h)))
+        // FOOTNOTE_NO_LIVE_FETCH=1 keeps the search offline.
+        if std::env::var_os("FOOTNOTE_NO_LIVE_FETCH").is_none()
+            && found
+                .iter()
+                .all(|(_, r)| r.as_ref().is_ok_and(|h| crate::miss::weak(query, h)))
         {
             for (db, r) in &mut found {
                 let room = crate::miss::CAP - live.len();
