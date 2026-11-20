@@ -7,7 +7,7 @@ assignees: ""
 ---
 
 ## Context & Evidence
-<!-- Cite exact file:line locations, measured benchmarks, or command output. -->
+<!-- Cite exact file:line locations, measured benchmarks, or command output. Do not name analyzed/inspiration external tools unless directly benchmarking against them (see docs/ISSUE-RULES.md). -->
 
 ## Problem
 <!-- What is missing or suboptimal, and who is affected? -->

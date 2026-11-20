@@ -68,3 +68,8 @@ Run the metrics report at any time with:
 python scripts/agent_metrics.py --limit 100
 python scripts/agent_metrics.py --limit 100 --format json
 ```
+
+## 5. External tool references
+
+- **Do not mention analyzed or inspiration third-party tools in public GitHub issues.** Describe the architectural pattern, trade-off, or requirement in neutral engineering terms and keep research notes about analyzed tools local only (in local memory or private notes).
+- **Exception — benchmarked competitors:** Naming an external tool in an issue is allowed **only** when Footnote is explicitly benchmarking against that tool (e.g., head-to-head comparison receipts in `bench/`).

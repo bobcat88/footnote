@@ -7,7 +7,7 @@ assignees: ""
 ---
 
 ## Context & Evidence
-<!-- Exact file:line locations, logs, or version/commit where the bug occurs. -->
+<!-- Exact file:line locations, logs, or version/commit where the bug occurs. Do not name analyzed/inspiration external tools unless directly benchmarking against them (see docs/ISSUE-RULES.md). -->
 
 ## Reproduction
 1. Step 1
