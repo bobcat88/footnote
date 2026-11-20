@@ -27,6 +27,9 @@ now stories on GitHub Issues.
   blocked after Grounded's scrape; Footnote also trails on Grounded's own Flask pages (-0.073). Next: look at Sphinx-built
   docs (Flask, Python) on the development sets, and fix the final's design (alternate order or cool-down between systems)
   before a new sealed set.
+- Sphinx docs, sealed final 2 (20 Nov, Scrapy and pytest, [results](../../bench/experiments/DOCS-SPHINX-SEALED2-RESULTS-2026-11-20.md)):
+  Footnote's own crawl 0.768 against Grounded Docs 0.721 nDCG@5 (+0.047, interval -0.054 to +0.155): inconclusive, not a claim; on the same
+  pages 0.712 (level); crawl 94% faster, queries 37% faster.
 
 ## P0: protect and finish what exists (small, this week)
 

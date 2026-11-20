@@ -1,0 +1,107 @@
+{
+ "seed": 20261121,
+ "binary": "C:\\Users\\johan\\.t3\\worktrees\\Footnote\\t3-770b50cd-3d26ec9917738a2c\\bench\\work\\sphinx2\\final.exe",
+ "latency_median_s": {
+  "gd": 1.8344212770462036,
+  "fn": 1.1542776823043823
+ },
+ "latency_mean_s": {
+  "gd": 1.8651250958442689,
+  "fn": 1.1611110091209411
+ },
+ "crawl_seconds": {
+  "scrapy/fn": 10.1,
+  "scrapy/gd": 160.6,
+  "pytest/gd": 121.8,
+  "pytest/fn": 7.6
+ },
+ "index_seconds": {
+  "footnote-same/scrapy": 115.1,
+  "footnote-same/pytest": 72.6
+ },
+ "rows": {
+  "all": {
+   "questions": 40,
+   "grounded": 0.7213622306042832,
+   "footnote": 0.7680613501426363,
+   "footnote_same_text": 0.7118468196804738,
+   "footnote_minus_grounded": {
+    "diff": 0.046699119538353054,
+    "ci95": [
+     -0.05447722749019777,
+     0.15479162093420262
+    ],
+    "verdict": "worse"
+   },
+   "footnote_same_text_minus_grounded": {
+    "diff": -0.00951541092380941,
+    "ci95": [
+     -0.12247400093326803,
+     0.09683347366972697
+    ],
+    "verdict": "worse"
+   }
+  },
+  "pytest": {
+   "questions": 20,
+   "grounded": 0.6978381879195548,
+   "footnote": 0.7913387740423656,
+   "footnote_same_text": 0.7043753352187324,
+   "footnote_minus_grounded": {
+    "diff": 0.09350058612281097,
+    "ci95": [
+     -0.06328198392981337,
+     0.26891444520666435
+    ],
+    "verdict": "worse"
+   },
+   "footnote_same_text_minus_grounded": {
+    "diff": 0.006537147299177676,
+    "ci95": [
+     -0.16876044491601483,
+     0.18897740827676723
+    ],
+    "verdict": "worse"
+   }
+  },
+  "scrapy": {
+   "questions": 20,
+   "grounded": 0.7448862732890117,
+   "footnote": 0.7447839262429068,
+   "footnote_same_text": 0.7193183041422151,
+   "footnote_minus_grounded": {
+    "diff": -0.0001023470461048559,
+    "ci95": [
+     -0.11902705046018544,
+     0.12593585383132835
+    ],
+    "verdict": "worse"
+   },
+   "footnote_same_text_minus_grounded": {
+    "diff": -0.025567969146796495,
+    "ci95": [
+     -0.1599407890841666,
+     0.09282638019535275
+    ],
+    "verdict": "worse"
+   }
+  }
+ },
+ "secondary": {
+  "grounded": {
+   "recall_at_5": 0.8416666666666666,
+   "hit_at_3": 0.825,
+   "mrr": 0.7070833333333334
+  },
+  "footnote": {
+   "recall_at_5": 0.9416666666666667,
+   "hit_at_3": 0.925,
+   "mrr": 0.7154166666666667
+  },
+  "footnote_same_text": {
+   "recall_at_5": 0.8583333333333334,
+   "hit_at_3": 0.875,
+   "mrr": 0.6895833333333333
+  }
+ }
+}
