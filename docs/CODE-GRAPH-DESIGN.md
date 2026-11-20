@@ -447,3 +447,12 @@ of old and new binaries compared). New, all opt-in or additive:
 - **`FOOTNOTE_CODE_SCIP=<file>`:** read an existing SCIP index as the compiler graph. The compiler was already the top tier.
 - **Miss buckets:** a method on a value of unknown type is the largest real one (51% Python, 54% TypeScript of missed calls).
   TypeScript recall is now scored without `<constructor>`/`<get>`/`<set>` references, which are not calls.
+
+**Local type inference for receivers (#299, 20 November 2026).** Full table: `bench/experiments/CODE-INFERENCE-2026-11-20.md`. A call
+`x.m()` in Python or TypeScript links through the member lookup (inherited methods included) when `x` is a local whose type is
+written: `x = Foo()`, `new Foo()`, an annotated parameter or local, `self`/`this` (all already there), or, new, `x = make()` where
+`make` is the one project function of that name and declares its return type (rule `return_type`, default tier; `Promise<T>` under
+`await`). A variable that may be rebound before the call, a loop, `with` or `except` variable, an unannotated parameter, two
+definitions of `make` (overloads) and a function imported from outside the project stay unresolved. Same six fixtures: precision
+unchanged (0.864 Python, 0.938 TypeScript), Python recall 0.458 to 0.460, TypeScript unchanged (its new links are in files the
+compiler graph does not cover). Most of the unknown-receiver bucket is values whose type is not written anywhere local.

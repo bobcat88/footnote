@@ -123,6 +123,9 @@ enum Base {
     Type(String),
     /// `Type::f()`: whatever `f` returns.
     Static(String, String),
+    /// Python and TypeScript `make()`: a class constructor when `make` is a project class, else what the one free function
+    /// `make` declares it returns.
+    Call(String),
 }
 #[derive(Clone, Debug)]
 enum Step {
@@ -391,6 +394,7 @@ fn parse(root: &Path, project: &str) -> anyhow::Result<(Vec<Document>, usize, Ve
                             match b {
                                 Base::Type(t) => Base::Type(fix(t)?),
                                 Base::Static(t, f) => Base::Static(fix(t)?, f),
+                                b @ Base::Call(_) => b,
                             },
                             s,
                         ))
@@ -661,6 +665,22 @@ fn parse(root: &Path, project: &str) -> anyhow::Result<(Vec<Document>, usize, Ve
                 let d = &defs[method(ty, f, file, None)?];
                 (d.ret.clone()?, d.file)
             }
+            Base::Call(f) if owner(f, file).is_some() => (f.clone(), file),
+            Base::Call(f) => {
+                // A function imported from outside the project is not the project's function of that name.
+                if imports[file].get(f).is_some_and(|m| !local(m, file)) {
+                    return None;
+                }
+                // One definition: overloads may differ in what they return.
+                let [one] = by_name.get(f.as_str())?[..] else {
+                    return None;
+                };
+                let d = &defs[one];
+                if d.kind != "function" || d.owner.is_some() {
+                    return None;
+                }
+                (d.ret.clone()?, d.file)
+            }
         };
         for s in steps {
             t = match s {
@@ -820,8 +840,16 @@ fn parse(root: &Path, project: &str) -> anyhow::Result<(Vec<Document>, usize, Ve
             .as_ref()
             .and_then(|(b, s)| type_of(b, s, c.file))
             .and_then(|(t, file)| method(&t, &c.name, file, c.args));
+        let by_return = matches!(&c.recv, Some((Base::Call(f), _)) if owner(f, c.file).is_none());
         let target: Option<(usize, &str)> = if let Some(d) = typed {
-            Some((d, "receiver_type"))
+            Some((
+                d,
+                if by_return {
+                    "return_type"
+                } else {
+                    "receiver_type"
+                },
+            ))
         } else if !same.is_empty()
             // A name imported at the top of the file wins over a same-file definition of it (hono's
             // `Deno.upgradeWebSocket = ...` in a test). Only the top: `use super::f` inside `mod tests` must not hide `f`.
@@ -1406,8 +1434,8 @@ fn receiver_dyn(e: Node, src: &[u8], depth: u8) -> Option<(Base, Vec<Step>)> {
                 "member_expression" | "attribute" => {
                     then(f.child_by_field_name("object")?, Step::Call(member(f)?))
                 }
-                // Python `Store(...)`: a constructor when `Store` is a project class (the method tables check it).
-                "identifier" if e.kind() == "call" => Some((Base::Type(text(f)?), vec![])),
+                // `Store(...)` is a constructor when `Store` is a project class, else `make(...)` returns its declared type.
+                "identifier" => Some((Base::Call(text(f)?), vec![])),
                 _ => None,
             }
         }
@@ -2474,6 +2502,90 @@ mod tests {
             ],
             "{rules:?}"
         ); // `u.save()` (no annotation), loop and comprehension variables: no link
+    }
+
+    #[test]
+    fn a_local_takes_the_declared_return_type_of_the_one_function_it_calls() {
+        let t = tempfile::tempdir().unwrap();
+        let w = |p: &str, s: &str| std::fs::write(t.path().join(p), s).unwrap();
+        w(
+            "m.py",
+            "class Base:
+    def run(self):
+        pass
+
+class Db(Base):
+    pass
+
+class Other:
+    def run(self):
+        pass
+
+def open_db() -> Db:
+    return Db()
+
+def untyped():
+    return Db()
+
+def twice() -> Db:
+    pass
+
+def twice() -> Other:
+    pass
+
+def go():
+    a = open_db()
+    a.run()
+    b = untyped()
+    b.run()
+    c = twice()
+    c.run()
+    d = open_db()
+    if a:
+        d = Other()
+    d.run()
+    e = Db()
+    e.run()
+    f: Other = untyped()
+    f.run()
+",
+        );
+        w(
+            "m.ts",
+            "class Repo {
+  find() {}
+}
+function makeRepo(): Repo { return new Repo(); }
+async function loadRepo(): Promise<Repo> { return new Repo(); }
+async function go(c: boolean) {
+  const r = makeRepo();
+  r.find();
+  const q = await loadRepo();
+  q.find();
+  let s = makeRepo();
+  if (c) { s = other(); }
+  s.find();
+}
+",
+        );
+        let (_, _, rules) = parse(t.path(), "demo").unwrap();
+        let mut got: Vec<&str> = rules
+            .iter()
+            .map(String::as_str)
+            .filter(|l| l.contains("	run	") || l.contains("	find	"))
+            .collect();
+        got.sort();
+        assert_eq!(
+            got,
+            [
+                "m.py	26	run	m.py	return_type",   // inherited from Base through Db
+                "m.py	36	run	m.py	receiver_type", // `e = Db()` is a constructor, not a return type
+                "m.py	38	run	m.py	receiver_type", // the annotation wins over the call
+                "m.ts	10	find	m.ts	return_type",
+                "m.ts	8	find	m.ts	return_type",
+            ],
+            "{rules:?}"
+        ); // no return type, two definitions of `twice`, and a variable reassigned in an `if`: no link
     }
 
     #[test]

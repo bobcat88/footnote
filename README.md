@@ -216,6 +216,8 @@ Footnote Code answers "who calls this, and what does it call" from the compiler'
 
 Rust in a subfolder (a Tauri app's `src-tauri`, `crates/<name>`) gets its own rust-analyzer run beside the top folder's indexer; folders starting with a dot and vendored copies are skipped, and the answer's `roots` says which indexer read which folder.
 
+Without an indexer, the built-in parser links a Python or TypeScript `x.m()` when `x`'s type is written locally (`Foo()`, `new Foo()`, an annotation, or the declared return type of the one function it came from), and leaves it unlinked when it is not or when `x` may be reassigned.
+
 On Windows, keep Node.js and npm's global launcher folder on `PATH`. Footnote loads the global Python indexer through Node
 with a temporary compatibility fix for its invalid path-separator regex ([upstream PR #224](https://github.com/sourcegraph/scip-python/pull/224)).
 The installed package is never edited. A fixed upstream regex is left unchanged; the native constructor is restored after
