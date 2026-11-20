@@ -30,4 +30,4 @@ Keep the model in the README true. New tools must be read-only over MCP; anythin
 
 ## Pull requests
 
-One topic per pull request, with the evidence in the description. Commits follow `type(scope): summary` (`feat`, `fix`, `perf`, `bench`, `docs`).
+One topic per pull request, tracked by a GitHub issue, with the evidence in the description. Commits follow `type(scope): summary` (`feat`, `fix`, `perf`, `bench`, `docs`). AI agents filing issues, comments, or PRs sign them with their agent name, model, and logo (see [.github/AGENT-SIGNATURES.md](.github/AGENT-SIGNATURES.md)).
