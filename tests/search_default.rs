@@ -1,3 +1,5 @@
+mod support;
+
 use assert_cmd::Command;
 use serde_json::Value;
 use std::{fs, path::Path};
@@ -27,6 +29,9 @@ fn json(out: std::process::Output) -> Value {
 /// Search is hybrid by default once the corpus has vectors from a model installed in Footnote's models folder; lexical otherwise.
 #[test]
 fn search_is_hybrid_by_default_when_the_corpus_models_are_installed() {
+    if !support::model("minilm") {
+        return;
+    }
     let t = tempfile::tempdir().unwrap();
     let (state, root, db) = (
         t.path().join("state"),

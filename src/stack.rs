@@ -440,6 +440,7 @@ fn detect(root: &Path, user: &[String]) -> Result<Libs> {
     Ok(libs)
 }
 
+#[cfg(any(feature = "memory", test))]
 fn describe(l: &Lib) -> String {
     format!(
         "{} | {} | {} | {} | {}",
@@ -451,6 +452,7 @@ fn describe(l: &Lib) -> String {
     )
 }
 
+#[cfg(any(feature = "memory", test))]
 fn parse_line(line: &str) -> Option<Lib> {
     let p: Vec<&str> = line.split(" | ").collect();
     let [eco, name, version, exact, source] = p[..] else {
@@ -465,6 +467,7 @@ fn parse_line(line: &str) -> Option<Lib> {
     })
 }
 
+#[cfg(feature = "memory")]
 fn diff(before: &Libs, after: &Libs) -> Value {
     let key = |l: &Lib| (l.eco.clone(), l.name.clone());
     let added: Vec<Value> = after

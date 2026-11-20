@@ -160,7 +160,7 @@ pub fn run(root: &Path, set: &[String], _record: bool) -> Result<Value> {
     #[cfg(feature = "memory")]
     let mut known = stored(&root_s)?;
     #[cfg(not(feature = "memory"))]
-    let mut known: BTreeMap<&'static str, (Vec<i64>, String)> = BTreeMap::new();
+    let known: BTreeMap<&'static str, (Vec<i64>, String)> = BTreeMap::new();
     #[cfg(feature = "memory")]
     if !answers.is_empty() {
         let state = crate::state::state_dir()?;

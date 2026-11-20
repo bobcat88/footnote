@@ -84,6 +84,12 @@ jobs:
       # Every shipped dependency is listed with its licence, and each licence allows commercial use (Footnote Enterprise).
       - name: Third-party notices
         run: python scripts/third_party.py --check
+      - name: Bench index
+        run: python scripts/check_bench_index.py
+      - name: Launcher JS tests and site build
+        run: |
+          node --test "apps/launcher/src/**/*.test.js"
+          node site/build.mjs
 
       # Every product combination must build cleanly: a company build may leave a product out.
       - name: Clippy, all products
@@ -94,6 +100,9 @@ jobs:
         run: cargo clippy --locked --workspace --all-targets --no-default-features --features memory -- -D warnings
       - name: Clippy, Code only
         run: cargo clippy --locked --workspace --all-targets --no-default-features --features code -- -D warnings
+      - name: Clippy, encryption (Windows)
+        if: runner.os == 'Windows'
+        run: cargo clippy --locked --workspace --all-targets --features encryption -- -D warnings
       # Releases include llama.cpp (dist-workspace.toml) for the opt-in French model; it needs CMake and libclang,
       # which both runner images ship.
       - name: Clippy, with llama.cpp
@@ -103,3 +112,6 @@ jobs:
         run: cargo test --locked --workspace --no-fail-fast -- --include-ignored
       - name: Tests, Code (needs rust-analyzer, skipped without it)
         run: cargo test --locked --test code
+      - name: Tests, Launcher (Windows)
+        if: runner.os == 'Windows'
+        run: cargo test --locked --manifest-path apps/launcher/src-tauri/Cargo.toml

@@ -1,5 +1,6 @@
 //! Keyword index first, embeddings in the background: search works before vectors exist, the state is visible, a dead worker
 //! leaves a usable corpus and re-running resumes. Local fixtures only (the model is the repo's tiny minilm).
+mod support;
 use assert_cmd::Command;
 use serde_json::{Value, json};
 use std::{fs, path::Path, time::Duration};
@@ -25,6 +26,9 @@ fn row_state(state: &Path) -> String {
 
 #[test]
 fn keyword_search_first_then_background_embedding_resumes_after_a_dead_worker() {
+    if !support::model("minilm") {
+        return;
+    }
     // Outside the system temp folder: docs registers explicitly, but keep the same layout as docs_cache.
     let t = tempfile::tempdir_in(env!("CARGO_TARGET_TMPDIR")).unwrap();
     let state = t.path().join("state");
@@ -198,6 +202,9 @@ fn a_library_that_cannot_be_crawled_does_not_stop_the_others() {
 
 #[test]
 fn a_killed_embedding_keeps_its_batches_and_resumes_without_recomputing() {
+    if !support::model("minilm") {
+        return;
+    }
     let t = tempfile::tempdir_in(env!("CARGO_TARGET_TMPDIR")).unwrap();
     let state = t.path().join("state");
     let notes = t.path().join("notes");

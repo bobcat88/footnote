@@ -10,10 +10,11 @@ use std::path::{Path, PathBuf};
 
 /// List prices in USD per million tokens, from the providers' pricing pages, read 16 Nov 2026:
 /// https://platform.claude.com/docs/en/about-claude/pricing and https://developers.openai.com/api/docs/pricing (standard tier);
-/// gpt-6.2-sol read 18 Nov 2026 from the same OpenAI page (#223).
+/// gpt-6.2-sol read 18 Nov 2026 from the same OpenAI page (#223);
+/// https://api-docs.deepseek.com/quick_start/pricing read 20 Nov 2026 (standard/peak list rates; off-peak 50% discount not modelled).
 /// Changing a price: edit the row and `PRICES`; every file is then read again so old counts get the new prices.
-/// shortcut: batch, fast tier, US-only inference (x1.1) and regional endpoints are not priced; add them when someone uses them.
-const PRICES: &str = "2026-11-18";
+/// shortcut: batch, fast tier, US-only inference (x1.1), off-peak discounts and regional endpoints are not priced; add them when someone uses them.
+const PRICES: &str = "2026-11-20";
 
 #[derive(Clone, Copy)]
 struct Price {
@@ -85,6 +86,9 @@ const TABLE: &[Row] = &[
         Some((272_000, p(0.20, 0.20, 0.20, 0.02, 0.75))),
     ),
     ("gpt-5.3-codex", p(1.75, 1.75, 1.75, 0.175, 14.0), None),
+    // DeepSeek standard/peak list rates (https://api-docs.deepseek.com/quick_start/pricing, 20 Nov 2026; off-peak 50% discount not modelled).
+    ("deepseek-flash", p(0.30, 0.30, 0.30, 0.006, 1.20), None),
+    ("deepseek-v4-pro", p(1.32, 1.32, 1.32, 0.044, 3.96), None),
 ];
 
 /// One request's tokens. `input` is uncached input only; reads and writes are the cached parts.
@@ -764,8 +768,16 @@ mod tests {
                 t.requests,
                 t.unpriced_requests
             ),
-            (4081, 136, 8576, 1, 1)
+            (4081, 136, 8576, 1, 0)
         );
+        let approx = |a: f64, b: f64| (a - b).abs() < 1e-9;
+        assert!(approx(t.cost_input, 4081.0 * 0.30 / 1e6));
+        assert!(approx(t.cost_cache_read, 8576.0 * 0.006 / 1e6));
+        assert!(approx(t.cost_output, 136.0 * 1.20 / 1e6));
+        assert!(approx(
+            t.api_price_usd,
+            (4081.0 * 0.30 + 8576.0 * 0.006 + 136.0 * 1.20) / 1e6
+        ));
         let user =
             br#"{"type":"user/message","time":1792964444792,"data":{"usage":{"inputTokens":1}}}"#;
         assert!(dsh_line(user, &mut FileState::default()).is_none());

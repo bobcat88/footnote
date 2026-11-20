@@ -85,7 +85,7 @@ enum StackWrite {
 
 #[derive(Subcommand)]
 enum Action {
-    /// Experimental encrypted personal-store setup and recovery; not yet used by the agent hooks.
+    /// Experimental encrypted personal-store setup, selection and recovery.
     #[cfg(all(feature = "encryption", windows))]
     Personal {
         #[command(subcommand)]

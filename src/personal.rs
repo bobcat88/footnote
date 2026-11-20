@@ -1,4 +1,4 @@
-//! Explicit experimental personal-store commands; never used by the live agent hooks.
+//! Experimental encrypted personal-store setup, selection and recovery commands.
 use anyhow::{Context, Result, bail};
 use clap::Subcommand;
 use footnote_memory::{personal_store, recovery};
@@ -122,7 +122,7 @@ pub fn run(action: &PersonalAction) -> Result<()> {
             drop(personal_store::create_new(store)?);
             println!(
                 "{}",
-                serde_json::json!({"created": true, "store": store, "next": "Save the recovery key with personal recovery-qr or recovery-text. This experimental store is not connected to agent hooks."})
+                serde_json::json!({"created": true, "store": store, "next": "Save the recovery key with personal recovery-qr or recovery-text, then run footnote personal use --store <folder> and footnote install --memory to use it with agents."})
             );
         }
         PersonalAction::RecoveryText { store } => {
@@ -159,7 +159,7 @@ pub fn run(action: &PersonalAction) -> Result<()> {
             personal_store::restore_new(store, backup, text.trim_end_matches(['\r', '\n']))?;
             println!(
                 "{}",
-                serde_json::json!({"restored": true, "store": store, "note": "This experimental store is not connected to agent hooks."})
+                serde_json::json!({"restored": true, "store": store, "note": "Run footnote personal use --store <folder> and footnote install --memory to connect agents to the restored store."})
             );
         }
         PersonalAction::Status { store } => {
