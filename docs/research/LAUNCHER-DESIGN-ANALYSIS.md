@@ -1,6 +1,6 @@
 # Launcher design: initial analysis (P1, M2 step 1)
 
-15 November 2026. Inputs for the design studio session with Johan; no visual decisions are taken here. Plan:
+15 November 2026. Initial design analysis inputs before locking `DESIGN.md`; no visual decisions are taken here. Plan:
 [P1-PLAN.md](../roadmap/P1-PLAN.md). Brand contract: [DESIGN.md](../../DESIGN.md).
 
 ## 1. What is already locked
@@ -29,7 +29,7 @@ Stack: a React web app (Tailwind v4 with `@theme` tokens, Base UI, Lucide icons)
 | Themes | Palettes as data compiled to CSS variables, plus contrast settings | The future light theme as a second palette, not a second stylesheet |
 
 Not taken: their fonts, colours, icons, assets or copy. We did not check which surfaces use which radius step, so the "rounded
-look" Johan likes should be judged on screenshots during the studio, not inferred from tokens.
+look" preference should be judged on screenshots during the design pass, not inferred from tokens.
 
 ## 3. Screens from the engine commands (M1)
 
@@ -48,11 +48,11 @@ Gaps found for the engine, before the window:
 3. **Progress for long steps:** model downloads and indexing need progress lines the window can follow.
 4. **Library:** corpus status (sources, freshness) for its card; later documentation ingestion (backlog item 14).
 
-## 4. Questions for the studio (Johan)
+## 4. Open questions settled for design
 
 **Answered 15 November:** (1) a compact tray panel plus the full window; (2) T3 Code's design language first, adjusted only where
-it does not suit Footnote; (3) the dot field in the **header only**, chosen on a demo
-([design/demos/launcher-dots.html](../../design/demos/launcher-dots.html): none, header only, everywhere, with the draw cost per frame); (4) dark only for now; (5) marks for every product and a rule for
+it does not suit Footnote; (3) the dot field in the **header only**;
+(4) dark only for now; (5) marks for every product and a rule for
 future members of the family, so the question is never asked again.
 
 
@@ -63,12 +63,12 @@ future members of the family, so the question is never asked again.
 4. **Light theme:** now, as a second palette, or later as DESIGN.md says.
 5. **Marks:** Library and Memory marks (concept A lenses) to settle in the same session as the icons.
 
-## 5. One design language for the whole family (Johan, 15 Nov)
+## 5. One design language for the whole family (15 Nov)
 
 The launcher's language is the family's, not the launcher's: the coming Footnote Code graph visualizer (and later the project
 node map and the visual roadmap) must read as the same product. So the studio locks a shared system, not one screen:
 
-- **Shared tokens and components** in `design/` (colours, type, radius scale, insets, glass, motion curves, link chips), used by
+- **Shared tokens and components** (colours, type, radius scale, insets, glass, motion curves, link chips), used by
   the launcher, the site and every later app; each app adds only what its content needs.
 - **Graph primitives decided once:** node (a card at the card radius, the product's lens mark for its kind), edge (hairline in
   the line colour, glow colour when it carries the current path), focus (the glass lens magnifies the selected node and its
@@ -88,5 +88,5 @@ The studio session therefore mocks one launcher screen and one graph view per di
 | Palette | Raycast-like: a command palette first, panels for each product; the fastest daily use |
 | Ledger | Activity first: a timeline of what memory did, filtered by product and project; visibility as the home screen |
 
-Next: the design studio run (references, four mocks, Johan picks and tunes, locked DESIGN.md section for the launcher), then
+Next: the design studio run (references, four mocks, locked DESIGN.md section for the launcher), then
 the engine gaps of section 3, then M3.

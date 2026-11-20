@@ -225,7 +225,7 @@ fn tools_list_returns_eight_tools_with_valid_input_schemas() {
 }
 
 #[test]
-fn tools_call_borg_stats_returns_a_successful_tool_result_on_an_indexed_db() {
+fn tools_call_footnote_stats_returns_a_successful_tool_result_on_an_indexed_db() {
     let t = tmp();
     let db = fixture(&t);
     let result = call(&db, "footnote_stats", json!({}));
@@ -309,7 +309,7 @@ fn unknown_tool_is_a_tool_error_not_a_protocol_error() {
     let out = session(
         &db,
         &[
-            json!({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"borg_nope","arguments":{}}}),
+            json!({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"footnote_nope","arguments":{}}}),
         ],
     );
     let rs = responses(&out);
@@ -330,7 +330,7 @@ fn malformed_json_is_a_parse_error_with_null_id() {
 }
 
 #[test]
-fn borg_propose_refuses_without_weakening_the_allowlist_contract() {
+fn footnote_propose_refuses_without_weakening_the_allowlist_contract() {
     let t = tmp();
     let db = fixture(&t);
     let result = call(
@@ -435,13 +435,4 @@ fn serve_without_the_mcp_flag_fails_with_a_clear_error() {
         .clone();
     let stderr = String::from_utf8(out).unwrap();
     assert!(stderr.contains("--mcp"), "stderr: {stderr}");
-}
-
-#[test]
-fn pre_rename_tool_names_still_work() {
-    let t = tmp();
-    let db = fixture(&t);
-    let result = call(&db, "borg_stats", json!({}));
-    assert!(result["isError"] != json!(true), "{result}");
-    assert!(text(&result).contains("chunks"));
 }

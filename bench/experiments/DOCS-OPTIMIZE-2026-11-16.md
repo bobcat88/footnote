@@ -96,7 +96,7 @@ than 5 % were all footer-only before (for example `nis.html` now opens with "Dep
 3.13"); React, FastAPI, Vite, Tailwind CSS, Pydantic and Svelte: 0 pages changed. The three earlier tries are kept as
 `G-try1..3` and `changes-try1..3.json`.
 
-D and F made concrete (added 16 November, 09:10, before measuring either; Johan gave the go the same morning to run the final
+D and F made concrete (added 16 November, 09:10, before measuring either; approved the same morning to run the final
 alone once D and F are settled):
 - **D, measured:** the B2 development databases searched hybrid, `--limit 5`, with `--per-source 1` against no per-file cap
   (today's product default; the metric already counts each page once, so a repeated page wastes a slot). **Keep D** by the
@@ -120,7 +120,7 @@ seven builds took 771 s against 916 s for A (84 %; same machine, not certified i
 most the crawl itself (about 38 s against about 754 s of indexing on five libraries), so it is not worth building now. The
 lever left is document encoding on the GPU (test 3 of `BUILD-SPEED.md`, never run), kept only if vectors match the CPU.
 
-**Final run, how (written 16 November before it starts; Johan's go to run it alone, same morning):** kept changes A, B2, D,
+**Final run, how (written 16 November before it starts; approved to run alone, same morning):** kept changes A, B2, D,
 E, G (and the lean output, which does not change rankings). Sealed set `bench/datasets/docs-heldout3/dataset.yaml`, SHA-256
 checked before the run (aa54e211…). One binary for the Footnote side (`bench/work/dev/bin/final.exe`, from `feat/lean-output`).
 Sequential, on the idle machine, nothing else running:
@@ -171,7 +171,7 @@ final.
   hybrid, EmbeddingGemma), nDCG@5, paired bootstrap over 40 questions (10,000 resamples, seed 20261117). Equivalent: lower bound
   above −0.05; better: above 0. If at least equivalent, the crawler ships with the kept changes as defaults.
 - Reported, not judged: end-to-end time (crawl plus index) of both systems on the sealed libraries, index size.
-- **Competitor runs (Johan, 16 November):** candidates are A/B-tested against Footnote's own previous version only; Grounded
+- **Competitor runs (16 November):** candidates are A/B-tested against Footnote's own previous version only; Grounded
   Docs is run once, on the sealed set, after gains have accumulated, and not at all if no candidate is kept.
 
 ## Result E, adaptive concurrency (16 November, 06:03, `bench/work/dev/crawl-speed/`)

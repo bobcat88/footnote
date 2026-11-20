@@ -1,8 +1,6 @@
 # Documentation map
 
-The product README is [../README.md](../README.md). This folder holds the longer records. Some of them were written during the **pilot**, when the project was called
-BorgKnowledge and ranked with FTS5, AND-matching and RRF over one MiniLM model. They are kept because their evidence is still real, but their conclusions about
-ranking are superseded by the benchmark protocol in [`../bench/`](../bench/README.md).
+The product README is [../README.md](../README.md). This folder holds architecture, operations, roadmap, and design documents for Footnote.
 
 ## Current
 
@@ -10,20 +8,22 @@ ranking are superseded by the benchmark protocol in [`../bench/`](../bench/READM
 |---|---|
 | [`../bench/README.md`](../bench/README.md) | The benchmark protocol: datasets, splits, receipts, determinism, decision rules |
 | [`../bench/DECISION.md`](../bench/DECISION.md) | Decision rules written before the results, and every outcome: models, fusion, chunking, rerank, storage engine |
-| [`../bench/experiments/RESULTS.md`](../bench/experiments/RESULTS.md) | The 15 optimization experiments, the heldout confirmation, E12 reranker, E14 latency at scale |
-| [`OPERATIONS.md`](OPERATIONS.md) | Limits, privacy, recovery, the audit log (scan bounds and hybrid limits updated) |
-| [`roadmap/BACKLOG.md`](roadmap/BACKLOG.md) | What is running, waiting for a decision, planned, or only an idea |
+| [`../bench/experiments/RESULTS.md`](../bench/experiments/RESULTS.md) | The 15 optimization experiments, heldout confirmation, E12 reranker, E14 latency at scale |
+| [`../bench/INDEX.md`](../bench/INDEX.md) | Index of benchmark reports with statuses and line links |
+| [`ARCHITECTURE.md`](ARCHITECTURE.md) | Engine schema, layers, and safety boundaries |
+| [`OPERATIONS.md`](OPERATIONS.md) | Limits, privacy, recovery, and the audit log |
+| [`DEFINITION-OF-DONE.md`](DEFINITION-OF-DONE.md) | Completion checklist for PRs and stories |
+| [`security/AUDIT-2026-11-18.md`](security/AUDIT-2026-11-18.md) | Internal security audit findings and fixes |
+| [`roadmap/BACKLOG.md`](roadmap/BACKLOG.md) | Planned features and open research tracks |
+| [`roadmap/EPICS.md`](roadmap/EPICS.md) | Epic structure matching GitHub Issues |
+| [`roadmap/EDITIONS.md`](roadmap/EDITIONS.md) | Footnote One (Apache-2.0) vs Enterprise boundaries |
 
-## Pilot-era records (historical)
+## Design & Research
 
-| Document | Status |
+| Document | Topic |
 |---|---|
-| [`PILOT.md`](PILOT.md) | The pilot README. Names and commands are the old ones |
-| [`ARCHITECTURE.md`](ARCHITECTURE.md) | Schema and boundaries still apply; the ranking sections describe FTS5 and RRF |
-| [`HYBRID.md`](HYBRID.md), [`VERIFICATION.md`](VERIFICATION.md) | Pilot acceptance evidence for the first hybrid implementation (MiniLM, E5, RRF) |
-| [`QDRANT-QUALITY.md`](QDRANT-QUALITY.md), [`SERVER-BENCHMARK.md`](SERVER-BENCHMARK.md) | The Qdrant comparison. Superseded for storage by the bake-off in `bench/DECISION.md`: SQLite, Tantivy and an exact in-memory scan |
-| [`TECHNICAL-QUALITY.md`](TECHNICAL-QUALITY.md), [`KNOWLEDGE-RUNTIME.md`](KNOWLEDGE-RUNTIME.md) | Pilot harness and an opt-in personal runtime |
-| [`benchmarks/`](benchmarks/), [`research/`](research/), [`roadmap/`](roadmap/), [`migration/`](migration/) | Pilot experiments, literature notes and plans |
-
-Pilot documents contain local absolute paths from the machine they were produced on, and use the old executable and tool names (`borg-knowledge`, `borg_*`).
-The `borg_*` tool names still work as aliases in the current server.
+| [`AGENT-MEMORY-DESIGN.md`](AGENT-MEMORY-DESIGN.md) | Agent memory design and hook protocol |
+| [`CODE-GRAPH-DESIGN.md`](CODE-GRAPH-DESIGN.md) | Code graph design, two-tier indexing, and architecture map |
+| [`FEDERATION-DESIGN.md`](FEDERATION-DESIGN.md) | Federated multi-index enterprise design |
+| [`research/`](research/) | Technical studies (code graph, docs crawler, embeddings, remote access, token economy) |
+| [`adr/`](adr/) | Architecture Decision Records |

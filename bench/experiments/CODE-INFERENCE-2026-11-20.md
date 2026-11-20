@@ -32,7 +32,7 @@ hono and zustand gain none.
 
 Why the gain is small: a recall run of the remaining misses (httpx sample) is mostly property reads on `self.x` / `url.host`
 (not calls, counted in the compiler's references) and values whose type comes from a parameter without annotation, a loop or an
-external library; none of those can be inferred locally without guessing. What this does not show: Java, Rust, BorgInvestor and
+external library; none of those can be inferred locally without guessing. What this does not show: Java, Rust, private-ts-1 and
 Spring are not rescored (not touched); inference through generics, unions and `Optional` narrowing is still left unresolved.
 
 Tests: `a_local_takes_the_declared_return_type_of_the_one_function_it_calls` (return type, inheritance through the declared

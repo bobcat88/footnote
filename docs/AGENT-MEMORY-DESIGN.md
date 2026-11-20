@@ -45,7 +45,7 @@ How changes are handled differs:
 |---|---|---|
 | Session end / Stop | ICM, claude-mem | Yes: one extraction per session, cheap |
 | Before compaction | ICM | Yes: this is the last chance before the transcript is cut |
-| Every N user turns | (requested by Johan) | Yes, as a safety net for long sessions: N around 15 to 20 user turns |
+| Every N user turns | (maintainer requirement) | Yes, as a safety net for long sessions: N around 15 to 20 user turns |
 | After every tool call | ICM (opt-in), claude-mem | No: ICM turned it off for Codex after ~14,000 events a day flooded the store (ICM issue #288) |
 | Explicit "remember this" | everyone | Yes, immediate |
 
@@ -98,20 +98,20 @@ Add-only with supersede links, as in mem0's newest pipeline and Zep: nothing is 
 4. Our own extraction check on real sessions (does it keep the preferences, fixes and dates a human would?).
 5. Time from write to searchable, and the cost of the extraction call per session.
 
-## 7. Decisions (Johan, 14 November 2026)
+## 7. Decisions (14 November 2026)
 
-1. **Extraction model: the user's own LLM.** Built-in route: the Claude Code CLI, the one Johan uses; no other provider is maintained by us (one-person team). Any other provider goes through one generic route configured with an endpoint, a model and an API-key variable (OpenAI-compatible API, which also covers local servers such as Ollama or LM Studio). ~~A local keyword extractor is the fallback when no LLM is configured.~~ Removed 14 November 2026: memory is for agents and by agents, so it is written by an LLM or not at all. Measured before removal, the keyword fallback found the answer's session in the top 5 for 0.50 of LongMemEval questions, against 0.98 when sessions are kept whole (`bench/experiments/MEMORY-BASELINE.md`). When the LLM is missing or fails, the conversation stays pending and is retried.
+1. **Extraction model: the user's own LLM.** Built-in route: the user's existing coding agent CLI; no separate hosted provider is maintained by Footnote. Any other provider goes through one generic route configured with an endpoint, a model and an API-key variable (OpenAI-compatible API, which also covers local servers such as Ollama or LM Studio). ~~A local keyword extractor is the fallback when no LLM is configured.~~ Removed 14 November 2026: memory is for agents and by agents, so it is written by an LLM or not at all. Measured before removal, the keyword fallback found the answer's session in the top 5 for 0.50 of LongMemEval questions, against 0.98 when sessions are kept whole (`bench/experiments/MEMORY-BASELINE.md`). When the LLM is missing or fails, the conversation stays pending and is retried.
 2. **Scope: preferences global, everything else per project.** What always applies is kept apart from what is project-specific. Exceptions stay explicit in the memory text ("usually prefers X; in Y cases prefers Z") instead of overwriting the general preference.
 3. **Who may write: the extraction hook and explicit requests only.** Never automatic writes from tool output. A user command forces an extraction at the current point of the session.
 4. **Sensitive projects.** A project can be marked sensitive. Its project memories are then never extracted through a non-local LLM. Global preferences may still be extracted. Project memories in a sensitive project come only from a local LLM route.
 
-5. **Global preferences from agents wait for the user's review (Johan, 19 November 2026, #207).** A global preference saved over MCP is stored as `pending`: no recall, pack or search returns it, and what it supersedes stays live, until the user approves it (`footnote memory-restore <id>`) or rejects it (`footnote forget <id>`). `footnote memory-review` lists the pending ones first, and from 5 pending the session start asks the agent to tell the user. Project memories, global facts and fixes, and anything written at the command line are live at once. There is no exemption for the hook's own save request, because an injected agent can answer that request too.
+5. **Global preferences from agents wait for the user's review (19 November 2026, #207).** A global preference saved over MCP is stored as `pending`: no recall, pack or search returns it, and what it supersedes stays live, until the user approves it (`footnote memory-restore <id>`) or rejects it (`footnote forget <id>`). `footnote memory-review` lists the pending ones first, and from 5 pending the session start asks the agent to tell the user. Project memories, global facts and fixes, and anything written at the command line are live at once. There is no exemption for the hook's own save request, because an injected agent can answer that request too.
 
    *Why, for the product presentation:* a global preference is recalled into every later prompt, in every project, by every agent. Some grant permissions ("may run benchmarks without asking"). An agent that read a hostile page or README could otherwise turn one prompt injection into a standing rule that steers all future work (security audit of 18 November 2026, `docs/security/AUDIT-2026-11-18.md`). The cost is small: about 3 to 5 global preferences a day in the first week (64 global memories out of 297, 45 of them preferences), a minute of review, against the one memory kind whose forgery would do the most harm.
 
 After agent memory: index build time (section "Where Footnote loses" in `bench/experiments/FINAL-RANKING.md`).
 
-## 7b. One layer: the agent writes its own memories (Johan, 14 November 2026)
+## 7b. One layer: the agent writes its own memories (14 November 2026)
 
 Supersedes decisions 1 and 4 above. Footnote Memory is for agents and by agents: the agent people already use is the LLM that writes the memories, with `footnote_remember`, in its own context. No second model reads the conversation again.
 
@@ -155,7 +155,7 @@ Per tool, the hook reads the conversation from:
 
 Settings are in `%LOCALAPPDATA%/footnote/memory.json`.
 
-**Installed on Johan's machine, 14 November 2026.** Binary `%LOCALAPPDATA%/Programs/footnote/footnote.exe`, a release build kept apart from `target/release`, which the benchmark receipts use. Checked:
+**Installed local binary (14 November 2026).** Binary `%LOCALAPPDATA%/Programs/footnote/footnote.exe`, a release build kept apart from `target/release`, which the benchmark receipts use. Checked:
 - the hook command runs under bash and PowerShell;
 - Codex and Grok list the server;
 - the server exposes `footnote_remember` and `footnote_forget`.

@@ -45,7 +45,7 @@ On screen the canvas ran at the display rate (about 120 callbacks/s in headless;
 
 ## Design critique at 1920x1080 and 390 px
 
-I reviewed the screenshots myself; the independent critic agent was not run (flag for Johan). Findings: desktop matches the original apart from the font source; the hero lens overlapped the hint text on mobile (fixed); full-page captures show blocks blank until scrolled because the original reveal-on-scroll is kept (skipped under reduced motion). The background choice and the prototypes were not touched.
+I reviewed the screenshots myself; the independent critic agent was not run (pending independent critic pass). Findings: desktop matches the original apart from the font source; the hero lens overlapped the hint text on mobile (fixed); full-page captures show blocks blank until scrolled because the original reveal-on-scroll is kept (skipped under reduced motion). The background choice and the prototypes were not touched.
 
 ## Not verified
 

@@ -10,7 +10,7 @@ definitions in the same file with the same owner and kind are linked to the firs
 rules. Java and Rust are unchanged (their overloads are different functions, still abstained). No new flag, no new tier name: the
 links keep their rule names.
 
-Method: same fixtures, truth and scorer as `CODE-TIERS-2026-11-19.md` (`D:\Projets\_third-party-review\_codescore`, scip-python and
+Method: same fixtures, truth and scorer as `CODE-TIERS-2026-11-19.md` (`<local-codescore-dir>`, scip-python and
 scip-typescript graphs built by the same binary, parser-only run with `FOOTNOTE_CODE_RULES` and `FOOTNOTE_CODE_GUESSES=1`,
 `score_tiers.py`). The "before" row is a fresh run of the unchanged build (it matches the 19 November table, except two small
 drifts: TypeScript default 7745 links against 7743, nest 3575 against 3573, from the compiler graph being rebuilt).
@@ -34,7 +34,7 @@ by 0.001 to 0.002 each gain 13 correct links and 12 uncorroborated ones (the com
 within noise, not improved. Java and Rust were not rescored: the change does not touch them.
 
 What this does not show: only the file of the target is scored (same unit as before), so linking an overload to its first signature
-instead of its implementation is not distinguished. Rust projects, BorgInvestor and Spring are not rescored (not part of these
+instead of its implementation is not distinguished. Rust projects, private-ts-1 and Spring are not rescored (not part of these
 fixtures). Unknown-type receivers (the largest bucket) are untouched.
 
 Test: `overloaded_definitions_in_one_file_are_one_symbol` (tests/code.rs). Also in this change: the `tests/code.rs` helper clears

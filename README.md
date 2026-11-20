@@ -163,7 +163,7 @@ For any other MCP host, add this entry to its MCP settings:
 | Hermes | add the same command and args under `mcp_servers:` in `config.yaml` |
 | Cursor, Windsurf, Zed, VS Code, Cline | paste the JSON entry above into the host's MCP settings |
 
-`install` never overwrites an existing entry and keeps a backup of every file it edits. An entry named `borg` from before the rename still points at the old executable; delete it.
+`install` never overwrites an existing entry and keeps a backup of every file it edits.
 
 ### Tools the agent sees
 
@@ -178,8 +178,6 @@ For any other MCP host, add this entry to its MCP settings:
 | `footnote_propose` | **Refused over MCP.** Writes need an explicit CLI command from you |
 | `footnote_remember`, `footnote_forget` | Agent memory only: add or retire a memory in the memory database. Refused on a document corpus |
 | `footnote_code` | Code: a symbol's signature, place, callers and callees, from the compiler's index of the project |
-
-The previous `borg_*` tool names keep working as aliases.
 
 ### Agent memory
 

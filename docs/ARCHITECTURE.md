@@ -57,7 +57,7 @@ Proposal insertion/deduplication and validation/history insertion are transactio
 
 Both pinned multilingual candidates (E5-small and MiniLM) improved macro recall@5 on the fixed synthetic holdout, with fresh-process p50 near one second and no abstention on missing answers. The benchmark retained raw outputs and checked citation metadata/hashes against the source/corpus snapshot. MiniLM had better early-result ordering in this small run; no universal model selection or rollout is justified. Document compatibility, source authority and withdrawn advice are not inferred from similarity.
 
-The existing vault has a `borg_vault` Qdrant collection configured for 2,816-dimensional cosine vectors. Its model identity, current index coverage and runtime health were not established; its storage was inspected earlier only for collection/config metadata, never modified or opened read-write. Do not generate arbitrary vectors with the same dimension or claim interoperability. New isolated Qdrant-client local exact stores used the same 384-dimensional vectors/corpus and matched ordered top5 on all 32 queries/model; this is not a Qdrant server/HNSW/concurrency or storage-engine superiority claim. Reranking, calibrated answerability and global integration remain unimplemented.
+The pilot benchmark also tested isolated local vector stores with 384-dimensional embeddings against SQLite JSON arrays and matched ordered top5 across 32 queries per model. Reranking, calibrated answerability, and multi-store federation remain separate design tracks.
 
 ## Public references
 

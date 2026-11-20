@@ -1,6 +1,6 @@
 # Memory recall by meaning on each prompt: relevance cutoff
 
-Written 15 November 2026, before any measurement. Beads `bk-gsh`.
+Written 15 November 2026, before any measurement.
 
 ## Why
 
@@ -21,7 +21,7 @@ by id hash: half to choose the cutoff (dev), half to judge it (held-out).
 - **Cutoff, chosen on dev:** the lowest top-hit hybrid score such that at most 20 % of negatives inject anything.
 - **Pass, on held-out:** hybrid with the cutoff beats keyword recall (today's hook) on any@3 for positives, paired bootstrap 95 %
   interval above zero, while injecting on at most 25 % of negatives (keyword's own rate is reported next to it).
-- **Then:** `"resident": true` in Johan's `memory.json`, and the cutoff becomes the default of `memory-recall --resident`. If it fails,
+- **Then:** `"resident": true` in the user's `memory.json`, and the cutoff becomes the default of `memory-recall --resident`. If it fails,
   resident stays off and keyword recall stays.
 - Reported, not judged: hook latency with the daemon warm and cold, daemon RAM.
 

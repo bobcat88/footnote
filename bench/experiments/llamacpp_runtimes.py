@@ -24,7 +24,7 @@ REPO = Path(__file__).resolve().parents[2]
 OUT = REPO / "bench/work/overnight/llamacpp-runtimes.json"
 GGUF = REPO / "artifacts/gguf/v5-nano-retrieval-Q8_0.gguf"
 RUNTIMES = {
-    "b11901-vulkan": Path("D:/Projets/Qwythos/runtime/b11901/llama-server.exe"),
+    "b11901-vulkan": Path(os.environ.get("FOOTNOTE_LLAMA_SERVER", "llama-server")),
     "b12421-vulkan": REPO / "bench/work/runtimes/b12421-vulkan/llama-server.exe",
     "b12421-rocm": REPO / "bench/work/runtimes/b12421-rocm/llama-server.exe",
 }

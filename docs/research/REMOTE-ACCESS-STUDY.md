@@ -2,7 +2,7 @@
 
 16 November 2026. Read from T3 Code's own documentation ([pingdotgg/t3code](https://github.com/pingdotgg/t3code), MIT):
 `docs/user/remote-access.md`, `docs/internals/remote.md`, `t3-connect.md`, `environment-auth.md`, `connection-runtime.md` and
-`infra/relay/README.md`. Johan uses it daily from his phone and finds it reliable.
+`infra/relay/README.md`. Tested daily over remote mobile clients with reliable session persistence.
 
 ## How it works
 

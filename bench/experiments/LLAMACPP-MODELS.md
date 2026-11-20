@@ -24,14 +24,14 @@ poorly (`GPU-ENCODING.md`). The question: does llama.cpp make a stronger model a
 ## Setup, frozen
 
 - **Runtime:** llama.cpp upstream build 11901 (commit 5320c87ff, Windows x64, Vulkan), run as `llama-server --embedding`, read-only from
-  `D:/Projets/Qwythos/runtime/b11901`. Queries on the CPU (`-ngl 0`). Documents once on the CPU and once on the GPU (`-ngl 99`, Radeon RX 6800).
+  `<local-llamacpp-runtime>`. Queries on the CPU (`-ngl 0`). Documents once on the CPU and once on the GPU (`-ngl 99`, Radeon RX 6800).
 - **Candidates**, each alone in the shipped hybrid (the M2 configuration: BM25 shortlist, z-score fusion, alpha 0.55, whole documents):
   - **C1** EmbeddingGemma-300m, `ggml-org/embeddinggemma-300M-GGUF`, Q8_0; prefixes `task: search result | query: ` and `title: none | text: `.
   - **C2** Qwen3-Embedding-0.6B, `Qwen/Qwen3-Embedding-0.6B-GGUF`, Q8_0; query prefix
     `Instruct: Given a web search query, retrieve relevant passages that answer the query\nQuery: `, none for documents.
   - **C3** bge-m3, `ggml-org/bge-m3-Q8_0-GGUF`, Q8_0, no prefixes.
   - **C4** EmbeddingGemma 2 (September 2026, Apache 2.0, text part only: 270M), `ggml-org/embeddinggemma-2-GGUF`, Q8_0 (310 MB); prefixes
-    `task: search result | query: ` and `title: none | text: `. Added the same day, before any result, after Johan pointed to it. Its card
+    `task: search result | query: ` and `title: none | text: `. Added the same day, before any result, after review pointed to it. Its card
     warns that float16 gives NaN or degraded vectors: GPU vectors are checked for that under condition 5.
   - **C5** EmbeddingGemma 2 in ONNX (`onnx-community/embeddinggemma-2-ONNX`, text model), on ONNX Runtime like the shipped pair, so it
     would need no llama.cpp: int8 (`model_quantized`, 314 MB) and fp32 (`model`, 1.08 GB). Same prefixes as C4.
@@ -56,7 +56,7 @@ Qwen3-Embedding-0.6B stands in: same size class, the slowest kind of candidate. 
 
 ## Amendment (14 November, while stage A runs, before any result was read)
 
-Johan: for now Footnote is for personal use and the embedding model is a measure of ingestion speed and quality; for paying clients a
+Scope note: for now Footnote is for personal use and the embedding model is a measure of ingestion speed and quality; for paying clients a
 free model or a commercial licence from the best model's vendor are both possible, and the real size limit is what the GPU can run.
 So:
 - **Licence** is reported, no longer a filter. Added: **C7** Jina v5 text nano retrieval and **C8** Jina v5 text small retrieval
@@ -110,7 +110,7 @@ lab now feeds zero-length tensors for those, and C5 then matches C4 (cosine 0.99
 
 **Gate:** every candidate gains at least +0.01 on one of the two corpora, so all pass stage A. Same model, two runtimes: llama.cpp
 encoded EmbeddingGemma 2 about twice as fast as ONNX Runtime on this CPU (319 s against 648–742 s), with the same scores.
-Johan chose to run stage A2 (the amendment's candidates) first, then stage B on the best of both.
+Decision: run stage A2 (the amendment's candidates) first, then stage B on the best of both.
 
 ## Stage A2 results (14 November)
 
@@ -175,7 +175,7 @@ needs the held-out confirmation like every other number here.
 
 Survivors for conditions 2 to 5: French/mixed C9, C1, C8, C7, C2; English C9, C1.
 
-**Scope cut (15 November, Johan's decision, before any held-out result):** C9 (Qwen3-Embedding-4B, GPU) leaves stage B: its dev lead
+**Scope cut (15 November, before any held-out result):** C9 (Qwen3-Embedding-4B, GPU) leaves stage B: its dev lead
 over C1 does not justify about 5 times the indexing time for now. It stays on record as the quality option for a company corpus built
 once (see `docs/research/EMBEDDING-LEADERBOARDS.md`). C2 (Qwen3-Embedding-0.6B) leaves too: on mix-fr-en it gains less than half of C1
 (+0.029 against +0.066) and indexes about 3 times slower. Conditions 2 to 5 continue on French/mixed C1, C8, C7 and English C1.

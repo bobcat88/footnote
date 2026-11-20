@@ -1949,7 +1949,7 @@ pub(crate) fn candidates(root: &Path) -> Vec<String> {
         .into_iter()
         .filter_entry(|e| {
             let name = e.file_name().to_string_lossy();
-            // Dot folders too: build copies like `.next-qloop-heavy` held most of a 43 MB copy of BorgInvestor (#246).
+            // Dot folders too: build copies like `.next-qloop-heavy` held most of a 43 MB copy of a Next.js repo (#246).
             !(e.file_type().is_dir()
                 && e.depth() > 0
                 && (name.starts_with('.') || SKIP.contains(&name.as_ref())))

@@ -1,6 +1,6 @@
 # Federated knowledge: many small indexes, owned by the teams that know them
 
-14 November 2026. Status: **validated in the lab on 14 November 2026 (section 6, results): viable if the router shares keyword statistics across indexes. Not built yet.** Decision owner: Johan.
+14 November 2026. Status: **validated in the lab on 14 November 2026 (section 6, results): viable if the router shares keyword statistics across indexes. Not built yet.** Decision owner: maintainer.
 
 ## 1. The question
 
@@ -45,7 +45,7 @@ This design follows that: **each team owns its index, and knowledge is promoted 
 ```
 
 - A memory stays private in its person's `memory.db` until that person proposes it.
-- A proposal lands in the team's index as a draft record; a team member validates it with its evidence (the decision, the runbook, the commit). Footnote already has this lifecycle for structured records: `proposal`, `validated`, `superseded`, with pinned evidence hashes (`crates/search/src/records.rs`; Beads `bk-doj` continues it).
+- A proposal lands in the team's index as a draft record; a team member validates it with its evidence (the decision, the runbook, the commit). Footnote already has this lifecycle for structured records: `proposal`, `validated`, `superseded`, with pinned evidence hashes (`crates/search/src/records.rs`).
 - Once validated, it is a cited entry in the department's library. Superseding it later keeps the history, as memory corrections already do.
 - Each department is responsible for the quality of its own library: it decides what is promoted, and stale entries show as stale because their evidence changed.
 
@@ -53,7 +53,7 @@ This is where Library and Memory become one product: what agents learn in daily 
 
 ## 5b. Sensitivity compartments (far roadmap, enterprise grade)
 
-Separate indexes also make sensitivity a boundary between files instead of a filter inside one database (Johan, 14 November 2026). Sensitive knowledge (HR, health, legal, security) lives in its own indexes, each carrying a sensitivity level:
+Separate indexes also make sensitivity a boundary between files instead of a filter inside one database (design decision, 14 November 2026). Sensitive knowledge (HR, health, legal, security) lives in its own indexes, each carrying a sensitivity level:
 
 - **Stronger protection per compartment:** its own encryption key, its own storage location or machine, no extraction or answering through a non-local model, shorter retention if required.
 - **Simpler audit:** every index already has its own tamper-evident log, so "who read health data, and when" is that one log.
@@ -125,8 +125,8 @@ Nothing else is built until the test in section 6 has run.
 
 Commercial edition only ([roadmap/EDITIONS.md](roadmap/EDITIONS.md)); the free edition never shows a sign-in.
 
-Johan's company already signs people in through single sign-on (SSO), and its developers already give an agent the same rights as
-the person logged in, by passing that person's JWT. Footnote follows the same model; what it adds is how those rights live inside
+A company deploying SSO already signs people in through its identity provider, and developers give agents scoped access
+via session tokens. Footnote follows the same model; what it adds is how those rights live inside
 an agent session, and for how long.
 
 **Who sees what**

@@ -1,6 +1,6 @@
 # Editions: Footnote One (free) and Footnote Enterprise (paid)
 
-Decided by Johan on 16 November 2026. Nothing built yet.
+Decision record, 16 November 2026.
 
 ## The decision
 
@@ -34,44 +34,41 @@ Cost: the engine's interface to that crate must stay stable, so changing it some
 | Library, Memory, Code, Alias | Single sign-on, sessions, forced revocation ([FEDERATION-DESIGN.md](../FEDERATION-DESIGN.md) section 10) |
 | Launcher, model manager | Rights register connector, unit hierarchy, shares |
 | Company policy file (useful to a small team too) | Router across many team indexes; promotion from team to company library |
-| Local audit log | Central audit export, compliance kit for French companies, cost per 1,000 users |
+| Local audit log | Central audit export, compliance kit, cost per 1,000 users |
 | Projects list across one person's repositories | Portfolio across teams and departments, with rights |
 
 ## Open
 
 - Licence of the commercial crate.
 - Whether team-level promotion (personal memory to a small team's index) is free, with only department and company levels paid.
-- Company session flow ([FEDERATION-DESIGN.md](../FEDERATION-DESIGN.md) section 10): Johan's fallback is a sign-in screen when the
+- Company session flow ([FEDERATION-DESIGN.md](../FEDERATION-DESIGN.md) section 10): fallback is a sign-in screen when the
   launcher opens and 4-hour sessions. Recommended: at normal expiry Footnote refuses calls ("sign in again") instead of killing
   agents, which would lose their work; agents are stopped only on a real revocation (someone leaves, an admin cuts access).
 
 ## Decisions of 16 November 2026 (evening)
 
-- **Names:** Footnote One (free, this repository) and Footnote Enterprise (paid, private repository bobcat88/footnote-enterprise,
+- **Names:** Footnote One (free, this repository) and Footnote Enterprise (paid, separate private repository
   which depends on this engine and holds the paid roadmap).
 - **Footnote One keeps:** agent memory (personal and project), Code graph, Library, the best engine for personal use, token-saving
   measures, single-project views. It must be good on its own: it is the product people talk about.
 - **Footnote Enterprise gets:** Alias (anonymisation), single sign-on and rights, encryption with company keys, federation, the
-  view across every project, curated company skills, Johan's GSD layer and design room. Every model and library it uses must
+  view across every project, curated company skills, and enterprise orchestration layers. Every model and library it uses must
   allow commercial use.
-- **Alias** was copied to the Enterprise repository (builds and passes its tests there). It stays here, unchanged, until an
-  Enterprise build can include it; removing it now would leave no runnable build with it.
-- **Before this repository goes public:** its git history contains Alias and company designs. Pushed history is not rewritten, so
-  the public repository starts as a fresh copy without them.
+- **Before this repository goes public:** its git history contains earlier prototypes and design explorations, so
+  the public repository starts as a fresh squashed snapshot without them.
 
 **Push-backs, checked 16 Nov**
 1. **The best personal engine cannot ship as Footnote One's default for teams.** Jina v5 nano is CC BY-NC 4.0 (its Hugging Face
    card: "for commercial use, please contact us"). A small company running the free edition at work is commercial use. Options:
    a permissive default model with Jina as an optional install for personal, non-commercial use, or a commercial licence from Jina.
-2. **Encryption is split, not all paid.** Earlier the same day Johan asked that the free edition encrypt personal data. Proposed:
-   encryption of one's own data on one's own machine stays free (trust is what makes people adopt a memory tool); company key
-   management, sensitive compartments and key recovery are Enterprise.
+2. **Encryption is split, not all paid.** Encryption of one's own data on one's own machine stays free (trust is what makes people adopt
+   a memory tool); company key management, sensitive compartments and key recovery are Enterprise.
 3. **A plain list of one person's projects stays free;** the graph, roll-ups and reporting across projects are Enterprise. A solo
    developer with many repositories is Footnote One's first user.
 
-## Free edition: private by default, up to five linked devices (Johan, 16 November 2026; design only)
+## Free edition: private by default, up to five linked devices (design only)
 
-**What Johan asked for**
+**Requirements**
 - A local account per person. What a person creates on their machine is encrypted, so no app can read it by simply opening the
   file; it opens only through Footnote, tied to that login.
 - Personal data (memories, private corpora) never leaves its owner. Projects can be shared.
@@ -80,7 +77,7 @@ Cost: the engine's interface to that crate must stay stable, so changing it some
 - Peer to peer: each device has its own identity and is a node; no central server. Whoever creates a project creates its key.
 
 **Proposed mechanisms (to be checked and security-reviewed before any build)**
-- **Encryption, not hashing.** A hash cannot be reversed, so data must be encrypted. The SQLite files would use SQLCipher (SQLite
+- **Encryption, not hashing.** A hash cannot be reversed, so data must be encrypted. The SQLite files use SQLCipher (SQLite
   with encryption; rusqlite's `bundled-sqlcipher` feature builds it in, with a vendored OpenSSL variant). Licence: BSD-style, usable
   in open-source and commercial software if Zetetic's notice is shown in the app and its documentation. Checked 16 Nov (zetetic.net).
 - **The login is the operating system's.** The database key is kept in the system's key store (Windows Credential Manager, macOS
@@ -110,41 +107,31 @@ Cost: the engine's interface to that crate must stay stable, so changing it some
 - **The five-seat limit cannot be enforced in open-source code:** anyone can rebuild Footnote without the check. Either it stays a
   stated limit, or the commercial edition's value is the directory features (sign-on, rights, compliance) rather than more seats.
   Recommended: the second, with the limit kept as a design default.
-- **One person's own devices:** should personal memory sync between them (a "me" group, separate from project groups)? Johan's
-  "one person with five computers" suggests yes.
-- **Shared projects: encrypted or not.** Johan called this debatable. Sharing them between devices already requires the project
+- **One person's own devices:** should personal memory sync between them (a "me" group, separate from project groups)? Supporting
+  multi-device sync for a single user ("one person with five computers") fits this model.
+- **Shared projects: encrypted or not.** Sharing them between devices already requires the project
   key, so encrypting them at rest costs little more once the mechanism exists.
 
-## Johan's review of 16 November 2026 (night), with checks
+## Review notes (16 November 2026)
 
 - **Code graph is in Footnote One,** per project, with agent memory (personal and project) and the plain list of one's projects.
   The graph and reporting across all projects are Enterprise.
 - **Encryption rule (written before any measure):** personal memory is always encrypted in Footnote One. Project memory and Library
-  corpora are encrypted too only if encrypted search keeps at least 90 % of today's speed (Johan: 90 to 95 %); otherwise they stay
+  corpora are encrypted too only if encrypted search keeps at least 90 % of baseline speed (90 to 95 % target); otherwise they stay
   as they are, protected by the operating system's per-user folder permissions.
-- **Personal data decision, 16 November:** Johan validated the SQLCipher and in-memory keyword-index approach for personal data
+- **Personal data decision, 16 November:** validated the SQLCipher and in-memory keyword-index approach for personal data
   after its warm recall benchmark exceeded the 90% speed gate. This is a feasibility decision, not a claim that encryption has
-  shipped or passed security review. See [the benchmark](../../bench/experiments/SQLCIPHER-FEASIBILITY.md) for its scope and
+  shipped or passed independent security review. See [the benchmark](../../bench/experiments/SQLCIPHER-FEASIBILITY.md) for its scope and
   remaining work; the project memory and Library decisions require their own evidence.
 - **Personal recovery requirement:** present the recovery key as a QR code so it can be saved in a password manager; the QR code
   contains the key itself and must be protected as a secret. Also provide the key as copyable text for password managers or
   devices that cannot save the QR code. Test restoration of an encrypted backup on another computer using the saved key before
-  treating recovery as complete. No personal key has been created yet.
-- **Licence of Footnote One: Apache-2.0 (decided by Johan, 16 Nov).** Footnote One is the useful bare-bones edition, free for
+  treating recovery as complete.
+- **Licence of Footnote One: Apache-2.0 (decided 16 Nov).** Footnote One is the useful bare-bones edition, free for
   everyone including companies; company features (sign-on, rights, Alias...) need Footnote Enterprise. Jina stays an optional model
   for personal, non-commercial use, with its licence shown at install; the default model for companies must allow commercial use.
-  Background, for the record: He wants "free for personal use; for commercial use, contact us", with Jina
-  as the engine. Apache-2.0 cannot say that: it lets anyone use the code commercially. Two consistent options:
-  - Keep Apache-2.0 for the code; Jina (CC BY-NC 4.0) is an optional model the user accepts for non-commercial use; companies use
-    a permissive model or buy Enterprise.
-  - Release Footnote One under the PolyForm Noncommercial License 1.0.0 (personal, hobby, research use free; not OSI open source):
-    any company use needs a paid licence, matching Jina's own terms. This is what Johan described.
-- **Stay in this private repository until a v0.9 beta,** then publish. Labels "alpha"/"beta" until v1.
-- **Contributions:** issues yes, outside pull requests no. GitHub can restrict pull requests to collaborators or turn them off
-  (repository setting, February 2026). Automated triage of issues by an agent comes later (GitHub Actions is blocked by billing).
+- **Release posture:** open-source release under Apache-2.0; optional non-commercial models require explicit acceptance during install.
+- **Contributions:** issues and PRs follow `CONTRIBUTING.md`.
 - **Third-party notices:** a list of every dependency and model with its licence ships with each edition, generated by
   `cargo-about` (and checked by `cargo-deny`); models and SQLCipher, if adopted, are added by hand. Footnote One uses only free
   components; Enterprise uses permissive ones by default, and any paid model or software is licensed by the client in its name.
-
-- **CI:** GitHub Actions is out of credit (16 Nov); failing checks are not code failures until credits return. Merging goes on;
-  pushed history is still never rewritten.

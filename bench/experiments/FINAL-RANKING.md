@@ -32,7 +32,7 @@ Lexical scale, synthetic text, speed only: at 1M documents Tantivy p50 3.0 ms / 
 
 ## 4. Our own model: candidates
 
-[MODEL-CONFIRMATION.md](MODEL-CONFIRMATION.md), [MODEL-LATENCY.md](MODEL-LATENCY.md). Every candidate that qualified on dev also wins on heldout (French/mixed: EmbeddingGemma-300m in the hybrid +0.073 and +0.063; arctic-m-v2 +0.055 and +0.042; English: EmbeddingGemma +0.043 and +0.017). **None passes the cost limits written before the results** (model file at most 600 MB, query encoding p95 at most twice today's pair): EmbeddingGemma fp32 is 1.2 GB and about 3.6× slower; its int8 and q4 exports are smaller but even slower on this CPU. Adopting EmbeddingGemma is a product decision for Johan, not a rule outcome: +0.04 to +0.07 nDCG@10 for +10 to +25 ms per query and a 1.2 GB download, still faster than every competitor except ICM.
+[MODEL-CONFIRMATION.md](MODEL-CONFIRMATION.md), [MODEL-LATENCY.md](MODEL-LATENCY.md). Every candidate that qualified on dev also wins on heldout (French/mixed: EmbeddingGemma-300m in the hybrid +0.073 and +0.063; arctic-m-v2 +0.055 and +0.042; English: EmbeddingGemma +0.043 and +0.017). **None passes the cost limits written before the results** (model file at most 600 MB, query encoding p95 at most twice today's pair): EmbeddingGemma fp32 is 1.2 GB and about 3.6× slower; its int8 and q4 exports are smaller but even slower on this CPU. Adopting EmbeddingGemma is a product decision rather than a rule outcome: +0.04 to +0.07 nDCG@10 for +10 to +25 ms per query and a 1.2 GB download, still faster than every competitor except ICM.
 
 ## 5. Accelerators
 

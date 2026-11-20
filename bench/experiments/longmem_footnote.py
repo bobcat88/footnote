@@ -29,7 +29,7 @@ class IsolatedFootnote(engines.ShippedEnsemble):
     def _start(self):
         self.state.mkdir(parents=True, exist_ok=True)
         env = {k: v for k, v in os.environ.items() if k != 'FOOTNOTE_SCAN_LIMIT'}
-        env['BORG_STATE_DIR'] = str(self.state)
+        env['FOOTNOTE_STATE_DIR'] = str(self.state)
         self._proc = subprocess.Popen([str(engines.EXE), '--db', str(self.db), 'mcp'], stdin=subprocess.PIPE,
                                       stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True,
                                       encoding='utf-8', bufsize=1, env=env)

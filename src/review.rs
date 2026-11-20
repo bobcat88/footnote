@@ -117,9 +117,8 @@ mod tests {
     use super::*;
     #[test]
     fn overlap_reads_reworded_copies_as_one_and_different_facts_as_two() {
-        let a =
-            words("Johan wants branches pruned after their PR is merged, locally and on GitHub.");
-        let b = words("Johan wants branches pruned after their PR is merged locally and on GitHub");
+        let a = words("Prune branches after their PR is merged, locally and on GitHub.");
+        let b = words("Prune branches after their PR is merged locally and on GitHub");
         let c = words("The daemon falls back to serving in-process when the relay loses it.");
         assert!(overlap(&a, &b) >= SAME && overlap(&a, &c) < 0.2);
     }

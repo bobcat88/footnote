@@ -45,7 +45,7 @@ fn memories_are_scoped_deduplicated_superseded_and_forgotten() {
         &["remember"],
         Some(json!([
             mem(
-                "Johan wants relative % gaps in benchmark tables.",
+                "Always show relative % gaps in benchmark tables.",
                 "preference",
                 "global",
                 "2026-11-13"
@@ -63,9 +63,9 @@ fn memories_are_scoped_deduplicated_superseded_and_forgotten() {
                 "2026-11-14"
             ),
             mem(
-                "Arkea uses the internal mirror for every package install.",
+                "Northwind uses the internal mirror for every package install.",
                 "fact",
-                "arkea",
+                "northwind",
                 "2026-11-10"
             ),
         ])),
@@ -76,7 +76,7 @@ fn memories_are_scoped_deduplicated_superseded_and_forgotten() {
         &db,
         &["remember"],
         Some(json!([mem(
-            "Johan wants relative % gaps in benchmark tables.",
+            "Always show relative % gaps in benchmark tables.",
             "preference",
             "global",
             "2026-11-13"
@@ -87,9 +87,9 @@ fn memories_are_scoped_deduplicated_superseded_and_forgotten() {
     // Pack: the global preference first, this project's memories next, never another project's.
     let pack = run(&db, &["memory-pack", "--project", "footnote"], None);
     let p = texts(&pack);
-    assert_eq!(p[0], "Johan wants relative % gaps in benchmark tables.");
+    assert_eq!(p[0], "Always show relative % gaps in benchmark tables.");
     assert_eq!(p.len(), 3);
-    assert!(!p.iter().any(|x| x.contains("Arkea")));
+    assert!(!p.iter().any(|x| x.contains("Northwind")));
 
     // Recall is scoped the same way.
     let r = run(
@@ -102,18 +102,18 @@ fn memories_are_scoped_deduplicated_superseded_and_forgotten() {
         ],
         None,
     );
-    assert!(!texts(&r).iter().any(|x| x.contains("Arkea")));
+    assert!(!texts(&r).iter().any(|x| x.contains("Northwind")));
     let r = run(
         &db,
         &[
             "memory-recall",
             "package install mirror",
             "--project",
-            "arkea",
+            "northwind",
         ],
         None,
     );
-    assert!(texts(&r)[0].contains("Arkea"));
+    assert!(texts(&r)[0].contains("Northwind"));
 
     // Hits say they are agent memories, with kind, scope and date in the heading.
     let release = run(

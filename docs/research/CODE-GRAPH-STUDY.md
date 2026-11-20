@@ -1,6 +1,6 @@
 # Code graph study: plan
 
-Written 14 November 2026, before any hands-on run. Status: desk study allowed now; hands-on waits for Johan's go.
+Written 14 November 2026, before any hands-on run. Status: desk study approved; hands-on gated by explicit review.
 
 ## Why this study
 
@@ -46,12 +46,11 @@ For each of the six, from its code and docs, without running it:
 
 Output: one table and a short verdict per tool, in this folder.
 
-## Part 2: hands-on (after Johan's go)
+## Part 2: hands-on (gated)
 
 Each tool installed only after the usual review (real upstream, code read, no install hooks run), in an isolated environment.
 
-- **Repositories (three languages):** BorgKnowledge (Rust and Python), BorgInvestor (Python and TypeScript/JavaScript), GovernanceOS
-  (JavaScript and TypeScript).
+- **Repositories (three languages):** Footnote (Rust and Python) and representative TypeScript/JavaScript/Python projects.
 - **Accuracy:** references found per symbol against a compiler-grade oracle (rust-analyzer SCIP for Rust, scip-python, scip-typescript),
   as precision and recall, on 50 symbols per repository drawn at random before the run.
 - **Tokens:** the same ten questions per repository, asked through the same agent and model with one server at a time: tool-schema tokens

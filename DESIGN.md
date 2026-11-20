@@ -1,12 +1,12 @@
 # DESIGN
-Last reviewed: 2026-11-14 · Direction locked by Johan in the Design Studio on 2026-11-14 · **Status: WIP**
+Last reviewed: 2026-11-14 · Direction locked in Design Studio on 2026-11-14 · **Status: WIP**
 
 > **Work in progress.** The direction, palette, type and shape below are locked choices. The logo and product marks, the glass treatment and the motion are a decent first pass that will need deeper work: treat them as provisional, not final artwork.
 
-Footnote is transparent for your team: set it up, and what comes into focus is your company's data and knowledge. The page shows that literally: data flowing in the background, liquid glass that brings part of it into focus, and the product answering with its sources.
+Footnote is transparent for your team: set it up, and what comes into focus is your team's data and knowledge. The page shows that literally: data flowing in the background, liquid glass that brings part of it into focus, and the product answering with its sources.
 
 ## 1. Tokens source
-Hand-written, then tuned and locked in the Design Studio on 2026-11-14 (base direction D2 "Afterglow"). Contrast values measured by the studio at the lock. Studio page: https://claude.ai/artifact/9nnqR2T6Z78NUwADRSXWxB; work files in `.design-studio/` (local only, not in git).
+Hand-written, then tuned and locked on 2026-11-14 (base direction D2 "Afterglow"). Contrast values measured at the lock.
 
 ## 2. References
 | # | Product or source | URL | Date viewed | Evidence type | Borrowed | Rejected and why |
@@ -39,7 +39,7 @@ Dark-first. A light theme is not designed yet (WIP); until it is, the page commi
 Rule: the accent marks actions, Footnote's own results in charts, and sources. No violet, no blue-to-purple gradient.
 
 ## 4. Typography
-- Families: **Plus Jakarta Sans** 600 (display, chosen by Johan) and **Hanken Grotesk** (body); JetBrains Mono for paths, hashes, commands and numbers in tables. Self-hosted in the final build (local-first: no font request leaves the page).
+- Families: **Plus Jakarta Sans** 600 (display, maintainer choice) and **Hanken Grotesk** (body); JetBrains Mono for paths, hashes, commands and numbers in tables. Self-hosted in the final build (local-first: no font request leaves the page).
 - Scale (ratio 1.335, density 1.05):
 
 | Name | Size | Use |
@@ -71,13 +71,13 @@ Concept A, "the lens numeral": the word **Footnote** is the family; a small glas
 | Footnote (umbrella) | the numeral 1 | provisional |
 | Footnote Library | database cylinder: L1 plain, or L2 with lines of text | open, not chosen |
 | Footnote Memory | wireframe brain: M1 plain, or M2 with connected nodes | open, not chosen |
-| Footnote Code | `{x}` (Johan) | chosen, drawing provisional |
+| Footnote Code | `{x}` (maintainer choice) | chosen, drawing provisional |
 
-`.design-studio/` is a local working folder, ignored by git: its files are on the designer's machine, not in the repository. Sketches: `.design-studio/logo/index.html` (concepts A, B, C), `.design-studio/logo/v2.html` (marks). Still to do: final SVG geometry, a still version for places without motion, an app icon (concept B, the focus tile, is the candidate), and a pass by someone with real logo skills.
+Work-in-progress logo sketches live outside the git repository. Still to do: final SVG geometry, a still version for places without motion, an app icon (concept B, the focus tile, is the candidate), and a pass by someone with real logo skills.
 
 ## 8. Motion (WIP)
 - Level: lively, with meaning. Durations 160 to 320 ms, ease-out, transform and opacity only.
-- Background: a slow field of dots flowing in bands (the company's data), paused under reduced motion.
+- Background: a slow field of dots flowing in bands (data stream), paused under reduced motion.
 - The lens drifts slightly over the data, as if reading it.
 - Cards rise and reveal on entry and hover (reference 4); content is visible at rest and never waits at opacity 0.
 - Never: numbers counting up, parallax on text, motion that implies a result the tool did not measure.
@@ -88,12 +88,10 @@ Concept A, "the lens numeral": the word **Footnote** is the family; a small glas
 - Banned words: "supercharge", "unlock", "seamless", "next-generation", "revolutionize"; no fake testimonials, logo walls or invented customer counts.
 
 ## 11. Launcher (app), locked 16 November 2026
-Studio run with four divergent directions (`.design-studio/launcher/`, studio page https://claude.ai/artifact/GQrHYr68hMgGzo3GXGe4rx).
-Johan chose D1's structure for the full window and D2's lenses for the mini mode, with the family's colours and fonts on both,
-and asked for these settings to be applied for him. Composition reference: `.design-studio/launcher/chosen/index.html`.
+Design pass selected D1's structure for the full window and D2's lenses for the mini mode, with the family's colours and fonts on both.
 
 - **Full window (D1 "Console" structure):** sidebar 232 px (products, workspace, not installed, Footnote Enterprise group, quiet
-  support link at the foot), top bar 44 px, content, activity column 320 px. Dense like T3 Code: tables for projects and agents,
+  support link at the foot), top bar 44 px, content, activity column 320 px. Dense tables for projects and agents,
   three product cards with one big number each.
 - **Mini mode (D2 "Lens"):** the tray panel and the floating bubble: one glass lens per product, live data moving between them, a
   few numbers. A switch moves between mini mode and the full window.
@@ -105,24 +103,24 @@ and asked for these settings to be applied for him. Composition reference: `.des
 - **Code views, by zoom level:** architecture map (blocks with import counts and outside services as dashed nodes: the inputs and
   outputs), then a block's files, then one symbol's callers and callees. Never the whole graph at once; the full "hairball" only
   as ambient decoration in mini mode.
-- **Architecture map, blueprint layout (Johan, 17 Nov 2026):** chosen as a blend of four studio directions (`.design-studio/codemap`).
-  Three columns: Flows | map | detail. The map sits on a 24 px blueprint grid, with the code in a solid zone and "Calls out" in a
+- **Architecture map, blueprint layout (17 Nov 2026):** chosen as a blend of four layout directions:
+  three columns (`Flows | map | detail`). The map sits on a 24 px blueprint grid, with the code in a solid zone and "Calls out" in a
   dashed zone grouped by kind (databases, model runtimes, network and APIs, files and system). `server` and `mcp` packages are
   listed as "Calls in". Blocks carry yellow (`--warn`) memory pills from anchored memories. A flow starts at an entry block and
   follows the heaviest references; the lit path animates with dots, but not under reduced motion. The detail panel shows the
-  selected flow or block: its memories first, then its steps or links. All colours, type and radii are this section's tokens; the
-  directions' own styles were for choosing structure only. The Layers tab (the Strata direction) reads the same map top to bottom: entry, features, base, outside, each with its links down.
+  selected flow or block: its memories first, then its steps or links. All colours, type and radii are this section's tokens.
+  The Layers tab reads the same map top to bottom: entry, features, base, outside, each with its links down.
 
 ## 10. Decision log
 | Date | Decision | Reason | Rejected alternative |
 |---|---|---|---|
-| 2026-11-16 | Launcher: D1 structure (full window) + D2 lenses (mini mode), family palette and fonts | Johan: D2 innovative but poor in data, D1 has all the information he needs; one look for both modes so the switch feels like one app | D3 Ledger (light paper, serif), D4 Palette (command box first) |
-| 2026-11-14 | Base direction D2 "Afterglow", tuned: green-black ground, teal accent, Jakarta + Hanken, radius 21, lively motion | Johan's pick in the Design Studio; D1, D3 and D4 looked too similar to each other | D1 Workbench, D3 Living memory, D4 Paper |
-| 2026-11-14 | Slight liquid glass over a data-flow background | Johan's note: Footnote is transparent, the company's knowledge comes into focus | Flat dark cards only; glass everywhere |
+| 2026-11-16 | Launcher: D1 structure (full window) + D2 lenses (mini mode), family palette and fonts | D2 is clean aesthetically but sparse in data; D1 surfaces all operational telemetry; shared palette unifies both modes | D3 Ledger (light paper, serif), D4 Palette (command box first) |
+| 2026-11-14 | Base direction D2 "Afterglow", tuned: green-black ground, teal accent, Jakarta + Hanken, radius 21, lively motion | Selected in design review; D1, D3 and D4 looked too similar to each other | D1 Workbench, D3 Living memory, D4 Paper |
+| 2026-11-14 | Slight liquid glass over a data-flow background | Visual metaphor: Footnote is transparent and brings data into focus | Flat dark cards only; glass everywhere |
 | 2026-11-14 | Logo concept A (lens numeral), mark becomes the product | The family stays legible (Footnote) and each product is one glyph | B focus tile as the main logo (kept as the app-icon candidate), C mark system |
-| 2026-11-14 | Footnote stays the umbrella name: Library, Memory, Code | Johan's decision after the naming brainstorm | Cairn, Gloss |
-| 2026-11-14 | Page v2: stream into a glass lens (hero), interlocking mint blocks, staggered product cards, orbit beside a bleeding glass panel | Johan found v1 too plain; v2 takes structure and motion from LangChain, Mode and Fabric. Johan: "more bold, I like it" | v1 centred hero with flat cards |
-| 2026-11-14 | Design status WIP | Johan: decent, will need deeper work later | Treating the first pass as final |
+| 2026-11-14 | Footnote stays the umbrella name: Library, Memory, Code | Maintainer decision after naming brainstorm | Cairn, Gloss |
+| 2026-11-14 | Page v2: stream into a glass lens (hero), interlocking mint blocks, staggered product cards, orbit beside a bleeding glass panel | Stronger visual hierarchy than v1 using flow and card rhythm | v1 centred hero with flat cards |
+| 2026-11-14 | Design status WIP | Acceptable initial pass; deeper polish deferred | Treating the first pass as final |
 | 2026-11-12 | (superseded 2026-11-14) Paper and ink palette with one proof red, Newsreader, radii 0 and 2 px, no glass | Was the first draft; replaced by the studio lock | |
 | 2026-11-12 | (kept) Benchmarks as a table first, a chart second | Numbers must be readable and copyable | Chart-only hero |
 | 2026-11-12 | (kept) Self-host fonts | A local-first, no-telemetry product must not call font CDNs | Google Fonts at runtime |

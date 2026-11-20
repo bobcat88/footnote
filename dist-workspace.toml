@@ -10,7 +10,7 @@ ci = "github"
 # The installers to generate for each app
 installers = ["shell", "powershell"]
 # Target platforms to build apps for (Rust target-triple syntax)
-# Windows and Linux only for now (Johan, 15 Nov): the platforms he can test; macOS with the launcher.
+# Windows and Linux first; macOS release builds will follow with the launcher.
 targets = ["x86_64-pc-windows-msvc", "x86_64-unknown-linux-gnu"]
 # Path that installers should place binaries in
 install-path = "CARGO_HOME"

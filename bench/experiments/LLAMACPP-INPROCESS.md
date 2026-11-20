@@ -11,7 +11,7 @@ scheduling), and does calling llama.cpp directly from Rust, as Footnote would sh
 ## Setup, frozen
 
 - Model: Jina v5 text nano retrieval, Q8_0, the same pinned GGUF as test 5. Prompt `Query: ` + query.
-- Runtime: the same llama.cpp build b11901 DLLs (`D:/Projets/Qwythos/runtime/b11901`), CPU (`n_gpu_layers 0`), threads = half the
+- Runtime: the same llama.cpp build b11901 DLLs (`<local-llamacpp-runtime>`), CPU (`n_gpu_layers 0`), threads = half the
   logical CPUs, last-token pooling. No new build, no new dependency: Rust calls `llama.dll` through `LoadLibrary`.
 - Queries: the same 100 dev queries per corpus as test 5 (Alloprof, mix-fr-en), clipped to 500 bytes, 3 warm-up calls, one query at a
   time, on a quiet machine (no other benchmark running).
@@ -50,7 +50,7 @@ Runner `t6_inproc.py`, rows in `sweeps/t6_inproc.jsonl`. Milliseconds per query,
   pair per query, about 26 ms at p95.
 - An early smoke test on two very short queries gave 4 to 8 ms; real queries are longer, so that figure did not hold.
 
-## Product wiring (15 November, Johan's go to integrate; rule written before the product runs)
+## Product wiring (15 November, approved to integrate; rule written before the product runs)
 
 Footnote now loads GGUF models itself (`--features llama`, crate `llama-cpp-2` 0.1.161, which compiles its own llama.cpp; model
 directory `artifacts/models/jina-v5-nano` with `"runtime": "llama.cpp"`). Wiring check (`t6_product_check.py`): its vectors against
@@ -77,7 +77,7 @@ Held-out split, both engines as an agent uses them (one resident MCP session).
 - Reported, not counted: index build 707 s and 2,174 s for nano against 272 s and 920 s for the pair; database 107 and 103 MB
   against 42 and 40 MB (768-wide vectors).
 - **Latency and build times are not valid:** the machine was in use during the runs (nano p95 64.6 and 70.1 ms against ~26 ms in
-  test 6). They are re-measured only on an idle machine, on Johan's go.
+  test 6). They are re-measured only on an idle machine, on an explicit go.
 
 ## Product latency on an idle machine (15 November evening)
 

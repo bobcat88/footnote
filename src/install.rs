@@ -285,7 +285,7 @@ pub fn run(db: &Option<PathBuf>, dry_run: bool) -> Result<Value> {
         "entry": entry,
         "targets": report,
         "daemon": register_daemon(&db, dry_run),
-        "note": "each agent runs `footnote --db <DB> mcp`; the daemon, token and audit log are automatic. An entry named `borg` from before the rename still points at the old executable: delete it from the agent config",
+        "note": "each agent runs `footnote --db <DB> mcp`; the daemon, token and audit log are automatic",
     }))
 }
 

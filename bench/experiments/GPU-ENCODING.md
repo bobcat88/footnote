@@ -20,7 +20,7 @@ Fixed 512-token padding (one input shape per batch size) did not help: bekko-a8m
 - **Quantized models change their results on DirectML.** Our shipped pair includes int8 `gte-small`; building an index on the GPU would produce different vectors than the CPU path. That alone rules it out for the product as shipped.
 - **Q3-2 fails as pre-registered**: the reranker needs at most 100 ms per query; it takes about 1.35 s on either device.
 
-## OpenVINO on the CPU (bk-1tc.3)
+## OpenVINO on the CPU
 
 Same script with `--provider openvino` (`bench/.ovenv`: `onnxruntime-openvino` 1.24.1 with OpenVINO 2025.4.1; OpenVINO 2026.4 does not load with this build). Both sides run on the same CPU; only the runtime changes. Raw output: `bench/work/openvino-encode-scifact.json`.
 

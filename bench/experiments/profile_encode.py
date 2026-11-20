@@ -2,7 +2,7 @@
 
     bench/.labenv/Scripts/python.exe -I bench/experiments/profile_encode.py --dataset scifact --docs 2000 --model bekko-a8m --model gte-small
 
-Answers bk-1tc.1's first question: which stage would an optimisation (Rust tokenizer, NumKong, Numba, OpenVINO...) actually touch?
+Answers which stage would an optimisation (Rust tokenizer, NumKong, Numba, OpenVINO...) actually touch?
 """
 from __future__ import annotations
 

@@ -59,7 +59,7 @@ def write_lock(lock: dict) -> None:
 
 def download(url: str, dest: Path) -> None:
     dest.parent.mkdir(parents=True, exist_ok=True)
-    request = urllib.request.Request(url, headers={"User-Agent": "borg-bench/1"})
+    request = urllib.request.Request(url, headers={"User-Agent": "footnote-bench/1"})
     with urllib.request.urlopen(request, timeout=120) as response, dest.open("wb") as out:
         while block := response.read(1 << 20):
             out.write(block)

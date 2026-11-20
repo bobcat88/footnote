@@ -1,11 +1,8 @@
 
-# Beads / Dolt files (added by bd init)
-.dolt/
+# Build & local state
 *.db
-.beads-credential-key
-.beads/proxieddb/
 *.gate.lock*
-/target/
+target/
 /.venv/
 /artifacts/
 *.db-shm
@@ -19,7 +16,6 @@ __pycache__/
 tools/artifacts/
 uv-cache/
 site-packages/
-/tools/support_verification_probe/model/
 *.onnx
 *.safetensors
 *.pt
@@ -33,15 +29,6 @@ site-packages/
 *.log
 *.tmp
 
-# Design work folders: studio directions, QLoop passes and demos are local working files, not source.
-# Decisions that matter are recorded in DESIGN.md; the product site (design/site/) stays tracked.
-/.design-studio/
-/design/qloop/
-/design/demos/
-
-# Flow: benchmark builds, matrix cells and run state are local outputs. Recorded results the docs cite live in flow/results/.
-/flow/build/
-/flow/.runtime/
 site/dist/
 site/node_modules/
 .wrangler/

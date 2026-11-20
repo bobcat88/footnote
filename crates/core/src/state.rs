@@ -7,13 +7,8 @@
 use anyhow::{Context, Result, bail};
 use std::path::{Path, PathBuf};
 
-/// A `FOOTNOTE_*` environment variable, falling back to its pre-rename `BORG_*` name.
-pub fn env(new: &str, old: &str) -> Option<std::ffi::OsString> {
-    std::env::var_os(new).or_else(|| std::env::var_os(old))
-}
-
 pub fn state_dir() -> Result<PathBuf> {
-    if let Some(dir) = env("FOOTNOTE_STATE_DIR", "BORG_STATE_DIR") {
+    if let Some(dir) = std::env::var_os("FOOTNOTE_STATE_DIR") {
         return Ok(PathBuf::from(dir));
     }
     let base = if cfg!(windows) {
@@ -27,13 +22,7 @@ pub fn state_dir() -> Result<PathBuf> {
     };
     let base =
         base.context("cannot determine a per-user state directory; set FOOTNOTE_STATE_DIR")?;
-    let dir = base.join("footnote");
-    // Before the rename the folder was called borg-knowledge; carry its audit log, key and token over once.
-    let old = base.join("borg-knowledge");
-    if !dir.exists() && old.is_dir() {
-        let _ = std::fs::rename(&old, &dir);
-    }
-    Ok(dir)
+    Ok(base.join("footnote"))
 }
 
 /// Append one line to a log shared by several processes (metrics, activity, hook errors). The whole line goes out in one write
@@ -224,7 +213,7 @@ mod tests {
     /// user and SYSTEM only, whatever the parent directory's ACL grants.
     #[test]
     fn state_files_are_private_to_the_current_user() {
-        let parent = std::env::temp_dir().join(format!("borg-acl-{}", std::process::id()));
+        let parent = std::env::temp_dir().join(format!("footnote-acl-{}", std::process::id()));
         let dir = parent.join("state");
         std::fs::create_dir_all(&parent).unwrap();
         ensure_private_dir(&dir).unwrap();
@@ -264,7 +253,7 @@ mod tests {
 
     #[test]
     fn an_existing_folder_with_inherited_access_is_made_private() {
-        let dir = std::env::temp_dir().join(format!("borg-fix-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("footnote-fix-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap(); // made outside Footnote: inherits the temp folder's access list
         let acl = |d: &Path| {
             let o = std::process::Command::new("icacls")
@@ -281,7 +270,7 @@ mod tests {
 
     #[test]
     fn creating_the_same_secret_twice_never_overwrites() {
-        let dir = std::env::temp_dir().join(format!("borg-once-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("footnote-once-{}", std::process::id()));
         ensure_private_dir(&dir).unwrap();
         let path = dir.join("k");
         assert!(write_private(&path, b"first").unwrap());

@@ -4,7 +4,7 @@ Updated 2026-11-13. The protocol and rules are in `../README.md`; dated sections
 
 ## Current queue, 2026-11-13
 
-Work is in `D:\Projets\BorgKnowledge`, branch `bench/model-candidates`. The active task is the retrieval comparison and improvements, not the landing page.
+Work ran on branch `bench/model-candidates`. The active task is the retrieval comparison and improvements, not the landing page.
 
 1. `run_headtohead.sh` is running the 27 configured Footnote/mem0/Cognee cases. Last inspected at 10:18 local time: twelve complete receipts, Footnote running on SciFact. Eleven completed cases pass their recorded repeat check; Cognee lexical on NFCorpus fails it. Syntec and NFCorpus are finished. Logs: `work/headtohead.log`.
 2. `run_models2.sh` waits for that suite, then runs the four model candidates and the frozen pair on four dev corpora. Logs: `work/models2.log`; append-only results: `sweeps/models2.jsonl`.
@@ -24,18 +24,18 @@ These processes are already launched. Do not start another heavy benchmark or du
 
 At queue completion, the reports include `HEADTOHEAD.md`, `LANCEDB-RESULTS.md`, `MODEL-CANDIDATES.md`, `MODEL-LATENCY.md` and `MODEL-CONFIRMATION.md` under `experiments/`. Read source receipts and cost measurements before proposing a winner. Full production integration, memory budgets, crash safety and consequential licensing decisions remain separate gates. No push or production-default change is part of this queue.
 
-## Future optimization backlog in Beads
+## Future optimization backlog
 
-Captured at Johan's request on 2026-11-13. Epic `bk-1tc`; all six children are open. These are planned investigations, not measured gains or changes to the active queue.
+Captured on 2026-11-13. Six planned investigations, not measured gains or changes to the active queue:
 
-- `bk-1tc.1`: profile each stage, then reduce repeated builds/encoding with correct cache invalidation and separate cold/warm measurements.
-- `bk-1tc.2`: controlled version comparison for NumPy, ONNX Runtime and tokenizers in isolated environments.
-- `bk-1tc.3`: compare OpenVINO CPU with ONNX Runtime CPU on this Intel host.
-- `bk-1tc.4`: evaluate a native Rust encoder with identical models and recipes, including end-to-end overhead.
-- `bk-1tc.5`: evaluate Polars for corpus preparation and result tables if profiling justifies it. NumPy remains appropriate for dense numerical arrays.
-- `bk-1tc.6`: diagnose the non-reproducible Cognee lexical receipt without deleting it or weakening validation.
+- Stage 1: profile each stage, then reduce repeated builds/encoding with correct cache invalidation and separate cold/warm measurements.
+- Stage 2: controlled version comparison for NumPy, ONNX Runtime and tokenizers in isolated environments.
+- Stage 3: compare OpenVINO CPU with ONNX Runtime CPU on this Intel host.
+- Stage 4: evaluate a native Rust encoder with identical models and recipes, including end-to-end overhead.
+- Stage 5: evaluate Polars for corpus preparation and result tables if profiling justifies it. NumPy remains appropriate for dense numerical arrays.
+- Stage 6: diagnose the non-reproducible Cognee lexical receipt without deleting it or weakening validation.
 
-Tasks `.2` through `.5` depend on `.1`. Each task records acceptance criteria. Inspect with `rtk proxy bd --sandbox show bk-1tc`; list with `rtk proxy bd --sandbox list --parent bk-1tc`. Wait for the existing measurement queue before starting heavy experiments. No product dependency or default was changed when recording this backlog.
+Tasks 2 through 5 depend on stage 1. Wait for the existing measurement queue before starting heavy experiments. No product dependency or default was changed when recording this backlog.
 
 ## Done
 

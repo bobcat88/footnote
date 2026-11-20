@@ -1,6 +1,6 @@
 {
  "seed": 20261121,
- "binary": "C:\\Users\\johan\\.t3\\worktrees\\Footnote\\t3-770b50cd-3d26ec9917738a2c\\bench\\work\\sphinx2\\final.exe",
+ "binary": "target/release/footnote.exe",
  "latency_median_s": {
   "gd": 1.8344212770462036,
   "fn": 1.1542776823043823

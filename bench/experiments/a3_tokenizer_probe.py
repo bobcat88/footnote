@@ -9,8 +9,9 @@ import urllib.request
 from huggingface_hub import hf_hub_download
 from tokenizers import Tokenizer
 
+import os
 ROOT = Path(__file__).resolve().parents[2]
-SERVER = Path("D:/Projets/Qwythos/runtime/b11901/llama-server.exe")
+SERVER = Path(os.environ.get("FOOTNOTE_LLAMA_SERVER", "llama-server"))
 MODELS = (
     ("Octen/Octen-Embedding-4B", "Octen-Embed-4B-Q8_0.gguf"),
     ("codefuse-ai/F2LLM-v2-1.7B", "F2LLM-V2-1.7B-Q8_0.gguf"),

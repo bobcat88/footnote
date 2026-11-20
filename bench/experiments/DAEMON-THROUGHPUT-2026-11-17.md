@@ -1,6 +1,6 @@
 # Shared daemon throughput, before and after one lock per model (story #152, PR #171)
 
-Measured 17 November 2026 on Johan's PC, which he confirmed idle (CPU 6 % average over 10 s before the run; no other cargo work
+Measured 17 November 2026 on a quiet test PC (confirmed idle: CPU 6 % average over 10 s before the run; no other cargo work
 during it). Same bench as 16 November ([docs_mcp_load.py](docs_mcp_load.py): private copy of the React docs database, 3 warm-ups
 and 30 measured calls per client), shared daemon only (`FOOTNOTE_LOAD_SCENARIOS=shared`), run back to back:
 

@@ -31,7 +31,7 @@ STORE = RUN / "store"
 NPX = ["npx.cmd" if os.name == "nt" else "npx", "-y", "@arabold/docs-mcp-server@3.4.1"]
 FOOTNOTE = str(REPO / "target/release/footnote.exe")
 MODELS = [str(Path(os.environ["LOCALAPPDATA"]) / "footnote/models" / m) for m in ("bekko-a8m", "gte-small")]
-LLAMA = "D:/Projets/Qwythos/runtime/b11901/llama-server.exe"
+LLAMA = os.environ.get("FOOTNOTE_LLAMA_SERVER", "llama-server")
 GGUF = str(REPO / "artifacts/gguf/embeddinggemma-300M-Q8_0.gguf")
 PORT = 8091
 # Grounded Docs' CI recipe (.github/workflows/eval.yml at v3.4.1).

@@ -1,7 +1,7 @@
 # Memory recall abstention: a reranker decides when no memory answers (goal 9)
 
 Written 17 November 2026, before any data for this question was collected. Continues "Question 2" of
-[MEMORY-RECALL-SWITCH.md](MEMORY-RECALL-SWITCH.md); Johan chose the reranker the same day.
+[MEMORY-RECALL-SWITCH.md](MEMORY-RECALL-SWITCH.md); the reranker was chosen the same day.
 
 ## Why
 
@@ -37,13 +37,13 @@ disjoint answer sessions (no answer), as in the earlier experiments.
    - no-answer injection at most **50 %** (`_abs` and cross negatives together; each also reported alone);
    - answerable any@3 at most **5 points** below ungated hybrid any@3.
    Paired bootstrap 95 % intervals (10,000 resamples, seed 20261117, by question family) are reported, not gated.
-3. **Cross-language check, same frozen `t`:** on the 100 questions frozen for the recall switch (Johan's real memories, read-only
+3. **Cross-language check, same frozen `t`:** on the 100 questions frozen for the recall switch (real user memories, read-only
    backup copy, 50 French and 50 English, answerable only), gated any@3 at most 5 points below ungated, overall and on the French
    half. Fails the whole decision if it does not hold.
 4. **Reported, not gated:** added time per prompt on an idle machine (p50 and p95, three pairs scored), model size on disk and RAM.
 
 If all hold, the reranker gate is built into the engine (Rust, same model, logits checked against this run within 1e-3) and turned on
-as an option, with Johan's go on the reported latency. If any fails, injection stays as it is and the result is recorded here.
+as an option, with an explicit go on the reported latency. If any fails, injection stays as it is and the result is recorded here.
 
 ## Not in scope
 
@@ -77,7 +77,7 @@ agent-written memories with written no-answer prompts, closer to what the hook s
 
 ## Second candidate: bge-reranker-v2-m3 (written 17 November 2026, before scoring it)
 
-Johan asked to try the larger model after the first one failed, knowing it is slower. Same rule, same steps, same bars; only the
+The test then tried the larger model after the first one failed, knowing it is slower. Same rule, same steps, same bars; only the
 model changes:
 
 - `BAAI/bge-reranker-v2-m3` (Apache-2.0, 568 M parameters, XLM-R large), as the fp32 ONNX export of Hugging Face's own conversion
@@ -86,10 +86,10 @@ model changes:
   not BAAI's own file: it is checked against the original only through obvious pairs, since no PyTorch environment exists here.
 - Step 1 reuses the dev rows already collected (`bench/work/abstention/dev-v1.jsonl`): the rows do not depend on the reranker, and
   the threshold is still the single parameter chosen by the rule.
-- Step 4 matters more here: added time per prompt is reported on an idle machine (Johan confirms idle first), and adoption also
+- Step 4 matters more here: added time per prompt is reported on an idle machine (confirmed idle first), and adoption also
   needs his go on that cost.
 
-**Stopped before scoring (17 November 2026, Johan's call).** Recall itself works (any@3 0.91 on his real memories); the gate would
+**Stopped before scoring (17 November 2026, maintainer call).** Recall itself works (any@3 0.91 on real memories); the gate would
 only trim irrelevant memories, about 150 to 250 tokens per prompt, which agents already mostly ignore. That gain does not justify a
 2.3 GB model and likely a few hundred milliseconds per prompt. No score was taken with this model; the partial download was deleted.
 Cheaper levers if the noise ever matters: `memory.recall_limit` 2, or a fixture of agent-written memories with no-answer prompts.

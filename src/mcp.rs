@@ -536,26 +536,26 @@ fn dispatch(db: &Path, name: &str, args: &Value) -> Result<Value> {
         }
     );
     match name {
-        "footnote_recall" | "borg_recall" => recall(db, args),
+        "footnote_recall" => recall(db, args),
         // Not listed in tools/list: the memory hook's per-prompt recall through the resident daemon (models stay loaded).
         #[cfg(feature = "memory")]
         "footnote_memory_recall" => memory_recall(db, args),
-        "footnote_get" | "borg_get" => {
+        "footnote_get" => {
             let c = read_db(db)?;
             chunk_by_id(&c, int_arg(args, "id")?)
         }
-        "footnote_get_record" | "borg_get_record" => {
+        "footnote_get_record" => {
             let c = read_db(db)?;
             record_by_id(&c, int_arg(args, "id")?)
         }
-        "footnote_stats" | "borg_stats" => {
+        "footnote_stats" => {
             let c = read_db(db)?;
             app::stats(&c)
         }
-        "footnote_health" | "borg_health" => health(db),
-        "footnote_wake_up" | "borg_wake_up" => wake_up(db, args),
-        "footnote_propose" | "borg_propose" => propose(args),
-        "footnote_export" | "borg_export" => export(db, args),
+        "footnote_health" => health(db),
+        "footnote_wake_up" => wake_up(db, args),
+        "footnote_propose" => propose(args),
+        "footnote_export" => export(db, args),
         #[cfg(feature = "memory")]
         "footnote_remember" => {
             let models = if args["model"].is_null() {

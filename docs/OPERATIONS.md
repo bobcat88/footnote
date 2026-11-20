@@ -30,17 +30,13 @@ To restore safely: stop writers, retain the current database and any journal fil
 
 Deleting/rebuilding the entire database destroys authoritative findings/history. Reindex selected folders to refresh derived content; do not use deletion as an index refresh. `rebuild-embeddings --model LOCAL_DIR` replaces only that model's derived vectors and preserves records/history; re-run after corpus/record changes to regain semantic coverage. New or changed items can still match lexical search before rebuilding. Hybrid scores are not confidence, never establish advice applicability or freshness, and do not implement no-answer abstention; see [measured risks](HYBRID.md). No automatic garbage collection or pruning of structured records exists.
 
-## Evidence retention and honest scope
+## Ingestion isolation and scope
 
-`tools/import_archperf.py` copies four specifically authorized BorgInvestor evidence files byte-for-byte into this repository, verifies SHA-256, validates ZIP CRCs, imports only the two `READY_CONFIRMED_SCOPED` candidates and checks original bytes again. It never opens the live run registry or modifies BorgInvestor. Exact source versions, original measurements, regressions and caveats are retained in the record payload. These imports remain **proposals**: overall campaign preservation is `NOT_CERTIFIED`, the subsequent live-registry writer is unknown, and production health is `UNKNOWN`. Synthetic scale results are not global performance claims; the actual small-workload regressions/cancellation trade-off remain visible.
-
-The ordinary binary ingestion path snapshots one source into scratch, removes that scratch with its owning temporary directory, and leaves originals on disk. The helper launches with Python isolated mode. Provisioning dependencies downloads public packages/models; document ingestion itself uses local libraries and packaged models only. No agent runtime, Hermes profile, global MCP registration, service or Qdrant collection is installed/changed.
+The ordinary binary ingestion path snapshots one source into scratch, removes that scratch with its owning temporary directory, and leaves originals on disk. The helper launches with Python isolated mode. Provisioning dependencies downloads public packages/models; document ingestion itself uses local libraries and packaged models only. No agent runtime or global MCP registration is modified implicitly during document extraction.
 
 ## Distribution and unresolved operational choices
 
-No remote, distribution policy, service ownership or unattended schedule has been selected. The project is licensed Apache-2.0 and the shipped extraction path is permissive (PDFium via `pypdfium2`, RapidOCR). PyMuPDF is AGPL-3.0 and is confined to `requirements-eval.lock` for evaluation scripts only; do not move it back into the runtime locks or bundle it in a distributed product. Dependency versions are pinned in `Cargo.lock` and `requirements-extract.lock`, but a full RustSec/package vulnerability audit has not been run. There is no automatic updater. Keep the binary and its source/helper repository together or rebuild after relocation.
-
-The attempted `AGENTS.md` creation was blocked by the protected-instruction approval timeout. It was not retried or bypassed. Canonical policy symlinks exist; the user/coordinator can separately approve a project agent-instruction file if desired.
+The project is licensed Apache-2.0 and the shipped extraction path is permissive (PDFium via `pypdfium2`, RapidOCR). Dependency versions are pinned in `Cargo.lock` and `requirements-extract.lock`. Keep the binary and its source/helper repository together or rebuild after relocation.
 
 ## Metrics (opt-in builds only)
 

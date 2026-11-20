@@ -204,8 +204,8 @@ fn hidden(command: &mut Command) -> &mut Command {
     command
 }
 
-/// The project scope: the repository's name on its `origin` remote (the same on every clone and machine: `footnote`, not the
-/// local folder `BorgKnowledge`), else the repository folder's name, else the working folder's.
+/// The project scope: the repository's name on its `origin` remote (the same on every clone and machine: `footnote`, rather than a
+/// local folder name), else the repository folder's name, else the working folder's.
 /// The files changed in the working tree (from `git status --porcelain`), offered as `code` anchors for the memories being
 /// saved, so a code lookup later finds them (CODE-GRAPH-DESIGN.md section 12). Paths only; nothing is read from the files.
 fn changed_hint(status: &str) -> String {

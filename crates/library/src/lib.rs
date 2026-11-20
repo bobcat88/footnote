@@ -14,7 +14,7 @@ pub mod crawl;
 pub mod extract;
 pub mod miss;
 
-use footnote_core::{metrics, state};
+use footnote_core::metrics;
 
 /// The repository the binary was built from: the extraction helper lives in its `tools/`.
 pub(crate) fn repo() -> PathBuf {

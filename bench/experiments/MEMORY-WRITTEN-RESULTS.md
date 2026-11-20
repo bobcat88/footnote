@@ -11,7 +11,7 @@ each contain ten fact archetypes. Repeated patterns intentionally make weak memo
 explicit project names make the qualified fixture easy. This construction favors qualification.
 Perfect recall here must not be presented as expected production performance.
 
-At Johan's requested scale, each representation stores **300 French and 300 English memories**.
+At the target scale, each representation stores **300 French and 300 English memories**.
 These represent 300 underlying facts, not 600 independent facts. Translation pairs consume real
 result slots but both count as the same relevant fact. All documents share one memory scope;
 there is no project/tag/gold-derived filter. One quarter of original texts were already qualified

@@ -12,7 +12,7 @@ measure on a copy of `memory.db`.
   (Strawberry Perl) for MSVC builds.
 - No measure was taken (the plan said stop if the build fails). The live `memory.db` was not touched.
 
-## Options for Johan (none taken tonight)
+## Options (none taken tonight)
 
 1. **Install Strawberry Perl** (`winget install StrawberryPerl.StrawberryPerl`), then the planned build should work; GitHub's
    Windows runners already ship it. Cost: a third tool to build Footnote on Windows, and OpenSSL compiled into every binary
@@ -30,7 +30,7 @@ encrypted with the same library, keyword index in memory, on an idle machine.
 
 ## Follow-up, 16 November 2026: SQLCipher build and warm recall
 
-Johan authorized the install and benchmark. Strawberry Perl was installed through winget; the installer hash was verified. A
+After authorization to install and benchmark, Strawberry Perl was installed through winget; the installer hash was verified. A
 native MSVC release build of rusqlite 0.38 with `bundled-sqlcipher-vendored-openssl` succeeded and reported SQLCipher 4.10.0
 community. OpenSSL's build failed on the original very long temporary path with missing source files; a short
 `CARGO_TARGET_DIR` fixed it. Linking emitted LNK4099 warnings for missing OpenSSL debug symbols. This is a Windows build check,
@@ -59,7 +59,7 @@ access, or the existing disk-index implementation. The RAM index is an experimen
 runs with Tantivy's multi-threaded writer produced changing result order even across plaintext rebuilds; using one writer
 thread made this run deterministic. Those initial timings are not used for the verdict.
 
-**Decision, 16 November:** Johan validates this encryption approach for personal data on the strength of the measured performance
+**Decision, 16 November:** This encryption approach is validated for personal data on the strength of the measured performance
 gate. Personal memory encryption remains the product direction. This validates feasibility and performance for the measured
 workload; implementation, key management, migration and recovery, protection of derived data, and security review remain to be
 completed before claiming that personal data is protected in the product. Project memory and Library remain separate decisions.

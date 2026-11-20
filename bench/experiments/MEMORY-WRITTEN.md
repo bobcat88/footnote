@@ -17,7 +17,7 @@ separate extraction model is used. Some already-clear baseline memories should n
 
 ## Frozen ordering and data
 
-1. At Johan's request, create 300 fictional fact families and translate each into French and
+1. At target scale, create 300 fictional fact families and translate each into French and
    English: **600 memories per representation**. Use 30 projects with ten fact archetypes each
    (four fixes, three preferences, three decisions). Every memory is grounded in its own source
    history. These fictional fixes are test data, not verified technical advice. Repeated archetypes

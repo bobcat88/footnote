@@ -155,7 +155,7 @@ fn the_hook_recalls_through_a_resident_daemon_that_leaves_when_idle() {
     let t = tmp();
     let db = t.path().join("memory.db");
     let state = t.path().join("state");
-    let memory = serde_json::json!([{"text": "Johan wants relative % gaps in every benchmark table.", "kind": "preference",
+    let memory = serde_json::json!([{"text": "Always show relative % gaps in every benchmark table.", "kind": "preference",
                                      "scope": "global", "observed_at": "2026-11-15"}]);
     bin()
         .arg("--db")

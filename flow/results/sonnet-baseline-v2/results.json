@@ -1,4 +1,0 @@
-{"study":"sonnet-baseline-v2","date":"2026-11-18","model":"claude-sonnet-5-5","effort":"medium","arm":"baseline, neutral v2 prompt",
- "levels":{"L3":{"fixture":"v2","cell":"8529cc386d","hidden_checks":"17/17","existing":"pass","accepted":true,"seconds":114,"calls":7,"total_tokens":586829,"output":18851,"outside_access":[]},
-           "L4":{"fixture":"v2","cell":"1de51a1878","hidden_checks":"20/20","existing":"pass","accepted":true,"seconds":67,"calls":10,"total_tokens":800361,"output":8766,"outside_access":[]}},
- "conclusion":"v2 still does not stop an unassisted Sonnet 5.5 medium; correctness differences between setups are unlikely for strong models"}

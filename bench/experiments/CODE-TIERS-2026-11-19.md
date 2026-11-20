@@ -6,7 +6,7 @@ module_path) is untouched: for every scored project the default links are byte-i
 (`FOOTNOTE_CODE_GUESSES=1` at `code-index`), stored in their own table (`guesses`), shown only as `guessed_callers` in a lookup.
 
 Truth: the compiler graphs of 18 November (scip-python, scip-typescript, same unchanged sources) and javac on `src/main/java`
-(`JavacOracle.java`). Scored with `score_tiers.py`, `score_java.py`, and `classify_misses.py`. Rust projects (brotli, BorgInvestor)
+(`JavacOracle.java`). Scored with `score_tiers.py`, `score_java.py`, and `classify_misses.py`. Rust projects (brotli, private-rust-1)
 and Spring are not on this machine and were not rescored; this change touches the parser's unresolved branch only.
 
 ## 1. Tiers, scored one by one

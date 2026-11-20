@@ -44,7 +44,7 @@ fn seed(state: &Path, models: &[&str]) {
         c.args(["--model", model]);
     }
     c.write_stdin(json!([
-        {"text": "Johan wants relative % gaps in every benchmark table.", "kind": "preference", "scope": "global", "observed_at": "2026-11-14"},
+        {"text": "Always show relative % gaps in every benchmark table.", "kind": "preference", "scope": "global", "observed_at": "2026-11-14"},
         {"text": "Project Other uses a special benchmark dashboard.", "kind": "fact", "scope": "other", "observed_at": "2026-11-15"}
     ]).to_string()).assert().success();
 }
@@ -314,7 +314,7 @@ fn background_embeddings_and_opt_in_resident_recall() {
             .arg(&model)
             .args([
                 "--project",
-                "borgknowledge",
+                "footnote",
                 "--",
                 "how should tables show differences",
             ])

@@ -70,17 +70,17 @@ The tool list costs prompt tokens on every turn: CodeGraph lists 1 tool, the inc
 
 ## 4. What our own index shows
 
-Read-only look at `~/.cache/codebase-memory-mcp/D-Projets-GovernanceOS.db` (incumbent 0.10.8 format, 14 November 2026):
+Read-only inspection of a local `codebase-memory-mcp` index on a 11,932-file TypeScript/Rust workspace (`private-app-1`, incumbent 0.10.8 format, 14 November 2026):
 
 | | Value |
 |---|---|
-| GovernanceOS tracked files | 11,932, of which **276 code files (4.2 MB)**; the rest is PNG evidence, JSON, logs, SQLite fixtures |
+| `private-app-1` tracked files | 11,932, of which **276 code files (4.2 MB)**; the rest is PNG evidence, JSON, logs, SQLite fixtures |
 | Index file | **3.69 GB** (56,333 pages of 64 KB) |
 | `lsp_surface` table | **3,407.6 MB** of payload in 3,168 rows: the language-server layer, cached per file |
 | Graph proper | nodes 24.4 MB + edges 7.0 MB + vectors 7.3 MB |
 | Nodes by source | **50,978 of 67,815 from `.json` files**; 549 from `.rs`, 376 `.ts`, 241 `.py`, 7,166 `.js` |
 | Leftovers | 11.2 GB of orphaned `.stage` databases from interrupted runs, deleted the same day; 0.12.0 now reclaims them |
-| Processes | One thin MCP frontend per agent session (13 seen at once, 10 from Hermes profiles) sharing one daemon |
+| Processes | One thin MCP frontend per agent session sharing one daemon |
 
 So **99% of the disk is a cached LSP layer, and three quarters of the graph describes data files, not code**. The code graph itself is about 31 MB. This is the clearest place to do better.
 
@@ -90,7 +90,7 @@ So **99% of the disk is a cached LSP layer, and three quarters of the graph desc
 
 **Two-speed resolution: a fast labelled pass, then compiler truth where it is cheap.**
 1. A tree-sitter pass in-process (Rust crates, parallel per file), with repowise-style origins and fixed confidences, declining below a threshold. Usable within seconds.
-2. A precise pass in the background when the toolchain is present: import SCIP indexes from `rust-analyzer scip`, `scip-typescript` and `scip-python` (Johan's three main languages) as edges with origin `compiler`, replacing guesses on the same call sites. This gets compiler precision without Serena's per-query language-server latency and without persisting a language-server surface (the incumbent's 3.4 GB).
+2. A precise pass in the background when the toolchain is present: import SCIP indexes from `rust-analyzer scip`, `scip-typescript` and `scip-python` as edges with origin `compiler`, replacing guesses on the same call sites. This gets compiler precision without Serena's per-query language-server latency and without persisting a language-server surface (the incumbent's 3.4 GB).
 
 **Freshness: copy CodeGraph's three layers onto Footnote's existing daemon.** Debounced OS watcher, per-file stale banner in answers, content-hash reconcile on connect (Footnote already hashes sources with `sha2`). Build every rebuild into a temporary file in the same folder and rename it into place; sweep orphans at start-up. Prove parity with PipesHub's seven-change protocol in CI.
 
@@ -108,9 +108,9 @@ One shared daemon for every agent (already how Footnote runs), with a thin MCP f
 | Measure | Bar to beat | Source of the bar |
 |---|---|---|
 | Fresh index, Home Assistant (29k files) | 110 s, 5 GB peak | incumbent, PipesHub run |
-| Fresh index, Footnote's own repo and GovernanceOS code | under 5 s | proposal |
+| Fresh index, Footnote's own repo and `private-app-1` code | under 5 s | proposal |
 | One-file sync | 0.3 s on 4,400 files | CodeGraph, vendor |
-| Disk | ≤ 10× code bytes (GovernanceOS today: about 880× its 4.2 MB of code) | proposal |
+| Disk | ≤ 10× code bytes (`private-app-1` today: about 880× its 4.2 MB of code) | proposal |
 | Edge F1 against SCIP | 52.9 to 92.5 incumbent; 79.0 to 94.9 best | PipesHub run |
 
 ## 6. Measurement before claiming anything
@@ -118,21 +118,21 @@ One shared daemon for every agent (already how Footnote runs), with a thin MCP f
 Same discipline as the retrieval work: final-task results with frozen protocols, retrieval-style metrics only as diagnostics.
 
 1. **Edge accuracy against SCIP** on PipesHub's public set: its harness is MIT ([codegraph-bench](https://github.com/pipeshub-ai/codegraph-bench)), so Footnote, the incumbent 0.12.1 and CodeGraph can be scored by the same scorer.
-2. **The same on Johan's repositories** (BorgKnowledge in Rust, GovernanceOS in Rust and TypeScript, AlphaBar), with SCIP truth built locally.
+2. **The same on internal Rust/TypeScript/Python repositories** (Footnote, `private-app-1`, `private-rust-1`), with SCIP truth built locally.
 3. **Freshness parity** over the seven-change protocol, plus a kill-during-sync test.
 4. **Cost:** fresh build time, one-file sync time, peak memory, disk, per repository.
 5. **Agent end-task:** a frozen set of structural questions (callers, impact, path, architecture, "why"), with and without the graph, scored on correct and cited final answers; tokens processed **and** tokens resident at session end. A localization control set where no gain is expected, to catch overhead.
 
-## 7. Open decisions for Johan
+## 7. Open decisions
 
 1. **Languages with the precise pass:** Rust, TypeScript and Python first, everything else tree-sitter only?
 2. **Running local toolchains:** may Footnote run `rust-analyzer scip` / `scip-typescript` / `scip-python` in the background? It costs CPU and needs the project to build.
 3. **Default scope:** code and manifests only, with artifacts routed to the document corpus?
-4. **Switch-over rule:** replace `codebase-memory-mcp` once Footnote matches or beats it on section 6 items 1 to 3 on Johan's repositories, then move the MCP wiring.
+4. **Switch-over rule:** replace `codebase-memory-mcp` once Footnote matches or beats it on section 6 items 1 to 3 on internal test repositories, then move the MCP wiring.
 
-## 8. Positioning (Johan, 14 November 2026)
+## 8. Positioning (14 November 2026)
 
-The differentiator is the **decision layer**: competitors ship code graphs, document search and agent memory as separate tools that do not connect. Footnote links them, with accountability as the organising idea (Johan's PMO background): who decided what, when, on which source, and which code it governs. Every answer is backed by a documented decision and a hashed source.
+The differentiator is the **decision layer**: competitors ship code graphs, document search and agent memory as separate tools that do not connect. Footnote links them, with accountability as the organising idea: who decided what, when, on which source, and which code it governs. Every answer is backed by a documented decision and a hashed source.
 
 Target: EU organisations that must show conformity. Where this fits, stated carefully:
 - **GDPR accountability (Art. 5(2))** asks a controller to be able to demonstrate compliance; a cited, hash-checked trail from decision to code is that kind of evidence.
@@ -149,9 +149,9 @@ Target: EU organisations that must show conformity. Where this fits, stated care
 - Serena `README.md`, github.com/oraios/serena. Graphify `README.md`, github.com/Graphify-Labs/graphify.
 - [SWE-Explore] Zhang et al., arXiv 2606.07297 (abstract read).
 - [LocAgent] Chen et al., ACL 2025, arXiv 2503.09089 (abstract read).
-- Local: `D-Projets-GovernanceOS.db` read through SQLite in read-only mode; GovernanceOS file counts from `git ls-files`.
+- Local: SQLite inspection of `codebase-memory-mcp` index on `private-app-1` in read-only mode; file counts from `git ls-files`.
 
-## 9. Johan's answers (16 November 2026)
+## 9. Scope decisions (16 November 2026)
 
 1. **Languages:** at least JavaScript, TypeScript, Java, Rust and Python with the precise pass (scip-typescript covers
    JavaScript and TypeScript, scip-java, rust-analyzer, scip-python); CSS as tree-sitter edges between selectors and the markup
@@ -162,11 +162,11 @@ Target: EU organisations that must show conformity. Where this fits, stated care
    demand ("show inputs/outputs", split view). Artifact contents stay in the document corpus; only their names and links enter
    the graph. Static detection of paths is a guess when paths are built at run time: such edges carry a confidence label.
 4. **Switch-over:** replace codebase-memory-mcp when Footnote is at least as good on the measured items.
-5. **Hands-on test:** go, on BorgKnowledge, BorgInvestor and GovernanceOS (mostly Rust), plus PilotageProjet (JavaScript/HTML)
-   for JavaScript coverage; tools run locally only, telemetry off (PilotageProjet is earlier work for his employer).
+5. **Hands-on test:** run on Footnote, `private-ts-1`, and `private-app-1` (mostly Rust/TS), plus a private JS/HTML app
+   for JavaScript coverage; tools run locally only, telemetry off.
 6. **Design session:** after the technical tests.
 
-How impact is measured (Johan asked how an impact tool can be judged): three answer keys, from strictest to broadest.
+How impact is measured: three answer keys, from strictest to broadest.
 - **Mutation:** break one function on purpose, run the tests; the tests that fail are the true impact on tests. Compare with
   the tests the tool predicted (precision and recall).
 - **Compiler truth:** the transitive callers from SCIP are the exact static blast radius of a symbol.
@@ -174,7 +174,7 @@ How impact is measured (Johan asked how an impact tool can be judged): three ans
 
 ## 10. Stage 1 built: the precise pass for Rust (16 November 2026)
 
-Johan asked for a base. Built first: the part every later stage needs, and the answer key the hands-on comparison
+Built first: the part every later stage needs, and the answer key the hands-on comparison
 ([CODE-GRAPH-STUDY.md](research/CODE-GRAPH-STUDY.md), part 2) needs anyway.
 
 - `footnote code-index [root]` runs `rust-analyzer scip` (shipped with the Rust toolchain), reads the SCIP index with a small
@@ -187,7 +187,7 @@ Johan asked for a base. Built first: the part every later stage needs, and the a
 - Opt-in build feature `code`, not released; CLI only, no MCP tool yet (design: at most two, `footnote_code` and
   `footnote_impact`).
 
-First measures on BorgKnowledge (52 Rust files, 523 KB of code): 857 definitions, 2,452 references; index in 4.3 s warm
+First measures on Footnote (52 Rust files, 523 KB of code): 857 definitions, 2,452 references; index in 4.3 s warm
 (10.5 s cold, almost all of it rust-analyzer), graph 412 KB (0.8 times the code; target at most 10 times), a lookup in 58 ms
 including process start. Callers of `store::lean` matched a manual grep exactly (5 references, 4 calling functions).
 
@@ -195,11 +195,11 @@ Not built yet, in order: the MCP tool; TypeScript, JavaScript, Python and Java t
 (fast, labelled guesses) for files and languages with no compiler index; inputs and outputs (files, configuration, environment
 variables, tables, routes); freshness by watcher; then the comparison against codebase-memory-mcp on the measured items.
 
-## 11. Architecture map (Johan, 16 November 2026; engine side built 17 November)
+## 11. Architecture map (16 November 2026; engine side built 17 November)
 
-Johan wants two views behind one toggle: the **useful view**, an architecture map (blocks of code, how much each depends on the
+Two views behind one toggle: the **useful view**, an architecture map (blocks of code, how much each depends on the
 others, the outside services it calls, as in repowise's map), and the **cool view**, the whole-graph "hairball" as ambient motion.
-Method (Johan): study how 5 to 10 projects do it, take ideas, write our own in Rust, bench ours against theirs; no copied code.
+Method: study how 5 to 10 projects do it, take ideas, write our own in Rust, bench ours against theirs; no copied code.
 
 **How open projects build it (read 16 Nov from their READMEs; none run):**
 
@@ -209,7 +209,7 @@ Method (Johan): study how 5 to 10 projects do it, take ideas, write our own in R
 | Emerge (12 languages, 1.2k) | MIT | Module graph, coloured by Louvain modularity (communities found in the graph), with fan-in/fan-out | Communities as an alternative grouping when folders say little |
 | CodeBoarding (2.7k) | MIT | Static analysis for relationships; a language model names and describes the components; nested diagrams | Naming blocks is the hard part; their way sends code excerpts to a model provider |
 | arkit (JS/TS, 1k) | MIT | Groups modules into components from configured patterns, outputs SVG or PlantUML | Grouping rules the user can edit |
-| repowise | AGPL-3.0 | Layer cards with import counts, scores and outside services (ideas only) | The look Johan liked; its scores' method is unknown, so not copied |
+| repowise | AGPL-3.0 | Layer cards with import counts, scores and outside services (ideas only) | Clean layout reference; its scores' method is unknown, so not copied |
 
 **What Footnote already has for it:** every SCIP symbol names its package (`<indexer> <manager> <package> <version> <path>`), so
 references from project code to outside packages (OpenAI, httpx, serde...) are already in the index Footnote reads; today
@@ -235,7 +235,7 @@ tantivy as the most used outside packages. The standard library does not appear:
 Graphs built before this need `footnote code-index` again (the map says so). Not built: clustering by links instead of folders
 (Emerge's Louvain idea), names for blocks, the launcher view (overnight item 6), the benchmark against the projects above.
 
-## 12. Second pass: a parser for every language, compiler indexers only as an upgrade (Johan, 17 November 2026)
+## 12. Second pass: a parser for every language, compiler indexers only as an upgrade (17 November 2026)
 
 **Why.** Two of the four SCIP indexers broke on Windows: scip-python on one bad regex (worked around in #181), and scip-java on at
 least five open upstream bugs (scip-code/scip-java #991, #992, #1012, #1066, #1067, #1068; #179). The SCIP indexers are built for
@@ -314,13 +314,13 @@ Same Rust files, same scoring:
 | codebase-memory-mcp 0.12.1 | 0.61 | 0.41 | 0.52 | 0.39 |
 
 CodeGraph is the real competitor: a little more recall, about six times the wrong links. Not run: GitNexus (PolyForm
-Noncommercial, not usable for a commercial product, so left out by Johan's rule) and Serena (it asks a language server, here
+Noncommercial, not usable for a commercial product, so excluded by project policy) and Serena (it asks a language server, here
 rust-analyzer itself, one symbol at a time: no exportable graph, and on Rust it would score the compiler against itself). CodeGraph
 review: npm package with SLSA provenance, a bundled `node.exe` and readable JavaScript; no install scripts; telemetry to
 `telemetry.getcodegraph.com`, switched off with `DO_NOT_TRACK=1` and `CODEGRAPH_TELEMETRY=0`; its `install` command writes into
 agent configurations, so only `init` was run, on a `git archive` copy of the repository. Script: `score_codegraph.py`.
 
-**What makes it more than the competition (Johan, 17 November 2026).**
+**What makes it more than the competition (design review, 17 November 2026).**
 - **The base layer resolves names through scopes and imports, not by bare name.** `save` in a file that imports it from
   `./store` links to `store.save`, not to every function called `save`. This is the stack-graphs idea. CodeGraph and
   codebase-memory-mcp match by name. Its precision is published against the compiler-graded graphs.
@@ -332,13 +332,13 @@ agent configurations, so only `init` was run, on a `git archive` copy of the rep
 - **Upgrades start on detection and need consent.** When a Java, TypeScript or Python project is found and its precise indexer
   is missing, Footnote offers to set it up and says what it needs (a Java developer already has the JDK and Maven or Gradle).
   It installs nothing on its own. Java's precise layer waits for the upstream Windows fixes (to be sent as PRs to scip-java).
-- **The architecture map must be redrawn.** Johan's verdict on the 17 Nov version: far from the reference picture, and it reads
+- **The architecture map must be redrawn.** Review of the 17 Nov version: far from the reference picture, and it reads
   as AI slop. The visual makes or breaks the feature, more than the decorative whole-graph view does. Visual reference: LikeC4's
   diagrams (nested boxes with titles and descriptions, labelled relationships, clean automatic layout, drill-down from one level
   to the next). Used as a reference only: Footnote draws its own, and takes no code unless it is reviewed and credited. The
   redraw goes through the design studio and QLoop before it ships.
 
-**TypeScript and Python measured (18 November 2026, #216).** Scored like Rust (#214, #215) on 10 of Johan's projects and 6
+**TypeScript and Python measured (18 November 2026, #216).** Scored like Rust (#214, #215) on 10 private repositories and 6
 held-out online ones (hono, nest, zustand; click, httpx, rich). TypeScript had no parser graph until now: its tags query must
 be combined with the JavaScript one. Receiver typing was ported (class method tables, field types from annotations and
 constructors, typed locals and parameters, `await`, `Optional`). On held-out code, 6 of 13,449 comparable links conflict with
@@ -356,9 +356,9 @@ conflict rate. Times are medians of 3 runs on an idle machine, scratch copies wi
 | hono (TS, 427) | **1.1 s** / **3,076** / 0.905 / 0.0% | 5.0 s / 834 / **0.906** / 0.2% | 4.3 s / 1,141 / 0.774 / 3.1% |
 | rich (Python, 212) | **0.5 s** / **5,229** / **0.999** / 0.0% | 3.4 s / 2,861 / 0.987 / 0.5% | 4.3 s / 3,169 / 0.961 / 1.5% |
 | brotli (Rust, 70) | **0.5 s** / **1,424** / **0.987** / 0.1% | 1.6 s / 1,037 / 0.871 / 0.5% | 4.5 s / 1,250 / 0.743 / 7.4% |
-| BorgInvestor (mixed, 2,387 incl. build output) | **1.7 s** / **8,837** / **0.996** / 0% | 18.9 s / 7,307 / 0.984 / 0% | aborted ("indexing aborted before publication") |
+| private-ts-1 (mixed, 2,387 incl. build output) | **1.7 s** / **8,837** / **0.996** / 0% | 18.9 s / 7,307 / 0.984 / 0% | aborted ("indexing aborted before publication") |
 
-The BorgInvestor parser time was 62 s before #246: each bare call scanned every definition of the project and decoded its
+The private-ts-1 parser time was 62 s before #246: each bare call scanned every definition of the project and decoded its
 file again (quadratic), and outside git the walk read dot-named build copies (`.next-qloop-heavy`, 43 MB in all). The real
 repository, where git applies `.gitignore`, holds 806 code files and takes 1.9 s. Its precision was measured on the full copy.
 Graphify review: Apache-2.0 (Graphify-Labs/graphify, PyPI `graphifyy`), `graphify update` builds the code graph with no LLM
@@ -382,7 +382,7 @@ into a throwaway environment and run on scratch copies only. Scripts in `bench/e
 Measured against the compiler graph on the same five projects, Footnote's parser is faster (0.3 to 1.7 s against about 4 s), finds
 more correct links (1.2 to 3 times) and conflicts far less (0 to 0.1% against 0 to 7.4%), and codebase-memory-mcp aborted on
 the largest project (section above). Recommendation: switch. Removing codebase-memory-mcp from the agents' MCP configuration
-(Claude Code, Codex) is Johan's step; it also drops its tool definitions from every session.
+(Claude Code, Codex) is a manual configuration step; it also drops its tool definitions from every session.
 ### Java receiver typing (#179, 19 November 2026)
 
 Java calls now link through the receiver's written type (locals, parameters, fields, `this`, `new`, casts, `var`, for-each; lambda

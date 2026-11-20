@@ -1,8 +1,8 @@
 # Third-party due diligence, 19 November 2026
 
-Follow-up to [SKILLS-AND-TOOLS-TRIAGE.md](SKILLS-AND-TOOLS-TRIAGE.md). Johan asked for the sourced repos to be downloaded into a separate folder and checked: what each one does, how, and what we could do better. Candidates are judged for the curated skills catalogue (#229), which serves all of Johan's projects, not only Footnote.
+Follow-up skills & tools triage (19 Nov). Sourced upstream repositories were downloaded into a separate temporary review folder outside this repository and checked for structure, execution behavior, network calls, and licences. Candidates were evaluated for Footnote's agent workflow needs and ecosystem alignment.
 
-Method (memory 258): shallow clone of the real upstream into `D:\Projets\_third-party-review\<repo>`, one folder each, outside this repository, with git hooks disabled, no submodules and no LFS. Nothing was installed or run. I read the manifests, build scripts, install hooks, network calls and process launches, and checked the licences.
+Method: shallow clone of each real upstream repository into an external temporary folder with git hooks disabled, no submodules, and no LFS. Nothing was installed or run. Manifests, build scripts, install hooks, network calls, and process launches were audited directly.
 
 | Repo | Commit | Licence | Size |
 |---|---|---|---|
@@ -106,7 +106,7 @@ What: an MIT event protocol between an agent backend and a UI. Version 1.0 is fr
 
 Risks: a large monorepo (6,000 files). The only install hook is `postinstall: playwright install chromium` in its e2e test app, not in the SDKs.
 
-For the catalogue: any of Johan's projects that streams an agent run into a UI (a Flow run viewer, `footnote run` progress for #243, a chat front end) should use this event model instead of inventing one. Its own skill, `ag-ui-a2ui-integration`, is the candidate for an "agent UI" category. Review it when such a project starts.
+For the catalogue: any project that streams an agent run into a UI (a run viewer, `footnote run` progress for #243, a chat front end) should consider this event model instead of inventing a custom schema. Its own skill, `ag-ui-a2ui-integration`, is a candidate for an "agent UI" category.
 
 ### gitcraft (cross-project)
 
@@ -134,7 +134,7 @@ A Cloudflare Workers app (TanStack, Drizzle) with an MCP server and agent skills
 
 1. #244: add TokenEconomizer as an arm and record its hook latency next to Lean's.
 2. #136: run Indra on the French scans; if it wins, open a story to port the post-processing to Rust with ONNX Runtime.
-3. #229: run `skillevaluator quality-check` (keyless) on the 18 existing skills and the candidates. Then vendor the Dashboard Design skill (without its sign-off), the Modern Web Guidance guides (without `npx`), and the 12 trimmed marketing skills, each through review, hash and manifest.
-4. Catalogue backlog (other projects): the ag-ui skill, an egui desktop skill using gitcraft as its reference, and a free animation library (Magic UI, MIT) only if a project needs one, reviewed then.
+3. #229: run `skillevaluator quality-check` (keyless) on the existing skills and candidates. Review any candidates before adoption.
+4. Catalogue backlog: the ag-ui skill, an egui desktop skill using gitcraft as its reference, and a reviewed animation library if needed.
 
-The clones in `D:\Projets\_third-party-review` are reference copies. Delete them once the vendored skills are in the manifest.
+Keep external clones outside the repository and clean up temporary review clones once done.

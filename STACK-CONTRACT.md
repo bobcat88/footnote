@@ -1,1 +1,0 @@
-D:/Second Brain/AI-Agents/_shared/stack-contract.md

@@ -57,4 +57,4 @@ dependencies. `spider` is benched against it; it wins only if it finds clearly m
 
 Grounded Docs runs through `npx @arabold/docs-mcp-server@3.4.1` (security review done 15 November: its own install script only
 prints a message; `better-sqlite3`, `sqlite-vec` and `tree-sitter` fetch or build native binaries; telemetry off with
-`DOCS_MCP_TELEMETRY=false` and `--no-telemetry`). Running it needs Johan's go.
+`DOCS_MCP_TELEMETRY=false` and `--no-telemetry`). Running it requires explicit approval.

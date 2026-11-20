@@ -26,7 +26,7 @@ pub fn extract(bytes: &[u8], ext: &str) -> Result<Extraction> {
     fs::write(&source, bytes)?;
     let output = dir.path().join("output.json");
     let helper = crate::repo().join("tools/extract.py");
-    let python = crate::state::env("FOOTNOTE_PYTHON", "BORG_KNOWLEDGE_PYTHON")
+    let python = std::env::var_os("FOOTNOTE_PYTHON")
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|| {
             crate::repo().join(if cfg!(windows) {

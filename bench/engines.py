@@ -275,7 +275,7 @@ class ShippedEnsemble(CliEngine):
     def _start(self) -> None:
         state = WORK / "state" / self.family
         state.mkdir(parents=True, exist_ok=True)
-        env = {**os.environ, "BORG_STATE_DIR": str(state)}
+        env = {**os.environ, "FOOTNOTE_STATE_DIR": str(state)}
         self._proc = subprocess.Popen([str(EXE), "--db", str(self.db), "mcp"], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                       stderr=subprocess.DEVNULL, text=True, encoding="utf-8", bufsize=1, env=env)
         self._rpc("initialize", {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "bench", "version": "1"}})

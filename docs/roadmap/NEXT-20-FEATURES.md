@@ -20,7 +20,7 @@ initial relative estimate, not a time promise.
 | 3 | Local key storage | A generated key is stored in the OS key store for supported platforms; unavailable or locked stores fail clearly without plaintext fallback. | 1–2 | M |
 | 4 | Recovery key as QR code | Show the actual recovery key as a scannable QR code for saving in a password manager, with copyable text fallback; disclose that either form grants access. Test QR round-trip and compatible save/restore workflow. | 1–3 | M |
 | 5 | Encrypted backup and new-computer restore | Back up consistently and restore to a new location with the saved recovery key; verify records and search, reject a wrong key, and rehearse on a separate test profile. | 2–4 | M |
-| 6 | Safe migration of existing personal memory | On an explicitly selected copy, migrate, verify and rehearse rollback; preserve the original until Johan approves the production switch. Report interrupted and failed migrations clearly. | 2–5 | L |
+| 6 | Safe migration of existing personal memory | On an explicitly selected copy, migrate, verify and rehearse rollback; preserve the original until explicit user approval of the production switch. Report interrupted and failed migrations clearly. | 2–5 | L |
 | 7 | Protect derived personal data | Personal keyword index runs in memory and is rebuilt without leaving plaintext index files; audit caches, WAL/journals, temporary files and logs against the threat model. | 1–3 | L |
 | 8 | Personal encryption acceptance | Test a full restart and restore, failure and recovery paths, protected artifacts, and performance including cold startup and rebuild. Record review findings and limitations; do not claim a security audit passed without one. | 2–7 | M |
 | 9 | Memory recall abstention | Evaluate a no-answer decision on held-out answerable and unanswerable prompts; record false injections and missed relevant memories before enabling it by default. | Existing recall evaluation | L |
@@ -42,8 +42,8 @@ initial relative estimate, not a time promise.
   project memory or Library; those remain separate decisions and measurements.
 - The QR code and its copyable text contain the same secret. A password manager's ability to save and restore that exact format
   must be tested; scanning it as an authenticator code is not assumed. No personal encryption key exists yet.
-- Personal-source ingestion, whole-vault access, changing the live database, or deleting originals is not authorized by this plan.
-  The [personal-knowledge transition](PERSONAL-KNOWLEDGE-TRANSITION.md) retains its own scope and acceptance gates.
+- Personal-source ingestion, whole-corpus access, changing the live database, or deleting originals is not authorized by this plan.
+  See [PERSONAL-CORPUS-PLAN.md](PERSONAL-CORPUS-PLAN.md) for acceptance gates.
 - UI work follows the project's design contract, Apple design reference, accessibility requirements and QLoop protocol. An
   independent critic is a separate acceptance requirement where applicable; do not describe it as complete without evidence.
 - Feature delivery, external installation, deployment and any necessary approval follow the existing project and session rules.

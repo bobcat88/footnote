@@ -1,8 +1,0 @@
-{
-  "pid": 5336,
-  "port": 50620,
-  "process_exited": true,
-  "port_closed": true,
-  "returncode": 1,
-  "shutdown": "owned Popen terminate/wait; no other PID touched"
-}

@@ -1,6 +1,6 @@
-# Recall by meaning on each prompt (backlog bk-gsh): split the question in two
+# Recall by meaning on each prompt: split the question in two
 
-Written 16 November 2026, before any new run. Johan approved the direction the same day ("ok with everything").
+Written 16 November 2026, before any new run. Direction approved the same day.
 
 ## Why the earlier bar was the wrong one
 
@@ -28,7 +28,7 @@ Evidence already on record, all held-out or separate fixtures, none tuned for th
 | Same, memories naming their subject, recall@3 | 100 % | 100 % | MEMORY-WRITTEN-RESULTS.md (ceiling) |
 | Context fixture, dev, any@3 | 34.2 % | 52.4 % | MEMORY-CONTEXT-RESULTS.md |
 
-**Decision rule (fixed now):** switch the default to hybrid when, on one confirmation run over Johan's real memory database (copy,
+**Decision rule (fixed now):** switch the default to hybrid when, on one confirmation run over a real memory database (copy,
 read-only) with questions written before the run:
 
 - hybrid any@3 minus keyword any@3, paired bootstrap 95 % interval (10,000 resamples, seed 20261116), lower bound above zero;
@@ -45,7 +45,7 @@ fallback. If it fails: keyword stays, and the result is recorded.
 ## Result (16 November 2026): passes, hybrid is the default
 
 Questions frozen at 12:19:06 UTC (sha256 `af79058e063ffd8fb83f8619473d97bd9594858957b71ff18ee2eb326ef1b27b`) before any run, written by
-Claude from the 177 active memories of a `footnote backup` copy of Johan's database: 100 prompts phrased as a user would type them,
+Claude from the 177 active memories of a `footnote backup` copy of the test database: 100 prompts phrased as a user would type them,
 50 English and 50 French, each with the memory ids that answer it, all scoped to the footnote project (global memories included, as
 the hook does). Questions and per-question rankings stay in the git-ignored `bench/work/recall-switch/` because some quote
 personal administration. Runner: [memory_recall_switch.py](memory_recall_switch.py), installed metrics+llama build of main
@@ -82,4 +82,4 @@ below hybrid without a gate. Licence and per-prompt latency reported for each.
 ## Not in scope
 
 Answer accuracy of the agent (no answering or judging model is run), memory writing quality (covered by MEMORY-WRITTEN), and
-company-scale cost (later, per Johan's 15 Nov note).
+company-scale cost (deferred per the 15 Nov design note).

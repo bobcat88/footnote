@@ -376,7 +376,7 @@ def fuse(lex: np.ndarray | None, den: np.ndarray | None, cfg: dict, k: int, alph
 
 # ------------------------------------------------------------------ engine
 ENCODERS: dict = {}  # one loaded model per (name, max_len), shared by every engine in the process
-LLAMA_SERVER = os.environ.get("FOOTNOTE_LLAMA_SERVER", "D:/Projets/Qwythos/runtime/b11901/llama-server.exe")
+LLAMA_SERVER = os.environ.get("FOOTNOTE_LLAMA_SERVER", "llama-server")
 
 
 class LlamaEncoder:

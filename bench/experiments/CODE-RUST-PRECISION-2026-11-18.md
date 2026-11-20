@@ -8,12 +8,12 @@
 |---|---|---|
 | Tuning | toml_edit 0.22.27 | used while writing receiver typing (#201); reported apart |
 | Held out, online | clap_builder 4.6.7, zip 6.0.0 | picked by hand on 17 Nov, never used for tuning |
-| Held out, Johan's | sherlock, RingMaster, GovernanceOS (`src-tauri`), simple-code-gui (`src-tauri`), AlphaBar (`crates/alphabar`), Bonsai (`experiments/queen-drone-rust-v2`) | every Rust project in `D:\Projets` with more than 5 Rust files, minus Footnote, its copies, Bonsai2 (copy of Bonsai) and HyprlandConfig (vendored sherlock) |
+| Held out, private | private-rust-1, private-rust-2, private-rust-3 (`src-tauri`), private-rust-4 (`src-tauri`), private-rust-5 (`crates/app`), private-rust-6 (`experiments/bot-v2`) | every private Rust workspace repo with more than 5 Rust files, excluding duplicates and vendored mirrors |
 | Held out, random | tokio-util 0.7.20, gix-index 0.58.0, lindera-dictionary 3.0.7, core-foundation-sys 0.8.7, brotli 9.1.3, zerovec 0.11.9 | `random.seed(20261118)`, 6 drawn from the 195 crates in the local Cargo registry (latest version each) with at least 30 `.rs` files under `src`, excluding toml_edit, clap_builder, zip and platform binding families (windows, winapi, libsqlite, openssl, ring, aws-lc) |
 
 The random draw comes from the local registry, not from GitHub: indexing runs a crate's build scripts and macros, and those
 crates had already been built on this machine, so no new third-party code ran. The draw is therefore biased toward popular
-libraries that Johan's projects depend on. core-foundation-sys is macOS-only and produced no scorable link on Windows; it stays
+libraries that the held-out projects depend on. core-foundation-sys is macOS-only and produced no scorable link on Windows; it stays
 in the draw.
 
 ## Method
@@ -58,7 +58,7 @@ whenever it can run (#218).
 ## The "analyzed, no edge" links
 
 `import` (0.780) and `type_path` (0.772) sit below 0.95 on analyzed lines, yet almost never conflict with the compiler (2 and 0
-links). A seeded sample of about 40 of their no-edge links across RingMaster, Bonsai, lindera-dictionary, brotli, gix-index and
+links). A seeded sample of about 40 of their no-edge links across private-rust-2, private-rust-6, lindera-dictionary, brotli, gix-index and
 zip was correct on reading the source every time. Causes:
 - `Type::default()` and `Type::from(..)` on a hand-written trait impl: rust-analyzer files the call under std's trait, not the
   project's impl, which is the code that runs.

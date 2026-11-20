@@ -46,7 +46,7 @@ mod imp {
         let sink = SINK.get_or_init(|| {
             // Started by `cargo test` without its own state folder: never write into the user's real metrics file.
             if std::env::var_os("CARGO_MANIFEST_DIR").is_some()
-                && crate::state::env("FOOTNOTE_STATE_DIR", "BORG_STATE_DIR").is_none()
+                && std::env::var_os("FOOTNOTE_STATE_DIR").is_none()
             {
                 return None;
             }

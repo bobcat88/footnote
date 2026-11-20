@@ -144,7 +144,7 @@ def write_lock(lock: dict) -> None:
 
 
 def _get(url: str, dest: Path | None = None):
-    req = urllib.request.Request(url, headers={"User-Agent": "borg-bench/1"})
+    req = urllib.request.Request(url, headers={"User-Agent": "footnote-bench/1"})
     with urllib.request.urlopen(req, timeout=300) as r:
         if dest is None:
             return r.read()

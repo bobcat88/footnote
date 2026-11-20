@@ -1,5 +1,5 @@
 # PRODUCT
-Last reviewed: 2026-11-12 · Owner: Johan Proust
+Last reviewed: 2026-11-12 · Owner: Footnote maintainers
 
 ## 1. Users and context
 - Primary user: a developer or technical lead who works daily with AI coding agents (Claude Code, Codex, Hermes, Cursor, Gemini CLI, any other MCP host), experienced, careful about what leaves their machine.

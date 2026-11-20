@@ -1,6 +1,6 @@
 # Memory tags: a pre-filter before ranking
 
-Built 16 November 2026 on Johan's request ("add the extra filtering"), following his notes of 15 November: tags narrow the
+Built 16 November 2026 on request ("add the extra filtering"), following notes from 15 November: tags narrow the
 candidate pool before keyword and meaning ranking; they are not expected to guarantee an answer; they are judged on candidate
 reduction, survival of the relevant memory (including when tags are incomplete), ranking and latency, separately from any
 "is there an answer" decision.
@@ -24,7 +24,7 @@ reduction, survival of the relevant memory (including when tags are incomplete),
 
 Rule written now, before any tagged memory exists:
 
-- **Data:** Johan's memories as tagged by agents during the week (only memories saved after this change carry tags), and 60
+- **Data:** Real memories as tagged by agents during the week (only memories saved after this change carry tags), and 60
   questions written from those memories before any run, each with its answering ids and the tags a user would name.
 - **Measures**, per question, with the named tags as filter against no filter: candidates kept (share of the pool), answer
   survival (answering memory still a candidate), any@3, hook-side latency. Then the same with 30 % of tags removed at random
@@ -35,9 +35,9 @@ Rule written now, before any tagged memory exists:
 
 ## Early run, 16 November 2026: the tag engine fails, it stays off
 
-Johan asked for the engine the same day, so it was built (`memory::prompt_tags`, option `memory.infer_tags`, default **off**;
+The engine was requested the same day, so it was built (`memory::prompt_tags`, option `memory.infer_tags`, default **off**;
 `memory-recall --infer-tags`) and checked at once instead of after the week. Deviations from the plan above, written before the
-run: Claude tagged the 164 in-scope memories of a copy of Johan's database (386 tag pairs, 117 distinct tags, from each memory's
+run: Claude tagged the 164 in-scope memories of a copy of the test database (386 tag pairs, 117 distinct tags, from each memory's
 text) instead of agents during a week, and the questions are the 100 of [MEMORY-RECALL-SWITCH.md](MEMORY-RECALL-SWITCH.md)
 (written earlier, seen by the same author: bias toward passing). "Candidates reduced" is measured on prompts that name a tag;
 the others are unchanged by design. Runner: [memory_tag_engine.py](memory_tag_engine.py); hybrid recall, top 3; CPU 7 % before

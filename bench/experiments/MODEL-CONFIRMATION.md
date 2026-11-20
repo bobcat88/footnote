@@ -8,8 +8,8 @@ Dev gains: [0.08894999999999997, 0.014249999999999985].
 
 ```text
 scifact (heldout), 300 queries
-  A = D:\Projets\BorgKnowledge\bench\receipts\heldout\20261113T231530Z-scifact-lab_models2_baseline-heldout.rankings.json.gz: nDCG@10 0.7460
-  B = D:\Projets\BorgKnowledge\bench\receipts\heldout\20261113T231538Z-scifact-lab_models2_6b66ec5f06f1-heldout.rankings.json.gz: nDCG@10 0.7891
+  A = bench\receipts\heldout\20261113T231530Z-scifact-lab_models2_baseline-heldout.rankings.json.gz: nDCG@10 0.7460
+  B = bench\receipts\heldout\20261113T231538Z-scifact-lab_models2_6b66ec5f06f1-heldout.rankings.json.gz: nDCG@10 0.7891
   B - A = +0.0431  95% CI [+0.0243, +0.0626]  -> B better
 ```
 
@@ -17,8 +17,8 @@ scifact (heldout), 300 queries
 
 ```text
 nfcorpus (heldout), 323 queries
-  A = D:\Projets\BorgKnowledge\bench\receipts\heldout\20261113T231542Z-nfcorpus-lab_models2_baseline-heldout.rankings.json.gz: nDCG@10 0.3735
-  B = D:\Projets\BorgKnowledge\bench\receipts\heldout\20261113T231549Z-nfcorpus-lab_models2_6b66ec5f06f1-heldout.rankings.json.gz: nDCG@10 0.3900
+  A = bench\receipts\heldout\20261113T231542Z-nfcorpus-lab_models2_baseline-heldout.rankings.json.gz: nDCG@10 0.3735
+  B = bench\receipts\heldout\20261113T231549Z-nfcorpus-lab_models2_6b66ec5f06f1-heldout.rankings.json.gz: nDCG@10 0.3900
   B - A = +0.0165  95% CI [+0.0032, +0.0298]  -> B better
 ```
 
@@ -30,8 +30,8 @@ Dev gains: [0.06337999999999999, 0.08944999999999992].
 
 ```text
 alloprof (heldout), 1624 queries
-  A = D:\Projets\BorgKnowledge\bench\receipts\heldout\20261113T231608Z-alloprof-lab_models2_baseline-heldout.rankings.json.gz: nDCG@10 0.4884
-  B = D:\Projets\BorgKnowledge\bench\receipts\heldout\20261113T231642Z-alloprof-lab_models2_f139fdd30471-heldout.rankings.json.gz: nDCG@10 0.5533
+  A = bench\receipts\heldout\20261113T231608Z-alloprof-lab_models2_baseline-heldout.rankings.json.gz: nDCG@10 0.4884
+  B = bench\receipts\heldout\20261113T231642Z-alloprof-lab_models2_f139fdd30471-heldout.rankings.json.gz: nDCG@10 0.5533
   B - A = +0.0649  95% CI [+0.0491, +0.0805]  -> B better
 ```
 
@@ -39,8 +39,8 @@ alloprof (heldout), 1624 queries
 
 ```text
 mix-fr-en (heldout), 2320 queries
-  A = D:\Projets\BorgKnowledge\bench\receipts\heldout\20261113T231710Z-mix-fr-en-lab_models2_baseline-heldout.rankings.json.gz: nDCG@10 0.4991
-  B = D:\Projets\BorgKnowledge\bench\receipts\heldout\20261113T231756Z-mix-fr-en-lab_models2_f139fdd30471-heldout.rankings.json.gz: nDCG@10 0.5585
+  A = bench\receipts\heldout\20261113T231710Z-mix-fr-en-lab_models2_baseline-heldout.rankings.json.gz: nDCG@10 0.4991
+  B = bench\receipts\heldout\20261113T231756Z-mix-fr-en-lab_models2_f139fdd30471-heldout.rankings.json.gz: nDCG@10 0.5585
   B - A = +0.0594  95% CI [+0.0471, +0.0718]  -> B better
 ```
 
@@ -52,8 +52,8 @@ Dev gains: [0.04639000000000004, 0.013999999999999901].
 
 ```text
 alloprof (heldout), 1624 queries
-  A = D:\Projets\BorgKnowledge\bench\receipts\heldout\20261113T231608Z-alloprof-lab_models2_baseline-heldout.rankings.json.gz: nDCG@10 0.4884
-  B = D:\Projets\BorgKnowledge\bench\receipts\heldout\20261113T231829Z-alloprof-lab_models2_3a09f5d20f2d-heldout.rankings.json.gz: nDCG@10 0.5434
+  A = bench\receipts\heldout\20261113T231608Z-alloprof-lab_models2_baseline-heldout.rankings.json.gz: nDCG@10 0.4884
+  B = bench\receipts\heldout\20261113T231829Z-alloprof-lab_models2_3a09f5d20f2d-heldout.rankings.json.gz: nDCG@10 0.5434
   B - A = +0.0550  95% CI [+0.0437, +0.0663]  -> B better
 ```
 
@@ -61,8 +61,8 @@ alloprof (heldout), 1624 queries
 
 ```text
 mix-fr-en (heldout), 2320 queries
-  A = D:\Projets\BorgKnowledge\bench\receipts\heldout\20261113T231710Z-mix-fr-en-lab_models2_baseline-heldout.rankings.json.gz: nDCG@10 0.4991
-  B = D:\Projets\BorgKnowledge\bench\receipts\heldout\20261113T231914Z-mix-fr-en-lab_models2_3a09f5d20f2d-heldout.rankings.json.gz: nDCG@10 0.5407
+  A = bench\receipts\heldout\20261113T231710Z-mix-fr-en-lab_models2_baseline-heldout.rankings.json.gz: nDCG@10 0.4991
+  B = bench\receipts\heldout\20261113T231914Z-mix-fr-en-lab_models2_3a09f5d20f2d-heldout.rankings.json.gz: nDCG@10 0.5407
   B - A = +0.0415  95% CI [+0.0330, +0.0503]  -> B better
 ```
 
@@ -74,8 +74,8 @@ Dev gains: [0.05798000000000003, 0.06618999999999997].
 
 ```text
 alloprof (heldout), 1624 queries
-  A = D:\Projets\BorgKnowledge\bench\receipts\heldout\20261113T231608Z-alloprof-lab_models2_baseline-heldout.rankings.json.gz: nDCG@10 0.4884
-  B = D:\Projets\BorgKnowledge\bench\receipts\heldout\20261113T231950Z-alloprof-lab_models2_6b66ec5f06f1-heldout.rankings.json.gz: nDCG@10 0.5617
+  A = bench\receipts\heldout\20261113T231608Z-alloprof-lab_models2_baseline-heldout.rankings.json.gz: nDCG@10 0.4884
+  B = bench\receipts\heldout\20261113T231950Z-alloprof-lab_models2_6b66ec5f06f1-heldout.rankings.json.gz: nDCG@10 0.5617
   B - A = +0.0733  95% CI [+0.0610, +0.0858]  -> B better
 ```
 
@@ -83,8 +83,8 @@ alloprof (heldout), 1624 queries
 
 ```text
 mix-fr-en (heldout), 2320 queries
-  A = D:\Projets\BorgKnowledge\bench\receipts\heldout\20261113T231710Z-mix-fr-en-lab_models2_baseline-heldout.rankings.json.gz: nDCG@10 0.4991
-  B = D:\Projets\BorgKnowledge\bench\receipts\heldout\20261113T232039Z-mix-fr-en-lab_models2_6b66ec5f06f1-heldout.rankings.json.gz: nDCG@10 0.5622
+  A = bench\receipts\heldout\20261113T231710Z-mix-fr-en-lab_models2_baseline-heldout.rankings.json.gz: nDCG@10 0.4991
+  B = bench\receipts\heldout\20261113T232039Z-mix-fr-en-lab_models2_6b66ec5f06f1-heldout.rankings.json.gz: nDCG@10 0.5622
   B - A = +0.0630  95% CI [+0.0539, +0.0725]  -> B better
 ```
 
@@ -96,8 +96,8 @@ Dev gains: [0.017240000000000033, 0.014129999999999976].
 
 ```text
 alloprof (heldout), 1624 queries
-  A = D:\Projets\BorgKnowledge\bench\receipts\heldout\20261113T231608Z-alloprof-lab_models2_baseline-heldout.rankings.json.gz: nDCG@10 0.4884
-  B = D:\Projets\BorgKnowledge\bench\receipts\heldout\20261113T232115Z-alloprof-lab_models2_bad79b88abde-heldout.rankings.json.gz: nDCG@10 0.5103
+  A = bench\receipts\heldout\20261113T231608Z-alloprof-lab_models2_baseline-heldout.rankings.json.gz: nDCG@10 0.4884
+  B = bench\receipts\heldout\20261113T232115Z-alloprof-lab_models2_bad79b88abde-heldout.rankings.json.gz: nDCG@10 0.5103
   B - A = +0.0219  95% CI [+0.0100, +0.0335]  -> B better
 ```
 
@@ -105,8 +105,8 @@ alloprof (heldout), 1624 queries
 
 ```text
 mix-fr-en (heldout), 2320 queries
-  A = D:\Projets\BorgKnowledge\bench\receipts\heldout\20261113T231710Z-mix-fr-en-lab_models2_baseline-heldout.rankings.json.gz: nDCG@10 0.4991
-  B = D:\Projets\BorgKnowledge\bench\receipts\heldout\20261113T232202Z-mix-fr-en-lab_models2_bad79b88abde-heldout.rankings.json.gz: nDCG@10 0.5203
+  A = bench\receipts\heldout\20261113T231710Z-mix-fr-en-lab_models2_baseline-heldout.rankings.json.gz: nDCG@10 0.4991
+  B = bench\receipts\heldout\20261113T232202Z-mix-fr-en-lab_models2_bad79b88abde-heldout.rankings.json.gz: nDCG@10 0.5203
   B - A = +0.0211  95% CI [+0.0121, +0.0303]  -> B better
 ```
 
@@ -118,8 +118,8 @@ Dev gains: [0.03970000000000007, 0.015349999999999975].
 
 ```text
 alloprof (heldout), 1624 queries
-  A = D:\Projets\BorgKnowledge\bench\receipts\heldout\20261113T231608Z-alloprof-lab_models2_baseline-heldout.rankings.json.gz: nDCG@10 0.4884
-  B = D:\Projets\BorgKnowledge\bench\receipts\heldout\20261113T232255Z-alloprof-lab_models2_9cfb5988a1a9-heldout.rankings.json.gz: nDCG@10 0.5342
+  A = bench\receipts\heldout\20261113T231608Z-alloprof-lab_models2_baseline-heldout.rankings.json.gz: nDCG@10 0.4884
+  B = bench\receipts\heldout\20261113T232255Z-alloprof-lab_models2_9cfb5988a1a9-heldout.rankings.json.gz: nDCG@10 0.5342
   B - A = +0.0459  95% CI [+0.0369, +0.0549]  -> B better
 ```
 
@@ -127,8 +127,8 @@ alloprof (heldout), 1624 queries
 
 ```text
 mix-fr-en (heldout), 2320 queries
-  A = D:\Projets\BorgKnowledge\bench\receipts\heldout\20261113T231710Z-mix-fr-en-lab_models2_baseline-heldout.rankings.json.gz: nDCG@10 0.4991
-  B = D:\Projets\BorgKnowledge\bench\receipts\heldout\20261113T232404Z-mix-fr-en-lab_models2_9cfb5988a1a9-heldout.rankings.json.gz: nDCG@10 0.5316
+  A = bench\receipts\heldout\20261113T231710Z-mix-fr-en-lab_models2_baseline-heldout.rankings.json.gz: nDCG@10 0.4991
+  B = bench\receipts\heldout\20261113T232404Z-mix-fr-en-lab_models2_9cfb5988a1a9-heldout.rankings.json.gz: nDCG@10 0.5316
   B - A = +0.0324  95% CI [+0.0263, +0.0386]  -> B better
 ```
 
@@ -140,8 +140,8 @@ Dev gains: [0.04260000000000008, 0.0359799999999999].
 
 ```text
 alloprof (heldout), 1624 queries
-  A = D:\Projets\BorgKnowledge\bench\receipts\heldout\20261113T231608Z-alloprof-lab_models2_baseline-heldout.rankings.json.gz: nDCG@10 0.4884
-  B = D:\Projets\BorgKnowledge\bench\receipts\heldout\20261113T232503Z-alloprof-lab_models2_1755dbbf25c7-heldout.rankings.json.gz: nDCG@10 0.5437
+  A = bench\receipts\heldout\20261113T231608Z-alloprof-lab_models2_baseline-heldout.rankings.json.gz: nDCG@10 0.4884
+  B = bench\receipts\heldout\20261113T232503Z-alloprof-lab_models2_1755dbbf25c7-heldout.rankings.json.gz: nDCG@10 0.5437
   B - A = +0.0554  95% CI [+0.0462, +0.0650]  -> B better
 ```
 
@@ -149,8 +149,8 @@ alloprof (heldout), 1624 queries
 
 ```text
 mix-fr-en (heldout), 2320 queries
-  A = D:\Projets\BorgKnowledge\bench\receipts\heldout\20261113T231710Z-mix-fr-en-lab_models2_baseline-heldout.rankings.json.gz: nDCG@10 0.4991
-  B = D:\Projets\BorgKnowledge\bench\receipts\heldout\20261113T232622Z-mix-fr-en-lab_models2_1755dbbf25c7-heldout.rankings.json.gz: nDCG@10 0.5457
+  A = bench\receipts\heldout\20261113T231710Z-mix-fr-en-lab_models2_baseline-heldout.rankings.json.gz: nDCG@10 0.4991
+  B = bench\receipts\heldout\20261113T232622Z-mix-fr-en-lab_models2_1755dbbf25c7-heldout.rankings.json.gz: nDCG@10 0.5457
   B - A = +0.0465  95% CI [+0.0398, +0.0533]  -> B better
 ```
 
@@ -162,8 +162,8 @@ Dev gains: [0.03583999999999998, 0.057010000000000005].
 
 ```text
 alloprof (heldout), 1624 queries
-  A = D:\Projets\BorgKnowledge\bench\receipts\heldout\20261113T231608Z-alloprof-lab_models2_baseline-heldout.rankings.json.gz: nDCG@10 0.4884
-  B = D:\Projets\BorgKnowledge\bench\receipts\heldout\20261113T232658Z-alloprof-lab_models2_e027f0b8a1a7-heldout.rankings.json.gz: nDCG@10 0.5389
+  A = bench\receipts\heldout\20261113T231608Z-alloprof-lab_models2_baseline-heldout.rankings.json.gz: nDCG@10 0.4884
+  B = bench\receipts\heldout\20261113T232658Z-alloprof-lab_models2_e027f0b8a1a7-heldout.rankings.json.gz: nDCG@10 0.5389
   B - A = +0.0506  95% CI [+0.0382, +0.0633]  -> B better
 ```
 
@@ -171,8 +171,8 @@ alloprof (heldout), 1624 queries
 
 ```text
 mix-fr-en (heldout), 2320 queries
-  A = D:\Projets\BorgKnowledge\bench\receipts\heldout\20261113T231710Z-mix-fr-en-lab_models2_baseline-heldout.rankings.json.gz: nDCG@10 0.4991
-  B = D:\Projets\BorgKnowledge\bench\receipts\heldout\20261113T232746Z-mix-fr-en-lab_models2_e027f0b8a1a7-heldout.rankings.json.gz: nDCG@10 0.5423
+  A = bench\receipts\heldout\20261113T231710Z-mix-fr-en-lab_models2_baseline-heldout.rankings.json.gz: nDCG@10 0.4991
+  B = bench\receipts\heldout\20261113T232746Z-mix-fr-en-lab_models2_e027f0b8a1a7-heldout.rankings.json.gz: nDCG@10 0.5423
   B - A = +0.0431  95% CI [+0.0337, +0.0527]  -> B better
 ```
 

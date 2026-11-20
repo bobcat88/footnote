@@ -20,8 +20,8 @@ fn review_lists_candidates_and_every_choice_is_reversible() {
         serde_json::from_slice(&out.stdout).unwrap()
     };
     let memories = serde_json::json!([
-        {"text": "Johan wants branches pruned after their PR is merged, locally and on GitHub.", "kind": "preference", "scope": "global", "observed_at": "2026-11-10"},
-        {"text": "Johan wants branches pruned after their PR is merged locally and on GitHub", "kind": "preference", "scope": "global", "observed_at": "2026-11-17"},
+        {"text": "Prune branches after their PR is merged, locally and on GitHub.", "kind": "preference", "scope": "global", "observed_at": "2026-11-10"},
+        {"text": "Prune branches after their PR is merged locally and on GitHub", "kind": "preference", "scope": "global", "observed_at": "2026-11-17"},
         {"text": "Session of 2 October: the crawler was rewritten; tests left to write.", "kind": "session", "scope": "footnote", "observed_at": "2026-10-02"},
         {"text": "The daemon falls back to serving in-process when the relay loses it.", "kind": "fix", "scope": "footnote", "observed_at": "2026-11-17"}
     ]);

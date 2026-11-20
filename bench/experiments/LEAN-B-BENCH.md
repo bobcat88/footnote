@@ -25,5 +25,5 @@ Static: section 4 of the rule file lists the off-list. Dynamic: in the `lean-b-f
 body the agent wrote for fragment-style compression; any hit fails.
 
 ## How to run
-Not automated here: it needs paid model runs, so it waits for Johan's go and an idle machine. Run each arm through the
+Not automated here: it needs paid model runs, so it waits for an explicit go and an idle machine. Run each arm through the
 Flow harness (flow/), write the JSONL, then score it. Mark the first two #239 boxes only after real output exists.

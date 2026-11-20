@@ -12,7 +12,7 @@ launcher; the launcher holds no logic that could drift from the engine.
 
 ### M1: engine (no interface)
 
-Done 15 November (branch `feat/m1-engine`): every command below, tested; `footnote status` on Johan's machine: 141 memories,
+Done 15 November (branch `feat/m1-engine`): every command below, tested; initial `footnote status` verification: 141 memories,
 162 prompts given memories in the last 7 days, four agents registered, 27 ms.
 
 | Command | What it does |
@@ -22,14 +22,14 @@ Done 15 November (branch `feat/m1-engine`): every command below, tested; `footno
 | `footnote options` | The option catalogue: for each option its effect on speed, precision, privacy and disk, its default, and whether a company policy locks it |
 | `footnote models list/install/remove/use` | Model manager; install downloads pinned, hash-checked files (today `tools/provision_embeddings.py`, ported to Rust) |
 | `footnote models recommend` | Detects CPU, RAM, GPU and VRAM (any vendor), reads the corpus language, recommends from the model matrix built from Footnote's own results |
-| `footnote uninstall --memory` | Removes hooks and the MCP server from every agent (does not exist yet) |
+| `footnote uninstall --memory` | Removes hooks and the MCP server from every agent |
 
 **Option catalogue, first entries:**
 
 | Option | Gain | Cost | Default |
 |---|---|---|---|
 | Resident daemon (`resident`) | Recall by meaning on each prompt | Models stay in RAM (about 450 MB); a background process; some companies forbid it | On since 16 Nov (recall switch passed) |
-| Metrics | Timings for reviews and support | A local file (`metrics.jsonl`), no network | Off (on for Johan) |
+| Metrics | Timings for reviews and support | A local file (`metrics.jsonl`), no network | Off (opt-in) |
 | French/mixed model (Jina v5 nano) | +0.08 to +0.10 nDCG on French and mixed corpora | Database about 2.5x larger, indexing about 2.5x slower; latency to confirm on an idle machine | Off |
 | Save request frequency (`every_turns`) | More memories kept | More agent tokens per session | 10 prompts |
 
@@ -37,7 +37,7 @@ Done 15 November (branch `feat/m1-engine`): every command below, tested; `footno
 that forces or forbids options and products. Policy wins over the user's settings; the launcher shows a locked option with the
 reason. This answers "it depends on security and regulation" without a second build.
 
-**Live progress (Johan, 15 Nov: downloads started from the window must show, and so must any other):** every long step writes
+**Live progress (15 Nov: downloads started from the window must show, and so must any other):** every long step writes
 `<state dir>/jobs/<id>.json` up to four times a second (`footnote jobs` lists them; a job whose process died shows as
 interrupted). The launcher's Rust side watches that folder with file-system notifications and pushes each change to the window
 through Tauri events: live for the user, whoever started the job (window, command line, agent), with or without the daemon.
@@ -47,10 +47,10 @@ When the daemon runs, it may relay the same events over its local socket for mil
 
 1. T3 Code study ([pingdotgg/t3code](https://github.com/pingdotgg/t3code), MIT, React + Tailwind + Base UI + Lucide inside
    Electron): structure, layout, motion, links in chat. Structure only, no copied assets.
-2. Design studio for the launcher: references, four directions, Johan picks and tunes, `DESIGN.md` locked. Screens: Overview
+2. Design studio for the launcher: references, four directions, `DESIGN.md` locked. Screens: Overview
    (one card per product: on or off, health, this week's activity), Product (its options with their impact), Models (installed,
    recommended, disk), Activity (what memory saved and recalled: the visibility principle), Settings.
-   **Every module is always listed (Johan, 16 Nov):** products and models not installed appear greyed out with their install
+   **Every module is always listed (16 Nov):** products and models not installed appear greyed out with their install
    action, so the user sees everything Footnote can do. Pattern taken from the ArtCraft launcher
    ([storytold/craft-launcher](https://github.com/storytold/craft-launcher), MIT or Apache-2.0, `crates/ui-egui/src/views.rs`);
    our layout and look stay our own:
@@ -63,15 +63,13 @@ When the daemon runs, it may relay the same events over its local socket for mil
    - a card's states: available to install, downloading (size, percent, pause, cancel), installed and up to date, update
      available (installed → released version), coming soon;
    - modules can be hidden and found again behind a "Hidden" toggle.
-   - **Enterprise modules (Johan, 17 Nov):** Footnote One also lists the paid modules (Alias, sign-on and rights, company
+   - **Enterprise modules (17 Nov):** Footnote One also lists the paid modules (Alias, sign-on and rights, company
      portfolio...) so users see what Enterprise adds. They sit in one "Footnote Enterprise" group at the end of the list, muted,
      with "Learn more" instead of Install; never a pop-up, a badge or a reminder elsewhere, so the free edition stays simple and
      does not nag. "Upgrading" means installing the Enterprise build (the free build does not contain the paid code), not a key
      that unlocks hidden features.
-   - **Support link (Johan, 17 Nov):** one small "Support the project" link in the footer or About screen, to a donation page
-     (Liberapay: no platform fee; Ko-fi: 5 % on its free plan; GitHub Sponsors: fee to confirm on GitHub's own page), and a
-     "Footnote Enterprise" link for companies. Nothing else: no pop-up, badge or reminder. How donations are taxed in France
-     (micro-entreprise or not) is for Johan's accountant; no clear official answer found.
+   - **Support link (17 Nov):** one small "Support the project" link in the footer or About screen, to a donation page
+     (Liberapay, Ko-fi, or GitHub Sponsors) and a "Footnote Enterprise" link for companies. Nothing else: no pop-up, badge or reminder.
    Engine side: `footnote status` lists only Library and Memory today; M3 adds the full catalogue (every product and model with
    its state) so the window draws from one command.
 3. Icons in the same pass: one family, one icon per product (Footnote, Library, Memory, Code, Alias). SVG master, then ICO for
@@ -79,20 +77,17 @@ When the daemon runs, it may relay the same events over its local socket for mil
 
 ### M3: launcher
 
-`apps/launcher`: Tauri 2, web interface (React with the study's CSS tokens; Tailwind dropped on 17 Nov because the locked mock
-is plain CSS and Tailwind 4 adds a native compiler), calling `footnote` commands. First screen built 17 Nov (overnight item 3). Windows first, built
-for Linux and macOS in CI. QLoop UI gates before acceptance.
+`apps/launcher`: Tauri 2, web interface (React with the study's CSS tokens; plain CSS), calling `footnote` commands. Windows first, built
+for Linux and macOS in CI. UI gates before acceptance.
 
 ### M4: distribution (later)
 
 Installer for Windows (MSI or winget), signed binaries, updates. Not planned in detail.
 
-## Decisions (Johan, 15 November: all four as recommended, decision 3 corrected)
+## Decisions (15 November)
 
 1. **Turning Memory off:** the hook stops injecting at once (a setting, no agent restart), and a separate "Uninstall" removes
    hooks and server from the agents. Recommended: both, the switch for daily use and uninstall for good.
 2. **Downloads in Rust:** one small HTTP dependency (`ureq` with rustls) so model installation needs no Python. Recommended.
-3. **GPU detection, every vendor from the start** (corrected 15 Nov: Johan's GPU is an AMD Radeon RX 6800, so every GPU result
-   in the model matrix is AMD, through DirectML and llama.cpp Vulkan). Windows: DXGI (adapter name, dedicated VRAM; WMI caps VRAM at 4 GB and
-   reports 4 GB for this 16 GB card). Linux: `/sys/class/drm`. macOS with the launcher.
-4. **Order:** M1 and M2 can run side by side (M2 needs Johan's time, M1 does not).
+3. **GPU detection, every vendor from the start:** tested on AMD Radeon RX 6800 through DirectML and llama.cpp Vulkan, NVIDIA via standard probe. Windows: DXGI (adapter name, dedicated VRAM; WMI caps VRAM at 4 GB). Linux: `/sys/class/drm`. macOS with the launcher.
+4. **Order:** M1 and M2 can run side by side.

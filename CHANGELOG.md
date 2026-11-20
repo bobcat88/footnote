@@ -86,9 +86,9 @@ generated from Conventional Commits with git-cliff (`cliff.toml`); earlier entri
 - Overnight catch-up and morning report (#62)
 - **roadmap:** Fix the install folder path in the morning report (#63)
 - **roadmap:** Restore the backslash path in the morning report (#64)
-- **roadmap:** Plan the encrypted personal corpus (bk-0bp) (#76)
+- **roadmap:** Plan the encrypted personal corpus (#76)
 - Epics, user stories and the definition of done (#82)
-- **roadmap:** GitHub Issues replaces Beads as the tracker (#164)
+- **roadmap:** Migrate issue tracking to GitHub Issues (#164)
 - **encryption:** Derived-data audit of the personal store (#174)
 
 ### Tests and benchmarks
