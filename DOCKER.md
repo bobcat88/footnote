@@ -173,16 +173,16 @@ Check a registration with `claude mcp get footnote-memory` (it connects and repo
 
 ### 3.4 Hook Latency (measured)
 
-A hook runs on every prompt, so its round trip matters. Measured on Windows 11 + Docker Desktop (WSL 2 engine) with a warm daemon, two embedding models and about 70 memories; each call is a new session whose prompt recalls memories (about 580 bytes of context added); 20 calls each, medians:
+A hook runs on every prompt, so its round trip matters. Measured on Windows 11 + Docker Desktop (WSL 2 engine), the machine otherwise idle, with a warm daemon, two embedding models and a copy of a daily memory database. Each call is started the way an agent starts it (event on stdin, answer read from stdout) and is a new session whose prompt recalls three memories (575 bytes of context added; the SessionStart pack is 777 bytes). 20 calls per cell, two runs, medians (p90):
 
-| | Hook started through `cmd` | Through Git Bash (Claude Code on Windows) |
+| | `docker.exe` started directly | Through Git Bash, `bash -c` (Claude Code on Windows) |
 |---|---|---|
-| `docker exec` alone (no-op) | 123 ms | 211 ms |
-| `UserPromptSubmit` (recall, every prompt) | **192 ms** (p90 200) | **316 ms** (p90 330) |
-| `SessionStart` (memory pack) | 212 ms | 337 ms |
-| `Stop` | 184 ms | 283 ms |
+| `docker exec` alone (`footnote --version`) | 100 ms (105) | 130 ms (140) |
+| `UserPromptSubmit` (recall, every prompt) | 180–190 ms (≤ 202) | **210 ms** (≤ 233) |
+| `SessionStart` (memory pack) | 210–220 ms (≤ 227) | 240–255 ms (≤ 269) |
+| `Stop` | 170 ms (≤ 189) | 205–210 ms (≤ 220) |
 
-- The hook itself (recall through the daemon) is about 70 to 100 ms; the rest is `docker exec`. Starting a Windows program from Git Bash adds about 90 ms more, so Claude Code on Windows pays about 320 ms per prompt, above a 300 ms target; agents that start hooks without bash stay near 200 ms.
+- About 100 ms is `docker exec` itself and 80 to 90 ms the hook (recall with the daemon's warm models). Claude Code on Windows starts a hook command through Git Bash, which adds about 30 ms: about 210 ms per prompt.
 - A Stop that asks the agent to save its memories also runs `git status` for the changed-files hint: up to 3.4 s on this repository through the Docker Desktop mount (Stop's timeout is 5 s).
 - Not measured on a Linux host.
 
