@@ -16,3 +16,13 @@ Note: PyMuPDF (AGPL-3.0) was used in earlier prototypes and has been removed
 from the extraction path. The Docling pilot artifacts under tools/artifacts/
 were evaluation-only and are not part of the distributed source; Docling is
 MIT-licensed, but its downloaded model weights carry their own terms.
+
+Agent skills under skills/ are written for this project. Some rules were
+distilled from these public skill collections (ideas rewritten, no text
+copied):
+
+- supabase/agent-skills, MIT, https://github.com/supabase/agent-skills
+- neondatabase/agent-skills, Apache-2.0, https://github.com/neondatabase/agent-skills
+- prisma/skills, MIT, https://github.com/prisma/skills
+- mattpocock/skills, MIT, https://github.com/mattpocock/skills
+- obra/superpowers, MIT, https://github.com/obra/superpowers
