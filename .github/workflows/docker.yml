@@ -7,6 +7,8 @@ on:
       - .dockerignore
       - compose.yaml
       - scripts/docker-smoke.sh
+      - scripts/docker-agents.sh
+      - scripts/docker-agents.ps1
       - .github/workflows/docker.yml
   workflow_dispatch:
 
@@ -25,6 +27,6 @@ jobs:
         run: FOOTNOTE_WORKSPACES="$PWD" docker compose --profile net config --quiet
       # Non-root user and scoped git trust, hardened one-shot CLI, code-index and grep on a read-only mount, MCP tools/list
       # budget, memory persistence, Windows path mapping, a mounted repository's .git/config that must not run, the
-      # long-lived daemon behind `docker exec -i`.
+      # long-lived daemon behind `docker exec -i`, scripts/docker-agents.sh against that daemon.
       - name: Smoke suite
         run: bash scripts/docker-smoke.sh footnote:local

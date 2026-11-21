@@ -422,7 +422,35 @@ docker exec footnote footnote code-index /workspaces/<repo>
 bash scripts/docker-smoke.sh footnote:local
 ```
 
-### Host MCP Configuration via Docker
+### Register Your Agents Automatically
+
+Once the daemon runs (`docker compose up -d`), one command points every agent found for your user at it. It detects **Claude Code, Codex, Gemini CLI and Antigravity** and adds the `footnote-memory` MCP server, with the absolute path of `docker`:
+
+```powershell
+# Windows (Windows PowerShell 5.1 or pwsh)
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\docker-agents.ps1 -DryRun   # what would change
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\docker-agents.ps1
+```
+
+```bash
+# Linux / macOS (JSON files for Gemini CLI and Antigravity need python3)
+bash scripts/docker-agents.sh --dry-run
+bash scripts/docker-agents.sh
+```
+
+| Agent | Detected by | Written to |
+|---|---|---|
+| Claude Code | `claude` on `PATH`, or `~/.claude` | `claude mcp add --scope user` (its own command; `~/.claude.json` is never edited by the script) |
+| Codex | `codex` on `PATH`, or `$CODEX_HOME` / `~/.codex` | `[mcp_servers.footnote-memory]` in `config.toml` |
+| Gemini CLI | `gemini` on `PATH`, or `~/.gemini/settings.json` | `mcpServers` in `~/.gemini/settings.json` |
+| Antigravity | `~/.gemini/config`, `~/.gemini/antigravity` or `~/.gemini/antigravity-cli` | `mcpServers` in `~/.gemini/config/mcp_config.json` |
+
+- **Safe to run again:** an existing `footnote-memory` entry is kept. `-Force` / `--force` replaces it, `-Remove` / `--remove` deletes it (to revoke a machine). `-Container` / `--container` targets another stack (one per team or tenant).
+- Each edited file is backed up once (`<file>.footnote-backup`) and replaced atomically. A file that its agent rewrote meanwhile is left alone. A JSON file with comments is left for you to edit.
+- When the container runs, the script checks it answers `tools/list` through the registered command. Restart each agent afterwards.
+- It only writes MCP entries. Memory hooks (`footnote hook`) are set up by hand in Docker mode (see the compatibility matrix below).
+
+### Host MCP Configuration via Docker (Manual)
 
 Use the **absolute path to your `docker` executable** so GUI MCP hosts (Cursor, Windsurf, Zed, Antigravity, VS Code, Cline, Claude Code, Codex) can spawn it without shell `PATH` inheritance:
 
@@ -474,7 +502,7 @@ The backup holds every memory in clear text: keep it where only you (or the hub'
 | **Memory Hooks** (`footnote hook`) | **Partial** | Not installed automatically; runs through `docker exec -i` + `FOOTNOTE_PATH_MAP`. 140k / idle-expiry handoffs also need host transcripts mounted `:ro`. |
 | **Usage / Gain** (`usage`, `gain --missed`) | **Partial** | Requires mounting host `~/.claude` / `~/.codex` `:ro` and setting `CLAUDE_CONFIG_DIR` / `CODEX_HOME`. |
 | **Footnote Lean** (`run`, `hook lean`, `audit-prefix --probe-mcp`) | **Not supported from a Windows host** | `footnote run` executes inside the Linux container, without the host's toolchains. |
-| **`footnote install` / `update` / `rollback`** | **Not applicable** | Configure the host MCP entries (above). Rebuild the image to upgrade, keeping `footnote-state`. |
+| **`footnote install` / `update` / `rollback`** | **Not applicable** | Register agents with `scripts/docker-agents.ps1` / `scripts/docker-agents.sh` (above). Rebuild the image to upgrade while keeping `footnote-state`. |
 | **`footnote personal` (DPAPI encryption) / `apps/launcher`** | **Not supported** | Windows-native DPAPI / Tauri GUI only. |
 | **`footnote models recommend`** | **Approximate** | Reads the WSL 2 / container VM RAM (`/proc/meminfo`) and cannot see Windows host GPUs. |
 

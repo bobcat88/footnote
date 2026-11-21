@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # End-to-end smoke verification for the official Footnote Docker image (#392).
 # Runs completely isolated with a temporary named Docker volume and cleans up on exit.
-# Linux, macOS, and Git Bash on Windows.
+# Linux, macOS, and Git Bash on Windows; python3 is optional.
 set -euo pipefail
 
 IMAGE="${1:-footnote:local}"
@@ -26,6 +26,7 @@ TOOLS_LIST='{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}'
 host_path() { if command -v cygpath >/dev/null 2>&1; then cygpath -w "$1"; else printf '%s' "$1"; fi; }
 if command -v cygpath >/dev/null 2>&1; then export MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*'; fi
 REPO_MOUNT="$(host_path "${REPO_ROOT}")"
+have_python() { python3 -c 'import json' >/dev/null 2>&1; }
 
 cleanup() {
   docker rm -f "${DAEMON_NAME}" >/dev/null 2>&1 || true
@@ -42,7 +43,7 @@ HARDENED_ARGS=(
   --security-opt=no-new-privileges:true
 )
 
-echo "[1/9] Verify non-root user (UID ${EXPECTED_UID}), git, scoped git trust, and system CA bundle"
+echo "[1/10] Verify non-root user (UID ${EXPECTED_UID}), git, scoped git trust, and system CA bundle"
 uid="$(docker run --rm --entrypoint id "${IMAGE}" -u)"
 [ "${uid}" = "${EXPECTED_UID}" ] || { echo "Expected UID ${EXPECTED_UID}, got ${uid}" >&2; exit 1; }
 docker run --rm --entrypoint git "${IMAGE}" --version >/dev/null
@@ -56,13 +57,13 @@ if docker run --rm --entrypoint git "${IMAGE}" config --system --get-all safe.di
   exit 1
 fi
 
-echo "[2/9] Verify one-shot CLI under hardened flags (--network none --read-only)"
+echo "[2/10] Verify one-shot CLI under hardened flags (--network none --read-only)"
 docker run --rm "${HARDENED_ARGS[@]}" "${IMAGE}" --version
 docker run --rm "${HARDENED_ARGS[@]}" \
   -v "${STATE_VOL}:${STATE_DIR}" \
   "${IMAGE}" status >/dev/null
 
-echo "[3/9] Verify read-only workspace code-index (tree-sitter) and grep"
+echo "[3/10] Verify read-only workspace code-index (tree-sitter) and grep"
 docker run --rm "${HARDENED_ARGS[@]}" \
   -v "${STATE_VOL}:${STATE_DIR}" \
   -v "${REPO_MOUNT}:${WORKSPACE_DIR}:ro" \
@@ -72,7 +73,7 @@ docker run --rm "${HARDENED_ARGS[@]}" \
   -v "${REPO_MOUNT}:${WORKSPACE_DIR}:ro" \
   "${IMAGE}" grep "map_host_path" "${WORKSPACE_DIR}" --glob "*.rs" >/dev/null
 
-echo "[4/9] Verify MCP tools/list byte budget (<= 5,000 B, 8 tools) over serve --mcp"
+echo "[4/10] Verify MCP tools/list byte budget (<= 5,000 B, 8 tools) over serve --mcp"
 mcp_out="$(printf '%s\n%s\n' "${INIT}" "${TOOLS_LIST}" \
   | docker run --rm -i "${HARDENED_ARGS[@]}" \
       -v "${STATE_VOL}:${STATE_DIR}" \
@@ -88,7 +89,7 @@ size=$(($(printf '%s' "${tools_reply}" | LC_ALL=C wc -c | tr -d ' ') - ${#envelo
 [ "${size}" -le 5000 ] || { echo "tools/list exceeded 5000 B: ${size}" >&2; exit 1; }
 echo "MCP tools/list OK: ${tools} tools, ${size} B <= 5000 B"
 
-echo "[5/9] Verify cross-container memory persistence (remember -> recall)"
+echo "[5/10] Verify cross-container memory persistence (remember -> recall)"
 printf '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"footnote_remember","arguments":{"memories":[{"kind":"fact","scope":"footnote","text":"Docker smoke persistence marker %s","observed_at":"%s"}]}}}\n' "${MARKER}" "${TODAY}" \
   | docker run --rm -i "${HARDENED_ARGS[@]}" \
       -v "${STATE_VOL}:${STATE_DIR}" \
@@ -103,7 +104,7 @@ echo "${recall_out}" | grep -q "${MARKER}" || {
   exit 1
 }
 
-echo "[6/9] Verify FOOTNOTE_PATH_MAP Windows host path translation for hook + footnote_code"
+echo "[6/10] Verify FOOTNOTE_PATH_MAP Windows host path translation for hook + footnote_code"
 host_repo_json="${HOST_REPO//\\/\\\\}"
 printf '{"hook_event_name":"SessionStart","session_id":"smoke-map","cwd":"%s"}\n' "${host_repo_json}" \
   | docker run --rm -i "${HARDENED_ARGS[@]}" \
@@ -128,7 +129,7 @@ echo "${code_out}" | grep -q "map_host_path" || {
   exit 1
 }
 
-echo "[7/9] Verify a mounted repository's .git/config cannot start a program (fsmonitor, filter driver)"
+echo "[7/10] Verify a mounted repository's .git/config cannot start a program (fsmonitor, filter driver)"
 evil="${SCRATCH}/evil"
 mkdir -p "${evil}"
 evil_git="$(host_path "${evil}")" # host git is a Windows program under Git Bash
@@ -154,7 +155,7 @@ printf '{"hook_event_name":"SessionStart","session_id":"smoke-evil","cwd":"%s/ev
   exit 1
 }
 
-echo "[8/9] Verify long-lived daemon mode + docker exec -i mcp proxy"
+echo "[8/10] Verify long-lived daemon mode + docker exec -i mcp proxy"
 docker run -d --init --name "${DAEMON_NAME}" "${HARDENED_ARGS[@]}" \
   -v "${STATE_VOL}:${STATE_DIR}" \
   -v "${REPO_MOUNT}:${WORKSPACES_DIR}/footnote:ro" \
@@ -188,4 +189,48 @@ echo "${exec_out}" | grep -q "${MARKER}" || {
   exit 1
 }
 
-echo "[9/9] All Docker smoke checks passed."
+echo "[9/10] Verify scripts/docker-agents.sh registers detected agents with a working MCP command"
+agents_home="${SCRATCH}/home"
+stub_bin="${SCRATCH}/bin"
+mkdir -p "${agents_home}/.claude" "${agents_home}/.codex" "${agents_home}/.gemini/config" "${stub_bin}"
+# A stub claude shadows any real one: the smoke suite never touches the machine's own agent configuration.
+cat >"${stub_bin}/claude" <<'EOF'
+#!/bin/sh
+d="$(dirname "$0")"
+echo "$*" >>"$d/claude-calls.log"
+case "$1 $2" in
+  "mcp get") [ -f "$d/claude-registered" ] ;;
+  "mcp add") : >"$d/claude-registered" ;;
+esac
+EOF
+chmod +x "${stub_bin}/claude"
+agents_out="$(PATH="${stub_bin}:${PATH}" CODEX_HOME="${agents_home}/.codex" \
+  bash "${REPO_ROOT}/scripts/docker-agents.sh" --home "${agents_home}" --container "${DAEMON_NAME}")"
+echo "${agents_out}" | grep -q "answers over MCP with 8 tools" || {
+  echo "docker-agents.sh did not verify the hub: ${agents_out}" >&2
+  exit 1
+}
+grep -q "mcp add --scope user footnote-memory -- .* exec -i ${DAEMON_NAME} footnote --db ${DB_PATH} mcp" \
+  "${stub_bin}/claude-calls.log" || { echo "claude mcp add was not called as expected" >&2; exit 1; }
+codex_toml="${agents_home}/.codex/config.toml"
+grep -q '^\[mcp_servers.footnote-memory\]$' "${codex_toml}" || { echo "Codex entry missing" >&2; exit 1; }
+registered_docker="$(sed -n 's/^command = "\(.*\)"$/\1/p' "${codex_toml}")"
+agent_reply="$(printf '%s\n%s\n' "${INIT}" "${TOOLS_LIST}" \
+  | "${registered_docker}" exec -i "${DAEMON_NAME}" footnote --db "${DB_PATH}" mcp | tail -n 1)"
+[ "$(printf '%s' "${agent_reply}" | grep -o '"inputSchema"' | wc -l | tr -d ' ')" = 8 ] || {
+  echo "The registered command did not reach the hub: ${agent_reply}" >&2
+  exit 1
+}
+if have_python; then
+  python3 - "${agents_home}/.gemini/config/mcp_config.json" "${registered_docker}" "${DAEMON_NAME}" <<'PY'
+import json, sys
+entry = json.load(open(sys.argv[1], encoding="utf-8"))["mcpServers"]["footnote-memory"]
+assert entry["command"] == sys.argv[2], entry
+assert entry["args"] == ["exec", "-i", sys.argv[3], "footnote", "--db", "/state/memory.db", "mcp"], entry
+PY
+fi
+PATH="${stub_bin}:${PATH}" CODEX_HOME="${agents_home}/.codex" \
+  bash "${REPO_ROOT}/scripts/docker-agents.sh" --home "${agents_home}" --container "${DAEMON_NAME}" --remove >/dev/null
+if grep -q 'footnote-memory' "${codex_toml}"; then echo "--remove left the Codex entry" >&2; exit 1; fi
+
+echo "[10/10] All Docker smoke checks passed."

@@ -108,7 +108,7 @@ footnote docs add https://flask.palletsprojects.com/en/stable/ --site flask
 - **Update & rollback:** `footnote update --from <new-binary>` atomically swaps binaries even while agents run; `footnote rollback` restores the previous one.
 - **Uninstall:** `footnote uninstall --memory --lean` cleanly removes hooks and MCP entries while keeping your databases and backups.
 - **Full OS & harness walkthrough:** see **[HOW-TO.md](HOW-TO.md)**.
-- **Docker (Windows App Control, shared hub):** a hardened image (`Dockerfile`) and a long-lived daemon for several agents (`compose.yaml`). See [HOW-TO.md → Docker](HOW-TO.md#docker-when-windows-blocks-local-builds).
+- **Docker (Windows App Control, shared hub):** a hardened image (`Dockerfile`), a long-lived daemon for several agents (`compose.yaml`), and one command that registers Claude Code, Codex, Gemini CLI and Antigravity with it (`scripts/docker-agents.ps1` / `.sh`). See [HOW-TO.md → Docker](HOW-TO.md#docker-when-windows-blocks-local-builds).
 
 ### Connect your agent
 

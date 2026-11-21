@@ -3,6 +3,9 @@
 # Daily use: warm ONNX models shared by every agent that can reach this Docker engine.
 #   docker compose up -d
 #   MCP command for each agent: docker exec -i footnote footnote --db /state/memory.db mcp
+#   Register every detected agent (Claude Code, Codex, Gemini CLI, Antigravity) in one go:
+#     Windows: powershell -NoProfile -ExecutionPolicy Bypass -File scripts\docker-agents.ps1
+#     Linux / macOS: bash scripts/docker-agents.sh
 #
 # Network commands only (models install, docs add, crawl). This service mounts no workspace:
 #   docker compose --profile net run --rm footnote-net models install bekko-a8m gte-small
