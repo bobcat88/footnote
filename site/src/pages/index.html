@@ -32,10 +32,10 @@
         <div class="meta"><span>footnote install --memory</span></div>
       </article>
       <article class="pcard">
-        <div class="head"><h3><a class="stretch" href="/code"><span>Footnote</span> Code</a></h3><span class="tag">soon</span></div>
+        <div class="head"><h3><a class="stretch" href="/code"><span>Footnote</span> Code</a></h3><span class="tag on">available</span></div>
         <div class="stage" aria-hidden="true"><span class="lens glass"><svg class="mk"><use href="#m-code"/></svg></span></div>
         <p>Ask who calls a function and what it calls. The answer comes from the compiler's own index, not from a guess.</p>
-        <div class="meta"><span>coming soon</span></div>
+        <div class="meta"><span>footnote code-index .</span></div>
       </article>
     </div>
   </section>
@@ -58,10 +58,10 @@
   <section id="install" class="wrap">
     <p class="label">Install</p>
     <h2 class="blocks mt14"><span>Three steps, from source.</span></h2>
-    <p class="note">There is no installer and no prebuilt download yet; this is the developer path. You need Rust 1.92 or later, Python 3.10 or later (once, to download models and read PDFs) and about 200 MB of disk for two models.</p>
+    <p class="note">There is no installer and no prebuilt download yet; this is the developer path. You need Rust 1.92 or later and about 200 MB of disk for the two default embedding models (Python 3.10+ is optional, only for PDF/Office extraction).</p>
     <div class="install">
       <div class="step"><h3>1 · Build</h3><p>One Rust binary. Put <code>target/release</code> on your PATH.</p><div class="cmd"><code tabindex="0">git clone https://github.com/bobcat88/footnote &amp;&amp; cd footnote &amp;&amp; cargo build --release</code><button class="copy" type="button" aria-label="Copy the build commands">Copy</button></div></div>
-      <div class="step"><h3>2 · Models</h3><p>A one-time download of two small public models, checked by hash.</p><div class="cmd"><code tabindex="0">python tools/provision_embeddings.py bekko-a8m gte-small</code><button class="copy" type="button" aria-label="Copy the model download command">Copy</button></div></div>
+      <div class="step"><h3>2 · Models</h3><p>A one-time native download of two small public models, verified by SHA-256.</p><div class="cmd"><code tabindex="0">footnote models install bekko-a8m &amp;&amp; footnote models install gte-small</code><button class="copy" type="button" aria-label="Copy the model download command">Copy</button></div></div>
       <div class="step"><h3>3 · Connect</h3><p>Sets up Memory, its hooks and /remember in every supported agent it finds.</p><div class="cmd"><code tabindex="0">footnote install --memory</code><button class="copy" type="button" aria-label="Copy the Memory install command">Copy</button></div></div>
     </div>
     <p class="tnote">Update with <code>footnote update --from &lt;binary&gt;</code>, go back with <code>footnote rollback</code>, remove the hooks with <code>footnote uninstall --memory</code>. Your data stays in its own folder. Something failed? <a href="https://github.com/bobcat88/footnote/issues">Open an issue on GitHub</a> or write to <a href="mailto:johan.velocity.lab@pm.me">johan.velocity.lab@pm.me</a>.</p>
