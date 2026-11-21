@@ -56,6 +56,13 @@ pub fn catalogue() -> Vec<OptionSpec> {
             cost: "A memory tagged without the word the prompt uses is left out; off until bench/experiments/MEMORY-TAGS.md passes",
         },
         OptionSpec {
+            key: "memory.skills",
+            default: json!(false),
+            range: None,
+            gain: "Each prompt may get up to 2 skills from the themes you indexed (`footnote skills index`), only when one holds 40% of the prompt's topic words",
+            cost: "About 1 in 3 prompts that a skill fits get it; a wrong one on about 1 in 25 (bench/experiments/SKILL-RANKING-2026-11-21.md); a few ms per theme per prompt",
+        },
+        OptionSpec {
             key: "memory.idle_seconds",
             default: json!(1800),
             range: Some((60, 86_400)),

@@ -147,6 +147,14 @@ footnote install --memory --dry-run
 footnote install --memory
 ```
 
+Optional skill suggestions (off by default): index the skills of one theme (at most 100), then switch the option on. On each prompt the hook adds at most 2 skills (name, path, one line), and only when one holds 40% of the prompt's topic words.
+
+```bash
+footnote skills index web ~/.claude/skills/transitions-dev ~/.claude/skills/impeccable
+footnote config set memory.skills true
+footnote skills list            # themes switched on; `footnote skills remove web` switches one off
+```
+
 ### B. Footnote Lean (Shell Compaction, Token Accounting & Prefix Audit)
 
 Installs the fast SQLite-free `PreToolUse` hook (`footnote hook lean`) so eligible shell commands (`cargo`, `git`, `pytest`, `jest/vitest`, `rg/grep`, linters, `gh ... --json`) automatically run through `footnote run` with reversible handles:

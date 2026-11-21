@@ -121,6 +121,8 @@ struct Settings {
     resident: bool,
     idle_seconds: u64,
     infer_tags: bool,
+    /// Suggest skills from the themes indexed with `footnote skills index` (#280); off until more prompts are measured.
+    skills: bool,
     /// Context size, in tokens, past which Stop asks once for a handoff and a fresh session (#250, #379); 0 never asks.
     handoff_tokens: u64,
     /// Idle minutes past which a resumed session with >= `idle_handoff_min_tokens` asks for a handoff (#379); 0 disables.
@@ -141,6 +143,7 @@ impl Default for Settings {
             resident: true,
             idle_seconds: 1800,
             infer_tags: false,
+            skills: false,
             handoff_tokens: 140_000,
             idle_handoff_minutes: 55,
             idle_handoff_min_tokens: 60_000,
@@ -175,6 +178,9 @@ struct Session {
     /// Memories already in this context (#242): each one is re-read by every later call, so it is never shown twice.
     /// Reset at SessionStart, which also follows a compaction that dropped them.
     shown: Vec<i64>,
+    /// Skills already suggested in this context, by name; reset at SessionStart.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    skills_shown: Vec<String>,
     /// Whether this session was already asked for a handoff (#250).
     handoff_asked: bool,
     /// Recorded at UserPromptSubmit when resuming after idle cache expiry: `(idle_minutes, tokens)` (#379).
@@ -649,6 +655,7 @@ fn handle(state: &Path, s: &Settings, event: &Value) -> Result<Option<Value>> {
             st.handoff_asked = false; // after a compaction the context is small again
             st.idle_handoff_due = None;
             st.turn_prompt_hash = None;
+            st.skills_shown.clear();
             if db.exists() {
                 let conn = crate::app::open(&db, false)?;
                 let mut memories = crate::memory::pack(&conn, Some(&project), 3000)?;
@@ -735,6 +742,28 @@ fn handle(state: &Path, s: &Settings, event: &Value) -> Result<Option<Value>> {
                         "Possibly relevant memories (… marks a cut text: footnote_get <id> gives all of it)",
                         true,
                     );
+                }
+                #[cfg(feature = "library")]
+                if s.skills && !e.prompt.trim().is_empty() && !e.prompt.starts_with('/') {
+                    let query = &e.prompt[..e.prompt.floor_char_boundary(500.min(e.prompt.len()))];
+                    let picked = crate::skills::suggest(state, query, &st.skills_shown);
+                    st.skills_shown.extend(
+                        picked
+                            .iter()
+                            .filter_map(|v| v["name"].as_str().map(String::from)),
+                    );
+                    let lines = crate::skills::render(&picked);
+                    if !lines.is_empty() {
+                        recalled = if recalled.is_empty() {
+                            lines
+                        } else {
+                            format!(
+                                "{recalled}
+
+{lines}"
+                            )
+                        };
+                    }
                 }
                 let combined = match (idle_note.is_empty(), recalled.is_empty()) {
                     (true, true) => String::new(),
