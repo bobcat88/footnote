@@ -703,3 +703,54 @@ fn footnote_remember_uses_configured_memory_models_when_model_omitted() {
         "expected configured model load attempt, got: {msg}"
     );
 }
+
+#[cfg(feature = "memory")]
+#[test]
+fn mcp_memory_recalls_are_counted_in_the_activity_log() {
+    let t = tmp();
+    let state = t.path().join("state");
+    fs::create_dir(&state).unwrap();
+    let r = memory_session(
+        &state,
+        &[
+            three_memories(),
+            (
+                "footnote_recall",
+                json!({"query": "Connection pool", "project": "alpha-app", "mode": "lexical"}),
+            ),
+            (
+                "footnote_recall",
+                json!({"query": "integration checks", "mode": "lexical"}),
+            ),
+        ],
+    );
+    for (i, x) in r.iter().enumerate() {
+        assert_eq!(x["isError"], json!(false), "call {}: {x}", i + 1);
+    }
+    let log = fs::read_to_string(state.join("memory-hook/activity.jsonl")).unwrap();
+    assert_eq!(
+        log.lines()
+            .filter(|l| l.contains("\"source\":\"mcp\""))
+            .count(),
+        2,
+        "{log}"
+    );
+    assert!(
+        !log.contains("Connection pool") && !log.contains("integration"),
+        "ids only, never the query: {log}"
+    );
+    let status_out = Command::new(assert_cmd::cargo::cargo_bin!("footnote"))
+        .env("FOOTNOTE_STATE_DIR", &state)
+        .arg("status")
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let status: Value = serde_json::from_slice(&status_out).unwrap();
+    assert_eq!(
+        status["products"]["memory"]["recalls_last_7_days"],
+        json!(2),
+        "{status}"
+    );
+}

@@ -740,6 +740,43 @@ fn configured_memory_models() -> Result<Vec<PathBuf>> {
         .collect())
 }
 
+#[cfg(feature = "memory")]
+/// Record an MCP memory recall in `<state>/memory-hook/activity.jsonl` (ids only, never query text)
+/// so `footnote status` (`recalls_last_7_days`) reflects direct MCP usage as well as hook recalls.
+fn log_mcp_recall(project: Option<&str>, result: &Value) {
+    let ids: Vec<i64> = result["results"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|r| r["id"].as_i64())
+        .collect();
+    if ids.is_empty() {
+        return;
+    }
+    let Ok(state) = crate::state::state_dir() else {
+        return;
+    };
+    let on = footnote_core::config::product_settings(&state, "memory")
+        .map_or(true, |v| v["activity"].as_bool().unwrap_or(true));
+    if !on {
+        return;
+    }
+    let dir = state.join("memory-hook");
+    if crate::state::ensure_private_dir(&dir).is_err() {
+        return;
+    }
+    crate::hook::append_activity(
+        &dir,
+        &json!({
+            "t": footnote_core::audit::now_ms(),
+            "event": "recall",
+            "source": "mcp",
+            "project": project.unwrap_or(""),
+            "ids": ids,
+        }),
+    );
+}
+
 /// Read-only connection. Read tools never create a database.
 fn read_db(db: &Path) -> Result<Connection> {
     if !db.exists() {
@@ -835,6 +872,8 @@ fn recall(db: &Path, args: &Value) -> Result<Value> {
     #[allow(unused_mut)]
     let mut filters = filters;
     let is_mem = is_memory_store(db, &c)?;
+    #[cfg(feature = "memory")]
+    let recall_project = filters.project.clone();
     // On a memory database, `project` is the memory's scope (its own memories plus the global ones), with or without tags.
     #[cfg(feature = "memory")]
     if !args["tags"].is_null() {
@@ -851,18 +890,24 @@ fn recall(db: &Path, args: &Value) -> Result<Value> {
         let scope = filters.project.take();
         filters.only = Some(crate::memory::candidates(&c, scope.as_deref(), &[])?);
     }
-    #[cfg(not(feature = "memory"))]
-    let _ = is_mem;
     let given = if args["model"].is_null() {
         vec![]
     } else {
         model_args(db, args)?
     };
     let models = app::search_models(&c, mode.as_deref(), given)?;
-    if models.is_empty() {
-        return app::search(&c, &query, limit, &filters);
+    let out = if models.is_empty() {
+        app::search(&c, &query, limit, &filters)?
+    } else {
+        crate::semantic::search(&c, &query, limit, &filters, &models)?
+    };
+    #[cfg(feature = "memory")]
+    if is_mem {
+        log_mcp_recall(recall_project.as_deref(), &out);
     }
-    crate::semantic::search(&c, &query, limit, &filters, &models)
+    #[cfg(not(feature = "memory"))]
+    let _ = is_mem;
+    Ok(out)
 }
 
 #[cfg(feature = "memory")]
