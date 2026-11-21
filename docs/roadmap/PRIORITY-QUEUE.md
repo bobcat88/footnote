@@ -25,11 +25,9 @@ Value-ordered implementation queue for open Footnote GitHub issues.
 
 | Rank | Issue | Epic | Area | Impact | Effort | Depends | Summary & Value Rationale |
 |---:|---|---|---|---:|---|---|---|
-| 1 | #352 | #91 | usage | 5 | S | — | Lean C3b: MCP `tools/list` byte-budget gate & compact/multiplex schemas (cuts fixed per-turn token overhead on every session) |
-| 2 | #353 | #93 | engineering | 5 | S | — | Rust quality pass: remove prod `.unwrap()`, hoist `Regex::new` to `OnceLock`, `#[must_use]`/`#[non_exhaustive]`, trim `.clone()` hotspots |
-| 3 | #354 | #93 | engineering | 5 | S | — | Search correctness pass: fail-closed Tantivy fallback diagnostics & `SCAN_LIMIT` fast-path equivalence tests |
-| 4 | #347 | #93 | engineering | 5 | S | — | Pre-public parity: landing page updates, `#top` anchor, L2 caveats, `PRODUCT.md`, symlink check |
-| 5 | #335 | #93 | engineering | 5 | S | #347 | Pre-public checklist: final sign-off gate before repo and site go public |
+| 1 | #379 | #91 | usage | 5 | S | — | Lean: idle-cache-expiry (>55m) handoff trigger & 140k default threshold (directly cuts cold 1h cache writes & long-context cache reads) |
+| 2 | #380 | #91 | usage | 5 | S | — | Lean: `footnote audit-prefix` to rank Turn-1 fixed overhead across MCP servers, rules and skills |
+| 3 | #335 | #93 | engineering | 5 | S | — | Pre-public checklist: final sign-off gate before repo and site go public (`#347` merged) |
 
 ---
 
@@ -37,13 +35,15 @@ Value-ordered implementation queue for open Footnote GitHub issues.
 
 | Rank | Issue | Epic | Area | Impact | Effort | Depends | Summary & Value Rationale |
 |---:|---|---|---|---:|---|---|---|
-| 6 | #355 | #93 | engineering | 4 | S | — | Rust perf & build speed: benchmark `ignore` vs `walkdir`, trim `semantic.rs` hot-loop allocs, evaluate `cargo-nextest` (`line-tables-only` done in #368) |
+| 4 | #355 | #93 | engineering | 4 | S | — | Rust perf & build speed: benchmark `ignore` vs `walkdir`, trim `semantic.rs` hot-loop allocs, evaluate `cargo-nextest` (`line-tables-only` done in #368) |
+| 5 | #382 | #91 | usage | 5 | M | #355 | Lean C1b: native ripgrep-engine (`ignore` + `grep-searcher`) symbol-annotated search with `.gitignore` & output budget |
+| 6 | #381 | #91 | usage | 4 | S | — | Lean D3: `footnote gain --missed`, uniform JSON-array compaction & consecutive repeat-run failure delta in `footnote run` |
 | 7 | #344 | #84 | library | 4 | S | — | Library: expose shared docs cache over MCP, tighten keygen perms & align network docs |
 | 8 | #356 | #83 | memory | 5 | M | — | Memory recall packing: benchmark dual relevance floors, pointer packing & compact subagent context |
 | 9 | #357 | #84 | library | 5 | M | — | Embeddings: benchmark overlapping 510-token max-sim windows instead of hard truncation |
 | 10 | #345 | #85 | code | 4 | M | — | Code: standalone `code-index` roots in MCP, `code-map` MCP mode & multi-indexer status |
-| 11 | #242 | #91 | usage | 4 | M | #352 | Lean C3: smaller fixed overhead and cache-stable hook/prompt injections |
-| 12 | #240 | #91 | usage | 4 | M | — | Lean C1: graph-first reads to reduce blind file reads |
+| 11 | #240 | #91 | usage | 5 | M | — | Lean C1: graph-first & outline-first reads to cut whole-file `Read` tokens (7x larger than Bash volume) |
+| 12 | #242 | #91 | usage | 4 | M | — | Lean C3: smaller fixed overhead and cache-stable hook/prompt injections (`#352` merged) |
 | 13 | #241 | #91 | usage | 4 | M | — | Lean C2: memory-first recall before rediscovery |
 | 14 | #238 | #91 | usage | 4 | M | — | Lean A: `footnote gain` real bill per session and per-session context breakdown |
 | 15 | #343 | #86 | launcher | 4 | M | — | Launcher: bring Memory, Library/Docs and Usage screens to parity with Code and CLI |
