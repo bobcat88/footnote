@@ -25,9 +25,7 @@ Value-ordered implementation queue for open Footnote GitHub issues.
 
 | Rank | Issue | Epic | Area | Impact | Effort | Depends | Summary & Value Rationale |
 |---:|---|---|---|---:|---|---|---|
-| 1 | #379 | #91 | usage | 5 | S | — | Lean: idle-cache-expiry (>55m) handoff trigger & 140k default threshold (directly cuts cold 1h cache writes & long-context cache reads) |
-| 2 | #380 | #91 | usage | 5 | S | — | Lean: `footnote audit-prefix` to rank Turn-1 fixed overhead across MCP servers, rules and skills |
-| 3 | #335 | #93 | engineering | 5 | S | — | Pre-public checklist: final sign-off gate before repo and site go public (`#347` merged) |
+| 1 | #335 | #93 | engineering | 5 | S | — | Pre-public checklist: final sign-off gate before repo and site go public (`#347` merged) |
 
 ---
 
@@ -127,3 +125,4 @@ Value-ordered implementation queue for open Footnote GitHub issues.
 | 72 | #151 | #92 | enterprise | 3 | M | #149 | Enterprise: cost per 1,000 users on an idle machine |
 | 73 | #141 | #90 | alias | 2 | M | — | Alias (Enterprise): underline-and-explain prototype |
 | 74 | #142 | #90 | alias | 2 | M | #141 | Alias (Enterprise): evaluation set v2 |
+| 75 | #387 | #85 | code | 2 | L | #360 | Exploratory: declarative process & system interaction modeling with static GitHub Pages presentation export |

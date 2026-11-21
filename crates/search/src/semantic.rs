@@ -478,18 +478,29 @@ struct Dense {
 impl Dense {
     fn blend(keys: Vec<(u8, i64)>, sigs: Vec<Arc<str>>, cos: Vec<Vec<f32>>) -> Dense {
         let mut z = vec![0.0; keys.len()];
+        let inv_models = 1.0 / cos.len().max(1) as f64;
         for per_model in &cos {
-            let ok: Vec<f64> = per_model
-                .iter()
-                .filter(|c| !c.is_nan())
-                .map(|c| *c as f64)
-                .collect();
-            let n = ok.len().max(1) as f64;
-            let mean = ok.iter().sum::<f64>() / n;
-            let var = ok.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / n;
+            // Two-pass mean/variance avoids allocating an up-to-SCAN_LIMIT Vec<f64> per model per query (#355).
+            let (mut count, mut sum) = (0usize, 0.0f64);
+            for &c in per_model {
+                if !c.is_nan() {
+                    count += 1;
+                    sum += c as f64;
+                }
+            }
+            let n = count.max(1) as f64;
+            let mean = sum / n;
+            let mut var_sum = 0.0f64;
+            for &c in per_model {
+                if !c.is_nan() {
+                    let d = c as f64 - mean;
+                    var_sum += d * d;
+                }
+            }
+            let var = var_sum / n;
             let sd = if var > 0.0 { var.sqrt() } else { 1.0 };
-            for (zi, c) in z.iter_mut().zip(per_model) {
-                *zi += (*c as f64 - mean) / sd / cos.len() as f64; // NaN stays NaN
+            for (zi, &c) in z.iter_mut().zip(per_model) {
+                *zi += (c as f64 - mean) / sd * inv_models; // NaN stays NaN
             }
         }
         Dense { keys, sigs, z }
@@ -610,13 +621,31 @@ struct Cand {
     lex: Option<f64>,
     dense: Option<f64>, // blended z-score over the shortlist, None when any model has no current vector
 }
+fn zscore_stats<I>(len: usize, values: impl Fn() -> I) -> (f64, f64)
+where
+    I: Iterator<Item = f64>,
+{
+    if len == 0 {
+        return (0.0, 1.0);
+    }
+    let n = len as f64;
+    let mean = values().sum::<f64>() / n;
+    let var = values()
+        .map(|x| {
+            let d = x - mean;
+            d * d
+        })
+        .sum::<f64>()
+        / n;
+    let sd = if var > 0.0 { var.sqrt() } else { 1.0 };
+    (mean, sd)
+}
+#[cfg(test)]
 fn zscore(values: &[f64]) -> Vec<f64> {
     if values.is_empty() {
         return vec![];
     }
-    let mean = values.iter().sum::<f64>() / values.len() as f64;
-    let var = values.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / values.len() as f64;
-    let sd = if var > 0.0 { var.sqrt() } else { 1.0 };
+    let (mean, sd) = zscore_stats(values.len(), || values.iter().copied());
     values.iter().map(|x| (x - mean) / sd).collect()
 }
 /// Convex combination of z-scored BM25 and z-scored dense similarity over their own top `pool`, best first.
@@ -647,21 +676,35 @@ fn fuse(cands: &[Cand], pool: usize, alpha: f64) -> Vec<(usize, f64)> {
     if den.is_empty() {
         return lex;
     }
-    let nl = zscore(&lex.iter().map(|x| x.1).collect::<Vec<_>>());
-    let nd = zscore(&den.iter().map(|x| x.1).collect::<Vec<_>>());
-    let floor_l = nl.iter().cloned().fold(f64::INFINITY, f64::min) - 1e-9;
-    let floor_d = nd.iter().cloned().fold(f64::INFINITY, f64::min) - 1e-9;
-    let mut score: HashMap<usize, (f64, f64)> = HashMap::new();
-    for ((i, _), z) in lex.iter().zip(&nl) {
-        score.entry(*i).or_insert((floor_d, floor_l)).1 = *z;
+    // Zero-allocation z-score stats + direct-indexed buffer instead of 4 temporary Vec<f64> + HashMap (#355).
+    let (mean_l, sd_l) = zscore_stats(lex.len(), || lex.iter().map(|x| x.1));
+    let (mean_d, sd_d) = zscore_stats(den.len(), || den.iter().map(|x| x.1));
+    let mut floor_l = f64::INFINITY;
+    for &(_, v) in &lex {
+        floor_l = floor_l.min((v - mean_l) / sd_l);
     }
-    for ((i, _), z) in den.iter().zip(&nd) {
-        score.entry(*i).or_insert((floor_d, floor_l)).0 = *z;
+    floor_l -= 1e-9;
+    let mut floor_d = f64::INFINITY;
+    for &(_, v) in &den {
+        floor_d = floor_d.min((v - mean_d) / sd_d);
     }
-    let mut out: Vec<(usize, f64)> = score
-        .into_iter()
-        .map(|(i, (d, l))| (i, alpha * d + (1.0 - alpha) * l))
-        .collect();
+    floor_d -= 1e-9;
+
+    let mut slots = vec![(false, floor_d, floor_l); cands.len()];
+    for &(i, v) in &lex {
+        slots[i].0 = true;
+        slots[i].2 = (v - mean_l) / sd_l;
+    }
+    for &(i, v) in &den {
+        slots[i].0 = true;
+        slots[i].1 = (v - mean_d) / sd_d;
+    }
+    let mut out: Vec<(usize, f64)> = Vec::with_capacity(lex.len().max(den.len()));
+    for (i, &(seen, d, l)) in slots.iter().enumerate() {
+        if seen {
+            out.push((i, alpha * d + (1.0 - alpha) * l));
+        }
+    }
     out.sort_by(order);
     out
 }

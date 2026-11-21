@@ -1926,7 +1926,8 @@ fn rebinds(t: &str, name: &str) -> bool {
 }
 
 /// The project's files, relative with `/`: what git tracks or would track (so `.gitignore` is honoured), or, outside a git
-/// repository or without git, a walk that skips dependency and build folders.
+/// repository or without git, ripgrep's parallel `ignore` walker honoring `.gitignore`, dot-folder / `SKIP` pruning,
+/// symlink rejection, and deterministic sorted output (#355).
 pub(crate) fn candidates(root: &Path) -> Vec<String> {
     let git = std::process::Command::new("git")
         .args(["ls-files", "-co", "--exclude-standard", "-z"])
@@ -1945,25 +1946,83 @@ pub(crate) fn candidates(root: &Path) -> Vec<String> {
             .map(|p| String::from_utf8_lossy(p).into_owned())
             .collect();
     }
-    walkdir::WalkDir::new(root)
-        .into_iter()
+    walk_candidates(root)
+}
+
+/// Parallel `.gitignore`-aware file walker backed by ripgrep's `ignore` crate (#355).
+/// Never follows symlinks/reparse points and returns deterministically sorted relative paths.
+pub(crate) fn walk_candidates(root: &Path) -> Vec<String> {
+    use ignore::WalkState;
+    use std::sync::Mutex;
+
+    let mut builder = ignore::WalkBuilder::new(root);
+    builder
+        .hidden(false)
+        .follow_links(false)
+        .git_ignore(true)
+        .git_global(false)
+        .git_exclude(true)
+        .require_git(false)
         .filter_entry(|e| {
+            if e.depth() == 0 {
+                return true;
+            }
+            if footnote_core::is_link(e.path()) {
+                return false;
+            }
+            let is_dir = e.file_type().is_some_and(|ft| ft.is_dir());
+            if !is_dir {
+                return true;
+            }
             let name = e.file_name().to_string_lossy();
             // Dot folders too: build copies like `.next-qloop-heavy` held most of a 43 MB copy of a Next.js repo (#246).
-            !(e.file_type().is_dir()
-                && e.depth() > 0
-                && (name.starts_with('.') || SKIP.contains(&name.as_ref())))
+            !(name.starts_with('.') || SKIP.contains(&name.as_ref()))
+        });
+
+    struct Batch<'a> {
+        out: &'a Mutex<Vec<String>>,
+        local: Vec<String>,
+    }
+    impl Drop for Batch<'_> {
+        fn drop(&mut self) {
+            if !self.local.is_empty()
+                && let Ok(mut guard) = self.out.lock()
+            {
+                guard.append(&mut self.local);
+            }
+        }
+    }
+
+    let found: Mutex<Vec<String>> = Mutex::new(Vec::new());
+    builder.build_parallel().run(|| {
+        let mut batch = Batch {
+            out: &found,
+            local: Vec::with_capacity(64),
+        };
+        Box::new(move |entry| {
+            if let Ok(e) = entry
+                && e.file_type().is_some_and(|ft| ft.is_file())
+                && !footnote_core::is_link(e.path())
+            {
+                let rel = e
+                    .path()
+                    .strip_prefix(root)
+                    .unwrap_or(e.path())
+                    .to_string_lossy()
+                    .replace('\\', "/");
+                batch.local.push(rel);
+                if batch.local.len() >= 128
+                    && let Ok(mut guard) = batch.out.lock()
+                {
+                    guard.append(&mut batch.local);
+                }
+            }
+            WalkState::Continue
         })
-        .filter_map(|e| e.ok())
-        .filter(|e| e.file_type().is_file())
-        .map(|e| {
-            e.path()
-                .strip_prefix(root)
-                .unwrap_or(e.path())
-                .to_string_lossy()
-                .replace('\\', "/")
-        })
-        .collect()
+    });
+    let mut out = found.into_inner().unwrap_or_default();
+    out.sort();
+    out
 }
 
 /// The project path a relative import points at, without extension: `relative("src/a/b.ts", "../c.js")` is `src/c`.
@@ -2899,5 +2958,24 @@ class C {
                 .any(|r| r.starts_with("custom.rs\t1\tclone\tstore.rs")),
             "{rules:?}"
         );
+    }
+
+    #[test]
+    fn ignore_walker_honors_gitignore_skips_build_dirs_and_sorts() {
+        let t = tempfile::tempdir().unwrap();
+        std::fs::write(t.path().join(".gitignore"), "ignored_dir/\n*.gen.rs\n").unwrap();
+        std::fs::create_dir_all(t.path().join("src")).unwrap();
+        std::fs::create_dir_all(t.path().join("ignored_dir")).unwrap();
+        std::fs::create_dir_all(t.path().join("target")).unwrap();
+        std::fs::create_dir_all(t.path().join(".hidden_cache")).unwrap();
+        std::fs::write(t.path().join("src/b.rs"), "fn b() {}").unwrap();
+        std::fs::write(t.path().join("src/a.rs"), "fn a() {}").unwrap();
+        std::fs::write(t.path().join("src/out.gen.rs"), "fn g() {}").unwrap();
+        std::fs::write(t.path().join("ignored_dir/x.rs"), "fn x() {}").unwrap();
+        std::fs::write(t.path().join("target/t.rs"), "fn t() {}").unwrap();
+        std::fs::write(t.path().join(".hidden_cache/h.rs"), "fn h() {}").unwrap();
+
+        let files = walk_candidates(t.path());
+        assert_eq!(files, vec![".gitignore", "src/a.rs", "src/b.rs"]);
     }
 }

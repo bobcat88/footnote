@@ -23,6 +23,8 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.10"
 walkdir = "2"
+# Ripgrep's parallel .gitignore-aware directory walker (#355, #382); MIT OR Unlicense.
+ignore = "0.4"
 # DeepSeek Harness keeps its sessions zstd-compressed (src/usage.rs); already in the tree through tantivy.
 zstd = { version = "0.14", default-features = false }
 tempfile = "3"
