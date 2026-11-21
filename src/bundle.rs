@@ -126,6 +126,8 @@ pub fn keygen(file: &Path) -> Result<Value> {
         .create_new(true)
         .open(file)
         .with_context(|| format!("create {}", file.display()))?;
+    // Restricted before the key is written, so it is never readable by others.
+    footnote_core::state::make_file_private(file)?;
     f.write_all(hex(pkcs8.as_ref()).as_bytes())?;
     let pair = Ed25519KeyPair::from_pkcs8(pkcs8.as_ref()).map_err(|e| anyhow::anyhow!("{e}"))?;
     Ok(

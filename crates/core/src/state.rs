@@ -72,12 +72,25 @@ pub fn ensure_private_dir(dir: &Path) -> Result<()> {
         .with_context(|| format!("create state directory {}", dir.display()))?;
     #[cfg(windows)]
     if !existed {
-        restrict_to_current_user(dir)?;
+        restrict_to_current_user(dir, "(OI)(CI)F")?;
     }
     #[cfg(not(windows))]
     if !existed {
         use std::os::unix::fs::PermissionsExt;
         std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700))?;
+    }
+    Ok(())
+}
+
+/// Make a file readable and writable by the current user only (0600; on Windows an access list with no inherited entries),
+/// for secrets written outside the private state folder, such as a `docs keygen` signing key.
+pub fn make_file_private(path: &Path) -> Result<()> {
+    #[cfg(windows)]
+    restrict_to_current_user(path, "F")?;
+    #[cfg(not(windows))]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))?;
     }
     Ok(())
 }
@@ -96,7 +109,7 @@ pub fn fix_private_dir(dir: &Path) -> Result<()> {
             .output()
             .context("run icacls to read the state directory's access list")?;
         if String::from_utf8_lossy(&out.stdout).contains("(I)") {
-            restrict_to_current_user(dir)?;
+            restrict_to_current_user(dir, "(OI)(CI)F")?;
         }
     }
     #[cfg(not(windows))]
@@ -110,7 +123,7 @@ pub fn fix_private_dir(dir: &Path) -> Result<()> {
 }
 
 #[cfg(windows)]
-fn restrict_to_current_user(dir: &Path) -> Result<()> {
+fn restrict_to_current_user(dir: &Path, rights: &str) -> Result<()> {
     let user = std::env::var("USERNAME").context("USERNAME is not set")?;
     let who = match std::env::var("USERDOMAIN") {
         Ok(domain) if !domain.is_empty() => format!("{domain}\\{user}"),
@@ -119,8 +132,9 @@ fn restrict_to_current_user(dir: &Path) -> Result<()> {
     let out = std::process::Command::new("icacls")
         .arg(dir)
         .args(["/inheritance:r", "/grant:r"])
-        .arg(format!("{who}:(OI)(CI)F"))
-        .args(["/grant:r", "SYSTEM:(OI)(CI)F"])
+        .arg(format!("{who}:{rights}"))
+        .args(["/grant:r"])
+        .arg(format!("SYSTEM:{rights}"))
         .output()
         .context("run icacls to restrict the state directory")?;
     if !out.status.success() {

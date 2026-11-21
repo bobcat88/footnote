@@ -270,6 +270,12 @@ pub fn run(db: &Option<PathBuf>, dry_run: bool) -> Result<Value> {
             gemini.clone(),
             gemini.parent().is_some_and(Path::exists),
         ),
+        // Grok lists only its own config.toml servers (Codex keys).
+        (
+            "grok".into(),
+            home.join(".grok/config.toml"),
+            home.join(".grok").exists(),
+        ),
     ];
     let agy_dirs = antigravity_config_dirs(&home);
     if agy_dirs.is_empty() {
@@ -288,7 +294,7 @@ pub fn run(db: &Option<PathBuf>, dry_run: bool) -> Result<Value> {
             report.push(json!({"agent": agent, "status": "not detected", "path": portable(&path)}));
             continue;
         }
-        let status = if agent == "codex" {
+        let status = if agent == "codex" || agent == "grok" {
             write_codex_toml(&path, &db, dry_run)?
         } else {
             write_json(&path, &entry, dry_run)?

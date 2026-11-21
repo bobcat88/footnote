@@ -2,8 +2,8 @@
 //!
 //! A corpus is searchable once its keyword index is built. Embeddings are computed afterwards by a detached `docs embed`
 //! worker (one `docs.embed` job per library, smallest first) and search upgrades to hybrid by itself when the vectors are
-//! committed. Embedding is one transaction per library: a crash leaves the keyword corpus intact, and re-running `docs add`
-//! starts the embedding again (shortcut: nothing is kept from the killed run, split into commits when a library is huge).
+//! committed. Embedding commits in batches: a crash leaves the keyword corpus intact with the batches already embedded, and
+//! re-running `docs add` resumes from there.
 //! Layout: `<state>/docs/<site>/<version>.db`, each registered in the corpora list so Search finds it.
 //! Old-version rule: a new version is added beside the old ones and nothing is deleted on its own; `docs prune` deletes,
 //! per site, every version older than the newest (numbers compare as numbers, so 10.0 > 9.2; any non-numeric version such

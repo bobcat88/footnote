@@ -161,7 +161,7 @@ Footnote assumes retrieved text is **untrusted data** that may contain prompt in
 - **Read-only corpora:** No MCP tool can write to your documents; memory write tools refuse any document database.
 - **Network calls:** Search, memory, code graph, and MCP tools stay offline except for:
   1. Explicit commands you run: `footnote models install`, `footnote docs add`, `footnote docs refresh`, `footnote docs install <url>`, and `footnote crawl`.
-  2. Optional live fetch-on-miss in `footnote find`: when cached docs have no strong match, it fetches up to 3 in-scope pages (honoring `robots.txt`, never sending your query text). Set `FOOTNOTE_NO_LIVE_FETCH=1` to disable completely.
+  2. Optional live fetch-on-miss in `footnote find` (and the MCP `footnote_recall` with `all=true`): when cached docs have no strong match, it fetches up to 3 in-scope pages (honoring `robots.txt`, never sending your query text). Set `FOOTNOTE_NO_LIVE_FETCH=1` to disable completely.
 - **Private local state:** User-only permissions/ACLs for state, HMAC daemon handshake, and tamper-evident audit log (`footnote audit verify`). Details in [SECURITY.md](SECURITY.md).
 
 ---

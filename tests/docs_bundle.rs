@@ -57,6 +57,7 @@ fn setup(redistributable: bool) -> (Env, std::path::PathBuf, String) {
         .as_str()
         .unwrap()
         .to_string();
+    assert_private(&key);
     ok(
         &src,
         &[
@@ -329,4 +330,23 @@ fn bundle_vectors_from_another_model_are_not_installed() {
         .unwrap();
     assert_eq!(n, 0);
     assert!(ok(&d, &["find", "pool"]).to_string().contains("pool"));
+}
+
+/// The signing key is readable by its owner only: 0600, or on Windows an access list with no inherited entries.
+fn assert_private(file: &std::path::Path) {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mode = std::fs::metadata(file).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o600, "key file mode {mode:o}");
+    }
+    #[cfg(windows)]
+    {
+        let out = std::process::Command::new("icacls")
+            .arg(file)
+            .output()
+            .unwrap();
+        let acl = String::from_utf8_lossy(&out.stdout);
+        assert!(!acl.contains("(I)"), "key file inherits access: {acl}");
+    }
 }

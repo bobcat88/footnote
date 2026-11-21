@@ -207,3 +207,46 @@ fn corpora_are_added_and_removed_by_hand() {
     assert!(!listed(&footnote().arg("corpora").output().unwrap().stdout));
     assert!(db.exists(), "removing keeps the database");
 }
+
+#[test]
+fn mcp_recall_with_all_searches_every_library_corpus() {
+    // An agent wired to the memory server reaches the Library corpora too, without a server per corpus (#344).
+    let t = tempfile::tempdir_in(env!("CARGO_TARGET_TMPDIR")).unwrap();
+    let state = t.path().join("state");
+    let root = t.path().join("notes");
+    fs::create_dir(&root).unwrap();
+    fs::write(
+        root.join("wal.md"),
+        "# SQLite\n## WAL\nCheckpoint latency is amortized by batching writes.\n",
+    )
+    .unwrap();
+    let r = root.to_str().unwrap();
+    Command::new(assert_cmd::cargo::cargo_bin!("footnote"))
+        .env("FOOTNOTE_STATE_DIR", &state)
+        .arg("--db")
+        .arg(t.path().join("k.db"))
+        .args(["index", "--root", r, "--allow", r])
+        .assert()
+        .success();
+    let input = concat!(
+        r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"t","version":"1"}}}"#,
+        "\n",
+        r#"{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"footnote_recall","arguments":{"query":"checkpoint latency","all":true}}}"#,
+        "\n",
+    );
+    let out = Command::new(assert_cmd::cargo::cargo_bin!("footnote"))
+        .env("FOOTNOTE_STATE_DIR", &state)
+        .env("FOOTNOTE_NO_LIVE_FETCH", "1")
+        .arg("--db")
+        .arg(state.join("memory.db"))
+        .arg("mcp")
+        .write_stdin(input)
+        .output()
+        .unwrap();
+    let reply = String::from_utf8_lossy(&out.stdout);
+    let last: Value = serde_json::from_str(reply.lines().last().unwrap()).unwrap();
+    assert_eq!(last["result"]["isError"], false, "{reply}");
+    let text = last["result"]["content"][0]["text"].as_str().unwrap();
+    assert!(text.contains("wal.md"), "{text}");
+    assert!(text.contains("Checkpoint latency"), "{text}");
+}

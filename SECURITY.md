@@ -1,6 +1,6 @@
 # Security policy
 
-Footnote is a local tool that serves your own documents to your own agents. It opens no outbound network connection except in two commands you run yourself, `footnote models install` and `footnote crawl <url>` (see the README's security model for their limits), and its MCP tools cannot write to your documents; the only write tools add or retire agent memories in a separate memory database. Agent memories are written by the agent you already use, into a local file; no other model receives your conversation.
+Footnote is a local tool that serves your own documents to your own agents. It opens outbound network connections only in commands you run yourself (`footnote models install`, `footnote crawl <url>`, `footnote docs add`, `footnote docs refresh`, `footnote docs install <url>`) and in `footnote find`'s fetch on miss, which reads up to 3 pages of an already cached docs site when no cached passage matches well and never sends your query (`FOOTNOTE_NO_LIVE_FETCH=1` turns it off; see the README's security model), and its MCP tools cannot write to your documents; the only write tools add or retire agent memories in a separate memory database. Agent memories are written by the agent you already use, into a local file; no other model receives your conversation.
 The model that describes what it defends against is in the README under [Security model](README.md#security-model).
 
 ## Reporting a vulnerability
