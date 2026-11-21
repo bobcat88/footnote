@@ -60,7 +60,7 @@ rust-version.workspace = true
 [features]
 # Products (ADR 0001): a build can leave out a product it does not need. Default: all three free products.
 default = ["library", "memory", "code"]
-library = ["dep:footnote-library"]
+library = ["dep:footnote-library", "dep:url"]
 memory = ["dep:footnote-memory"]
 # Experimental database primitive only; no automatic migration or key management.
 encryption = ["memory", "footnote-memory/encryption", "dep:zeroize"]
@@ -91,7 +91,7 @@ getrandom.workspace = true
 ureq.workspace = true
 ring.workspace = true
 regex.workspace = true
-url.workspace = true
+url = { workspace = true, optional = true }
 walkdir.workspace = true
 zstd.workspace = true
 zeroize = { version = "1", optional = true }
@@ -106,10 +106,23 @@ assert_cmd.workspace = true
 interprocess.workspace = true
 sha2.workspace = true
 
+# Release binaries: thin LTO, single codegen unit, and stripped symbols (#368).
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = "symbols"
+
 # The profile that 'dist' will build with
 [profile.dist]
 inherits = "release"
 lto = "thin"
+
+# Line-table debug info keeps exact file:line panic backtraces while cutting Windows .pdb link I/O (#368).
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.test]
+debug = "line-tables-only"
 
 # Tests load embedding models dozens of times; hashing the model and parsing its tokenizer unoptimized cost ~1.6 s per load.
 [profile.dev.package.sha2]
