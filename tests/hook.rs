@@ -715,3 +715,97 @@ fn skills_are_suggested_only_when_on_and_matching() {
         .success();
     assert!(!hook(state, event_in("s2", "UserPromptSubmit", prompt)).contains("css-transitions"));
 }
+
+/// #443: a suggested skill is watched in the session file; at Stop its read and script runs are logged with names and
+/// counts only, and `footnote skills stats` adds them up. With `activity` off nothing is logged.
+#[test]
+fn skill_outcomes_log_reads_and_script_runs() {
+    let t = tempfile::tempdir().unwrap();
+    let state = t.path();
+    let skills = state.join("my-skills");
+    let dir = skills.join("css-transitions");
+    fs::create_dir_all(dir.join("scripts")).unwrap();
+    fs::write(
+        dir.join("SKILL.md"),
+        "---\nname: css-transitions\ndescription: Add CSS transitions to dropdowns, modals and toasts.\n---\n# Body\n",
+    )
+    .unwrap();
+    command(state)
+        .args(["skills", "index", "web"])
+        .arg(&skills)
+        .assert()
+        .success();
+    let transcript = state.join("session.jsonl");
+    // Before the suggestion: never counted.
+    let early = json!({"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "x0", "name": "Read", "input": {"file_path": dir.join("SKILL.md")}}]}});
+    fs::write(&transcript, format!("{early}\n")).unwrap();
+    let with_transcript = |name: &str, session: &str| {
+        let mut ev = event_in(session, name, "add a transition to the dropdown");
+        ev["transcript_path"] = json!(transcript);
+        ev
+    };
+    let log = state.join("memory-hook").join("skill-outcomes.jsonl");
+
+    fs::write(
+        state.join("memory.json"),
+        r#"{"skills":true,"activity":false}"#,
+    )
+    .unwrap();
+    assert!(hook(state, with_transcript("UserPromptSubmit", "off")).contains("css-transitions"));
+    hook(state, with_transcript("Stop", "off"));
+    assert!(!log.exists(), "activity off must log nothing");
+
+    fs::write(state.join("memory.json"), r#"{"skills":true}"#).unwrap();
+    assert!(hook(state, with_transcript("UserPromptSubmit", "s1")).contains("css-transitions"));
+    let script = dir.join("scripts").join("check.mjs");
+    let lines = [
+        json!({"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "a", "name": "Read", "input": {"file_path": dir.join("SKILL.md")}}]}}),
+        json!({"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "b", "name": "Bash", "input": {"command": format!("node {} --secret-flag", script.display())}}]}}),
+        json!({"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "b", "is_error": true, "content": "Exit code 1\nboom"}]}}),
+        json!({"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "c", "name": "Read", "input": {"file_path": dir.join("SKILL.md")}}]}}),
+    ];
+    let mut text = fs::read_to_string(&transcript).unwrap();
+    for l in &lines {
+        text.push_str(&format!("{l}\n"));
+    }
+    fs::write(&transcript, text).unwrap();
+    hook(state, with_transcript("Stop", "s1"));
+    // A second Stop rescans nothing old.
+    hook(state, with_transcript("Stop", "s1"));
+
+    let rows: Vec<Value> = fs::read_to_string(&log)
+        .unwrap()
+        .lines()
+        .map(|l| serde_json::from_str(l).unwrap())
+        .collect();
+    let events: Vec<(&str, Option<bool>)> = rows
+        .iter()
+        .map(|r| (r["event"].as_str().unwrap(), r["ok"].as_bool()))
+        .collect();
+    assert_eq!(
+        events,
+        vec![("suggested", None), ("read", None), ("run", Some(false))]
+    );
+    let raw = fs::read_to_string(&log).unwrap();
+    for leak in [
+        "secret-flag",
+        "SKILL.md",
+        "check.mjs",
+        "dropdown",
+        "my-skills",
+    ] {
+        assert!(!raw.contains(leak), "{leak} leaked into {raw}");
+    }
+    let out = command(state)
+        .args(["skills", "stats"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let stats: Value = serde_json::from_slice(&out).unwrap();
+    assert_eq!(
+        stats["skills"][0],
+        json!({"skill": "css-transitions", "theme": "web", "suggested": 1, "read": 1, "runs": 1, "failures": 1})
+    );
+}

@@ -28,6 +28,9 @@ mod refresh;
 #[cfg(feature = "memory")]
 mod review;
 mod run;
+// Written by the Memory hook, read by `footnote skills stats` (Library).
+#[cfg_attr(not(all(feature = "memory", feature = "library")), allow(dead_code))]
+mod skill_outcomes;
 #[cfg(feature = "library")]
 // The prompt hook that suggests skills is Memory's; a Library-only build keeps just the index commands.
 #[cfg_attr(not(feature = "memory"), allow(dead_code))]

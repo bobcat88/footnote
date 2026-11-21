@@ -153,7 +153,10 @@ Optional skill suggestions (off by default): index the skills of one theme (at m
 footnote skills index web ~/.claude/skills/transitions-dev ~/.claude/skills/impeccable
 footnote config set memory.skills true
 footnote skills list            # themes switched on; `footnote skills remove web` switches one off
+footnote skills stats           # per skill: times suggested, read by the agent, script runs and failures
 ```
+
+While `memory.activity` is on (the default), the hook records what the agent did with each suggested skill: whether it read the `SKILL.md`, and how the skill's scripts ran. It reads only the agent's session file, and only the part written since its last check. The log at `memory-hook/skill-outcomes.jsonl` holds skill names, themes, projects and counts, never a prompt, path or command. It costs no tokens. Only Claude Code session files are read for now.
 
 ### B. Footnote Lean (Shell Compaction, Token Accounting & Prefix Audit)
 
