@@ -607,3 +607,36 @@ fn memory_recall_project_filter_is_the_memory_scope() {
     let tagged: Value = serde_json::from_str(&text(&r[2])).unwrap();
     assert_eq!(tagged["results"].as_array().unwrap().len(), 1, "{tagged}");
 }
+
+#[cfg(feature = "memory")]
+#[test]
+fn memory_wake_up_returns_the_memory_pack() {
+    let t = tmp();
+    let state = t.path().join("state");
+    fs::create_dir(&state).unwrap();
+    // Before the first memory: an empty pack, and still no database file.
+    let cold = memory_session(
+        &state,
+        &[("footnote_wake_up", json!({"project": "alpha-app"}))],
+    );
+    let cold: Value = serde_json::from_str(&text(&cold[0])).unwrap();
+    assert_eq!(cold["kind"], "memory_pack");
+    assert_eq!(cold["memories"], json!([]));
+    assert!(!state.join("memory.db").exists());
+
+    let r = memory_session(
+        &state,
+        &[
+            three_memories(),
+            ("footnote_wake_up", json!({"project": "alpha-app"})),
+        ],
+    );
+    assert_eq!(r[1]["isError"], json!(false), "{}", r[1]);
+    let wake: Value = serde_json::from_str(&text(&r[1])).unwrap();
+    assert_eq!(wake["kind"], "memory_pack");
+    assert_eq!(wake["retrieval"], "memory_pack");
+    let mems = wake["memories"].as_array().unwrap();
+    assert_eq!(mems.len(), 2, "the alpha-app memories only: {wake}");
+    assert_eq!(mems[0]["kind"], "preference", "preferences first: {wake}");
+    assert_eq!(mems[1]["kind"], "fact");
+}
