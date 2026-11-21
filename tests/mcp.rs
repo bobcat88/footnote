@@ -754,3 +754,25 @@ fn mcp_memory_recalls_are_counted_in_the_activity_log() {
         "{status}"
     );
 }
+
+#[cfg(feature = "memory")]
+#[test]
+fn memory_database_points_from_records_to_chunks() {
+    let t = tmp();
+    let state = t.path().join("state");
+    fs::create_dir(&state).unwrap();
+    let r = memory_session(
+        &state,
+        &[
+            three_memories(),
+            ("footnote_get", json!({"id": 1, "kind": "record"})),
+            ("footnote_info", json!({"op": "export"})),
+        ],
+    );
+    assert_eq!(r[1]["isError"], json!(true));
+    assert!(text(&r[1]).contains("kind=\"chunk\""), "{}", r[1]);
+    assert_eq!(r[2]["isError"], json!(false), "{}", r[2]);
+    let export: Value = serde_json::from_str(&text(&r[2])).unwrap();
+    assert_eq!(export["memories"], 3, "{export}");
+    assert!(export["note"].as_str().unwrap().contains("chunks"));
+}

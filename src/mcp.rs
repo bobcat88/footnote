@@ -941,6 +941,12 @@ fn record_by_id(c: &Connection, id: i64) -> Result<Value> {
         .query_row("SELECT id FROM records WHERE id=?1", [id], |r| r.get(0))
         .optional()?;
     if exists.is_none() {
+        #[cfg(feature = "memory")]
+        if crate::memory::is_memory_db(c)? {
+            bail!(
+                "record not found: id={id} (agent memories are stored as chunks; call footnote_get with kind=\"chunk\")"
+            );
+        }
         bail!("record not found: id={id}");
     }
     crate::records::get(c, id, true)
@@ -1162,6 +1168,8 @@ fn export(db: &Path, args: &Value) -> Result<Value> {
             "truncated": false,
             "access": "read_only",
             "trust": "metadata only; no record payload text is exported",
+            "memories": 0,
+            "note": "agent memories are stored as chunks, not structured records; use footnote_recall or footnote_wake_up to read them",
         }));
     }
     let c = read_db(db)?;
@@ -1180,7 +1188,9 @@ fn export(db: &Path, args: &Value) -> Result<Value> {
             }))
         })?
         .collect::<rusqlite::Result<_>>()?;
-    Ok(json!({
+    // Only the memory build adds to it.
+    #[allow(unused_mut)]
+    let mut out = json!({
         "format": format,
         "kind": "records_metadata",
         "records": records,
@@ -1189,7 +1199,20 @@ fn export(db: &Path, args: &Value) -> Result<Value> {
         "truncated": total > MAX_EXPORT_ROWS as i64,
         "access": "read_only",
         "trust": "metadata only; no record payload text is exported",
-    }))
+    });
+    #[cfg(feature = "memory")]
+    if is_memory_store(db, &c)? {
+        let memories: i64 = c.query_row(
+            "SELECT count(*) FROM memories m JOIN sources s ON s.id=m.source_id WHERE s.status='indexed'",
+            [],
+            |r| r.get(0),
+        )?;
+        out["memories"] = json!(memories);
+        out["note"] = json!(
+            "agent memories are stored as chunks, not structured records; use footnote_recall or footnote_wake_up to read them"
+        );
+    }
+    Ok(out)
 }
 
 #[cfg(feature = "memory")]
