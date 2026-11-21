@@ -1,9 +1,11 @@
-# Footnote: one long-lived hardened daemon, plus a helper profile for network commands (#392).
+# Footnote: one long-lived hardened daemon for one person's agents, plus a helper profile for network commands (#392).
 #
-# Daily use: warm ONNX models shared by every agent that can reach this Docker engine.
+# Daily use: warm ONNX models shared by every agent of this user (Claude Code, Codex, Gemini CLI, Antigravity, parallel
+# sessions), the way one memory.db already serves them on a host.
 #   docker compose up -d
 #   MCP command for each agent: docker exec -i footnote footnote --db /state/memory.db mcp
-#   Register every detected agent (Claude Code, Codex, Gemini CLI, Antigravity) in one go:
+#   Memory hook for each agent: docker exec -i footnote footnote hook
+#   Register both with every detected agent in one go:
 #     Windows: powershell -NoProfile -ExecutionPolicy Bypass -File scripts\docker-agents.ps1
 #     Linux / macOS: bash scripts/docker-agents.sh
 #
@@ -16,12 +18,12 @@
 # translate to container paths (for example a Windows host):
 #     FOOTNOTE_WORKSPACES=C:\Users\<user>\repos
 #
-# Access control: anyone who can use this Docker engine (`docker exec`) can read and change every memory in the state
-# volume. Run one stack per trust boundary (team, tenant), each with its own project name, container and volume:
-#     FOOTNOTE_CONTAINER_NAME=footnote-team-a FOOTNOTE_STATE_VOLUME=footnote-state-team-a docker compose -p team-a up -d
-# See SECURITY.md, "Container security boundary".
+# One person per stack: anyone who can use this Docker engine (`docker exec`) can read, change and delete every memory
+# in the state volume. Do not share a stack between people (SECURITY.md, "Container security boundary").
 #
 # Optional settings:
+# - FOOTNOTE_CLAUDE_PROJECTS: the host folder of Claude Code's session files (C:\Users\<user>\.claude\projects), mounted
+#   read-only so the hook can size a long session and ask for its handoff at Stop.
 # - FOOTNOTE_IMAGE, FOOTNOTE_CONTAINER_NAME, FOOTNOTE_STATE_VOLUME (default footnote-state), FOOTNOTE_DB, FOOTNOTE_PATH_MAP.
 # - FOOTNOTE_WORKSPACES_MOUNT: keep it at or under /workspaces, the only place where git trusts mounted repositories.
 # - FOOTNOTE_PIDS_LIMIT (default 512), FOOTNOTE_MEM_LIMIT (default 4g).
@@ -45,7 +47,7 @@ x-hardened: &hardened
     - no-new-privileges:true
   tmpfs:
     - /tmp:rw,noexec,nosuid,size=64m
-  # A shared hub must survive one runaway client: bounded processes, memory and logs.
+  # One runaway agent must not exhaust the host: bounded processes, memory and logs.
   pids_limit: ${FOOTNOTE_PIDS_LIMIT:-512}
   mem_limit: ${FOOTNOTE_MEM_LIMIT:-4g}
   logging:
@@ -63,7 +65,7 @@ services:
     environment:
       # Offline daemon: no live fetch-on-miss attempt (footnote find, footnote_recall all=true).
       FOOTNOTE_NO_LIVE_FETCH: "1"
-      FOOTNOTE_PATH_MAP: ${FOOTNOTE_PATH_MAP:-${FOOTNOTE_WORKSPACES:+${FOOTNOTE_WORKSPACES}=${FOOTNOTE_WORKSPACES_MOUNT:-/workspaces}}}
+      FOOTNOTE_PATH_MAP: ${FOOTNOTE_PATH_MAP:-${FOOTNOTE_WORKSPACES:+${FOOTNOTE_WORKSPACES}=${FOOTNOTE_WORKSPACES_MOUNT:-/workspaces}}${FOOTNOTE_CLAUDE_PROJECTS:+;${FOOTNOTE_CLAUDE_PROJECTS}=/host/claude-projects}}
     command:
       - --db
       - ${FOOTNOTE_DB:-/state/memory.db}
@@ -73,6 +75,8 @@ services:
     volumes:
       - footnote-state:/state
       - ${FOOTNOTE_WORKSPACES:?set FOOTNOTE_WORKSPACES to the host folder of repositories to mount read-only}:${FOOTNOTE_WORKSPACES_MOUNT:-/workspaces}:ro
+      # Claude Code's session files, read-only, when FOOTNOTE_CLAUDE_PROJECTS is set; otherwise an empty volume.
+      - ${FOOTNOTE_CLAUDE_PROJECTS:-footnote-no-transcripts}:/host/claude-projects:ro
     healthcheck:
       test: ["CMD-SHELL", "for s in \"$$FOOTNOTE_STATE_DIR\"/footnote-*.sock; do [ -S \"$$s\" ] && exit 0; done; exit 1"]
       interval: 5s
@@ -91,6 +95,8 @@ services:
 
 volumes:
   footnote-state:
-    # One name for the Compose daemon and the one-shot `docker run -v footnote-state:/state` commands of DOCKER.md;
-    # give each team or tenant stack its own (FOOTNOTE_STATE_VOLUME=footnote-state-team-a).
+    # One name for the Compose daemon and the one-shot `docker run -v footnote-state:/state` commands of DOCKER.md.
     name: ${FOOTNOTE_STATE_VOLUME:-footnote-state}
+  # Stands in for Claude Code's session folder when FOOTNOTE_CLAUDE_PROJECTS is unset; stays empty.
+  footnote-no-transcripts:
+    name: footnote-no-transcripts

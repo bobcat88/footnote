@@ -87,7 +87,7 @@ footnote update --from .\target\release\footnote.exe
 
 ### Docker (when Windows blocks local builds)
 
-Windows **Smart App Control** or a managed **WDAC / AppLocker** policy stops `cargo build` at the first build script (`os error 4551`). Run Footnote in a hardened Linux container instead (Docker Desktop, WSL 2 backend); the same image serves several agents as a shared hub. Everything is in **[DOCKER.md](DOCKER.md)**: build, one-shot commands, the Compose daemon, agent registration (`scripts/docker-agents.ps1` / `.sh`), host path mapping, backup and migration, the compatibility matrix and the limits.
+Windows **Smart App Control** or a managed **WDAC / AppLocker** policy stops `cargo build` at the first build script (`os error 4551`). Run Footnote in a hardened Linux container instead (Docker Desktop, WSL 2 backend); one daemon serves all your agents, MCP server and memory hooks. Everything is in **[DOCKER.md](DOCKER.md)**: build, one-shot commands, the Compose daemon, agent registration (`scripts/docker-agents.ps1` / `.sh`), host path mapping, backup and migration, the compatibility matrix and the limits.
 
 ```bash
 docker build -t footnote:local .

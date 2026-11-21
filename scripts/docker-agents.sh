@@ -1,14 +1,18 @@
 #!/usr/bin/env bash
-# Register the Footnote Docker hub as an MCP server in every agent found for this user (#392).
+# Register the Footnote Docker daemon with every agent found for this user: MCP server and memory hooks (#392).
 #
-# Detects Claude Code, Codex, Gemini CLI and Antigravity, and points each of them at the long-lived Compose daemon:
-#     <absolute path of docker> exec -i <container> footnote --db <db> mcp
-# - An existing entry with the same name is left as it is: --force replaces it, --remove deletes it.
-# - Claude Code is configured through its own command (`claude mcp add --scope user`), so its configuration file is
-#   never edited here. The other agents' files are backed up once (<file>.footnote-backup) and replaced atomically.
-#   A file that the agent rewrote in the meantime is not overwritten. JSON files (Gemini CLI, Antigravity) need python3.
+# Detects Claude Code, Codex, Gemini CLI and Antigravity (also its T3 Code provider folders and $GEMINI_HOME), and points
+# each of them at the long-lived Compose daemon of this user:
+#     MCP server:   <absolute path of docker> exec -i <container> footnote --db <db> mcp
+#     memory hooks: <absolute path of docker> exec -i <container> footnote hook
+# The hooks are the ones `footnote install --memory` writes on a host (same files, events and timeouts).
+# - An existing entry is left as it is; a Footnote memory hook already there is not doubled. --force replaces it,
+#   --remove deletes what this script added.
+# - Claude Code's MCP server goes through `claude mcp add --scope user` (~/.claude.json is never edited here); its hooks
+#   live in ~/.claude/settings.json. Every edited file is backed up once (<file>.footnote-backup) and replaced atomically;
+#   a file that the agent rewrote meanwhile is not overwritten; a JSON file with comments is left to you. JSON needs python3.
 # - Nothing goes over the network. --dry-run shows what would change and writes nothing.
-# - Anyone who can use this Docker engine can read every memory in the hub: see SECURITY.md, "Who can reach the hub".
+# - Anyone who can use this Docker engine can read every memory in the container: see SECURITY.md.
 #
 # Usage: scripts/docker-agents.sh [--container NAME] [--db PATH] [--name NAME] [--home DIR] [--dry-run] [--force] [--remove]
 set -euo pipefail
@@ -21,7 +25,7 @@ DRY_RUN=0
 FORCE=0
 REMOVE=0
 
-usage() { sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//'; }
 while [ $# -gt 0 ]; do
   case "$1" in
     --container) CONTAINER="${2:?--container needs a value}"; shift 2 ;;
@@ -48,15 +52,19 @@ die() { echo "docker-agents: $*" >&2; exit 1; }
 DOCKER="$(command -v docker || true)"
 [ -n "${DOCKER}" ] || [ "${REMOVE}" = 1 ] || die "docker is not on PATH: install Docker Engine (or Docker Desktop) first"
 if command -v cygpath >/dev/null 2>&1; then
-  # Git Bash: keep MSYS from rewriting container paths (/var/lib/...) passed to Windows programs, and register a
+  # Git Bash: keep MSYS from rewriting container paths (/state/...) passed to Windows programs, and register a
   # Windows path with forward slashes.
   export MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*'
   if [ -n "${DOCKER}" ] && [ -f "${DOCKER}.exe" ]; then DOCKER="${DOCKER}.exe"; fi
   if [ -n "${DOCKER}" ]; then DOCKER="$(cygpath -m "${DOCKER}")"; fi
 fi
 # GUI agents do not inherit the shell PATH: register the absolute path.
-case "${DOCKER}" in *'"'* | *$'\n'* | *$'\r'*) die "unsupported characters in the docker path: ${DOCKER}" ;; esac
+DOCKER="${DOCKER:-docker}"
+case "${DOCKER}" in *'"'* | *$'\n'* | *$'\r'* | *\\*) die "unsupported characters in the docker path: ${DOCKER}" ;; esac
 MCP_ARGS=(exec -i "${CONTAINER}" footnote --db "${DB}" mcp)
+# Agents run a hook command through a shell: quote the path only when it has a space.
+case "${DOCKER}" in *' '*) HOOK_EXE="\"${DOCKER}\"" ;; *) HOOK_EXE="${DOCKER}" ;; esac
+HOOK_COMMAND="${HOOK_EXE} exec -i ${CONTAINER} footnote hook"
 
 RESULTS=()
 result() { # agent target status
@@ -84,20 +92,29 @@ replace_file() { # path tmp stamp
   mv -f -- "${tmp}" "${path}"
 }
 
-# `mcpServers.<NAME>` in a JSON settings file (Gemini CLI, Antigravity).
-json_server() { # agent path
-  local agent="$1" path="$2"
+# One JSON edit (python3): mode `mcp` (mcpServers.<NAME>), `hooks` (Claude-format or Gemini event hooks) or `agy`
+# (Antigravity's named entry). Prints the status.
+json_edit() { # agent path mode [format]
+  local agent="$1" path="$2" mode="$3" format="${4:-claude}" status
   # A real interpreter, not the Microsoft Store stub that only prints a hint.
   if ! python3 -c 'import json' >/dev/null 2>&1; then
-    result "${agent}" "${path}" "skipped: python3 is needed to edit JSON; add \"${NAME}\" under mcpServers yourself"
+    result "${agent}" "${path}" "skipped: python3 is needed to edit JSON; add the ${mode} entry yourself (DOCKER.md)"
     return
   fi
-  local status
-  status="$(python3 - "${path}" "${NAME}" "${DOCKER}" "${DRY_RUN}" "${FORCE}" "${REMOVE}" "${MCP_ARGS[@]}" <<'PY'
+  status="$(FOOTNOTE_AGENTS_PATH="${path}" FOOTNOTE_AGENTS_MODE="${mode}" FOOTNOTE_AGENTS_FORMAT="${format}" \
+    FOOTNOTE_AGENTS_NAME="${NAME}" FOOTNOTE_AGENTS_DOCKER="${DOCKER}" FOOTNOTE_AGENTS_HOOK="${HOOK_COMMAND}" \
+    FOOTNOTE_AGENTS_DRY="${DRY_RUN}" FOOTNOTE_AGENTS_FORCE="${FORCE}" FOOTNOTE_AGENTS_REMOVE="${REMOVE}" \
+    python3 - "${MCP_ARGS[@]}" <<'PY'
 import json, os, re, sys, tempfile
 
-path, name, docker, dry, force, remove, *args = sys.argv[1:]
-dry, force, remove = dry == "1", force == "1", remove == "1"
+env = os.environ
+path, mode, fmt, name = env["FOOTNOTE_AGENTS_PATH"], env["FOOTNOTE_AGENTS_MODE"], env["FOOTNOTE_AGENTS_FORMAT"], env["FOOTNOTE_AGENTS_NAME"]
+docker, hook = env["FOOTNOTE_AGENTS_DOCKER"], env["FOOTNOTE_AGENTS_HOOK"]
+dry, force, remove = (env[k] == "1" for k in ("FOOTNOTE_AGENTS_DRY", "FOOTNOTE_AGENTS_FORCE", "FOOTNOTE_AGENTS_REMOVE"))
+mcp_args = sys.argv[1:]
+CLAUDE_EVENTS = {"SessionStart": 15, "UserPromptSubmit": 10, "Stop": 5}
+GEMINI_EVENTS = {"SessionStart": 15000, "BeforeAgent": 10000, "AfterAgent": 5000}
+DOCKER_HOOK = re.compile(r" exec -i [A-Za-z0-9][A-Za-z0-9_.-]* footnote hook$")
 
 def stamp():
     try:
@@ -106,13 +123,41 @@ def stamp():
     except FileNotFoundError:
         return None
 
+def memory_hook(command):
+    # This script's `docker exec ... footnote hook`, the native `footnote hook`, or the Python hook it replaced.
+    c = command.strip()
+    if "memory_hook.py" in c or DOCKER_HOOK.search(c):
+        return True
+    if not c.endswith(" hook"):
+        return False
+    exe = c[:-5].strip().strip("'\"").replace("\\", "/")
+    return exe.rsplit("/", 1)[-1] in ("footnote", "footnote.exe")
+
+def done(status, root=None):
+    if root is not None and not dry:
+        folder = os.path.dirname(path) or "."
+        os.makedirs(folder, exist_ok=True)
+        fd, tmp = tempfile.mkstemp(dir=folder, prefix=".footnote-", suffix=".tmp")
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(json.dumps(root, indent=2, ensure_ascii=False) + "\n")
+        if stamp() != before:
+            os.unlink(tmp)
+            sys.exit(f"{path} changed while it was being updated (the agent is probably running): close it and run this again")
+        if before and not os.path.exists(path + ".footnote-backup"):
+            with open(path, "rb") as src, open(path + ".footnote-backup", "wb") as dst:
+                dst.write(src.read())
+        if before:
+            os.chmod(tmp, os.stat(path).st_mode & 0o777)
+        os.replace(tmp, path)
+    print(status)
+    sys.exit(0)
+
 before = stamp()
 raw = open(path, encoding="utf-8").read() if before else ""
 if raw.strip():
     # Rewriting would drop comments: leave such a file to the user.
     if re.search(r"(?m)^\s*//", raw) or "/*" in raw:
-        print(f'skipped: the file has comments; add "{name}" under mcpServers yourself')
-        sys.exit(0)
+        done(f"skipped: the file has comments; add the {mode} entry yourself (DOCKER.md)")
     try:
         root = json.loads(raw)
     except ValueError as e:
@@ -121,41 +166,91 @@ if raw.strip():
         sys.exit(f"{path} does not hold a JSON object")
 else:
     root = {}
-servers = root.get("mcpServers")
-if servers is not None and not isinstance(servers, dict):
-    sys.exit(f"{path}: mcpServers is not an object")
-present = servers is not None and name in servers
-if remove:
-    if not present:
-        print("not registered")
-        sys.exit(0)
-    del servers[name]
-    status = "removed"
-else:
+
+if mode == "mcp":
+    servers = root.get("mcpServers")
+    if servers is not None and not isinstance(servers, dict):
+        sys.exit(f"{path}: mcpServers is not an object")
+    present = servers is not None and name in servers
+    if remove:
+        if not present:
+            done("mcp: not registered")
+        del servers[name]
+        done("removed (mcp)", root)
     if present and not force:
-        print("already registered (--force replaces it)")
-        sys.exit(0)
+        done("mcp: already registered (--force replaces it)")
     if servers is None:
         servers = root["mcpServers"] = {}
-    servers[name] = {"command": docker, "args": args}
-    status = "replaced" if present else "registered"
-if not dry:
-    folder = os.path.dirname(path) or "."
-    os.makedirs(folder, exist_ok=True)
-    fd, tmp = tempfile.mkstemp(dir=folder, prefix=".footnote-", suffix=".tmp")
-    with os.fdopen(fd, "w", encoding="utf-8") as f:
-        f.write(json.dumps(root, indent=2, ensure_ascii=False) + "\n")
-    if stamp() != before:
-        os.unlink(tmp)
-        sys.exit(f"{path} changed while it was being updated (the agent is probably running): close it and run this again")
-    backup = path + ".footnote-backup"
-    if before and not os.path.exists(backup):
-        with open(path, "rb") as src, open(backup, "wb") as dst:
-            dst.write(src.read())
-    if before:
-        os.chmod(tmp, os.stat(path).st_mode & 0o777)
-    os.replace(tmp, path)
-print(status)
+    servers[name] = {"command": docker, "args": mcp_args}
+    done(("replaced" if present else "registered") + " (mcp)", root)
+
+if mode == "agy":
+    handler = lambda t: [{"type": "command", "command": hook, "timeout": t}]
+    desired = {"SessionStart": handler(15), "PreInvocation": handler(10), "Stop": handler(5)}
+    current = root.get(name)
+    if remove:
+        dumped = json.dumps(current) if current is not None else ""
+        if " exec -i " not in dumped or "footnote hook" not in dumped:
+            done("hooks: not registered")
+        del root[name]
+        done("removed (hooks)", root)
+    if current == desired:
+        done("hooks: already registered")
+    if current is not None and not force:
+        done(f'hooks: a "{name}" entry is already there (--force replaces it)')
+    root[name] = desired
+    done(("replaced" if current is not None else "registered") + " (hooks: SessionStart, PreInvocation, Stop)", root)
+
+# mode == "hooks"
+events = GEMINI_EVENTS if fmt == "gemini" else CLAUDE_EVENTS
+hooks = root.get("hooks")
+if hooks is not None and not isinstance(hooks, dict):
+    sys.exit(f"{path}: hooks is not an object")
+if hooks is None:
+    if remove:
+        done("hooks: not registered")
+    hooks = root["hooks"] = {}
+groups_of = lambda ev: [g for g in (hooks.get(ev) or []) if isinstance(g, dict)]
+other = sum(
+    1 for ev in events for g in groups_of(ev) for h in (g.get("hooks") or [])
+    if isinstance(h, dict) and memory_hook(str(h.get("command", ""))) and h.get("command") != hook
+)
+if other and not force and not remove:
+    done("hooks: another Footnote memory hook is registered (--force replaces it)")
+changed = added = False
+for ev, timeout in events.items():
+    kept_groups, found = [], False
+    for g in groups_of(ev):
+        inner = [h for h in (g.get("hooks") or []) if isinstance(h, dict)]
+        kept = []
+        for h in inner:
+            cmd = str(h.get("command", ""))
+            if memory_hook(cmd):
+                if remove:
+                    if DOCKER_HOOK.search(cmd.strip()):
+                        changed = True
+                        continue
+                elif cmd != hook:
+                    h["command"] = hook
+                    changed = True
+                found = True
+            kept.append(h)
+        if inner and not kept:
+            continue  # every hook of this group was ours: drop the group
+        g["hooks"] = kept
+        kept_groups.append(g)
+    if not found and not remove:
+        entry = {"type": "command", "command": hook, "timeout": timeout}
+        kept_groups.append({"matcher": "*", "hooks": [entry]} if fmt == "gemini" else {"hooks": [entry]})
+        changed = added = True
+    if kept_groups:
+        hooks[ev] = kept_groups
+    else:
+        hooks.pop(ev, None)
+if not changed:
+    done("hooks: not registered" if remove else "hooks: already registered")
+status = "removed" if remove else ("registered" if added and not other else "replaced")
+done(f"{status} (hooks: {', '.join(events)})", root)
 PY
 )" || die "${agent}: ${path} was not changed"
   result "${agent}" "${path}" "${status}"
@@ -168,9 +263,9 @@ codex_server() { # path
   if [ -f "${path}" ] && grep -Eq "^[[:space:]]*\[mcp_servers\.(${NAME}|\"${NAME}\")\][[:space:]]*$" "${path}"; then
     present=1
   fi
-  if [ "${REMOVE}" = 1 ] && [ "${present}" = 0 ]; then result codex "${path}" "not registered"; return; fi
+  if [ "${REMOVE}" = 1 ] && [ "${present}" = 0 ]; then result codex "${path}" "mcp: not registered"; return; fi
   if [ "${present}" = 1 ] && [ "${FORCE}" = 0 ] && [ "${REMOVE}" = 0 ]; then
-    result codex "${path}" "already registered (--force replaces it)"
+    result codex "${path}" "mcp: already registered (--force replaces it)"
     return
   fi
   if [ "${REMOVE}" = 1 ]; then status=removed; elif [ "${present}" = 1 ]; then status=replaced; else status=registered; fi
@@ -198,20 +293,20 @@ codex_server() { # path
     fi
     replace_file "${path}" "${tmp}" "${stamp}"
   fi
-  result codex "${path}" "${status}"
+  result codex "${path}" "${status} (mcp)"
 }
 
-# Claude Code: its own command keeps ~/.claude.json consistent (Claude Code rewrites that file while it runs).
+# Claude Code's MCP server: its own command keeps ~/.claude.json consistent (Claude Code rewrites that file while it runs).
 claude_server() {
   local target="claude mcp (user scope)" present=0 status
   if ! command -v claude >/dev/null 2>&1; then
-    result claude-code "${target}" "skipped: the claude command is not on PATH; run: claude mcp add --scope user ${NAME} -- ${DOCKER} ${MCP_ARGS[*]}"
+    result claude-code "${target}" "skipped: the claude command is not on PATH; run: claude mcp add ${NAME} --scope user -- ${DOCKER} ${MCP_ARGS[*]}"
     return
   fi
   if (cd "${HOME_DIR}" && claude mcp get "${NAME}" >/dev/null 2>&1); then present=1; fi
-  if [ "${REMOVE}" = 1 ] && [ "${present}" = 0 ]; then result claude-code "${target}" "not registered"; return; fi
+  if [ "${REMOVE}" = 1 ] && [ "${present}" = 0 ]; then result claude-code "${target}" "mcp: not registered"; return; fi
   if [ "${present}" = 1 ] && [ "${FORCE}" = 0 ] && [ "${REMOVE}" = 0 ]; then
-    result claude-code "${target}" "already registered (--force replaces it)"
+    result claude-code "${target}" "mcp: already registered (--force replaces it)"
     return
   fi
   if [ "${REMOVE}" = 1 ]; then status=removed; elif [ "${present}" = 1 ]; then status=replaced; else status=registered; fi
@@ -224,29 +319,66 @@ claude_server() {
         die "claude mcp add --scope user ${NAME} failed"
     fi
   fi
-  result claude-code "${target}" "${status}"
+  result claude-code "${target}" "${status} (mcp)"
 }
 
-GEMINI="${HOME_DIR}/.gemini"
+# Antigravity config folders, found as `footnote install` finds them: ~/.gemini/config, T3 Code's isolated provider
+# folders (~/.t3/userdata/providers/antigravity/<id>/config), and $GEMINI_HOME/config when it is inside the home folder.
+# Prints "label|folder" lines.
+antigravity_dirs() {
+  local g="${HOME_DIR}/.gemini" seen="" d cfg
+  add() { case "|${seen}|" in *"|$2|"*) ;; *) seen="${seen}|$2"; echo "$1|$2" ;; esac; }
+  if [ -e "${g}/config" ] || [ -e "${g}/antigravity" ] || [ -e "${g}/antigravity-cli" ]; then add antigravity "${g}/config"; fi
+  if [ -d "${HOME_DIR}/.t3/userdata/providers/antigravity" ]; then
+    for d in "${HOME_DIR}/.t3/userdata/providers/antigravity"/*/; do
+      [ -d "${d}" ] || continue
+      d="${d%/}"
+      cfg="${d}/config"
+      if [ -d "${cfg}" ] || [ -d "${d}/antigravity-acp" ]; then add "antigravity (t3-code)" "${cfg}"; fi
+    done
+  fi
+  if [ -n "${GEMINI_HOME:-}" ] && [ -d "${GEMINI_HOME}" ]; then
+    case "${GEMINI_HOME%/}/" in "${HOME_DIR%/}/"*) add "antigravity (GEMINI_HOME)" "${GEMINI_HOME%/}/config" ;; esac
+  fi
+}
+
+CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-${HOME_DIR}/.claude}"
 CODEX_DIR="${CODEX_HOME:-${HOME_DIR}/.codex}"
+GEMINI_SETTINGS="${HOME_DIR}/.gemini/settings.json"
 found=0
-if command -v claude >/dev/null 2>&1 || [ -e "${HOME_DIR}/.claude" ]; then found=1; claude_server; fi
-if command -v codex >/dev/null 2>&1 || [ -e "${CODEX_DIR}" ]; then found=1; codex_server "${CODEX_DIR}/config.toml"; fi
-if command -v gemini >/dev/null 2>&1 || [ -f "${GEMINI}/settings.json" ]; then
+claude_hooks=0
+if command -v claude >/dev/null 2>&1 || [ -e "${CLAUDE_DIR}" ]; then
   found=1
-  json_server gemini-cli "${GEMINI}/settings.json"
+  claude_server
+  json_edit claude-code "${CLAUDE_DIR}/settings.json" hooks claude
+  claude_hooks=1
 fi
-if [ -e "${GEMINI}/config" ] || [ -e "${GEMINI}/antigravity" ] || [ -e "${GEMINI}/antigravity-cli" ]; then
+if command -v codex >/dev/null 2>&1 || [ -e "${CODEX_DIR}" ]; then
   found=1
-  json_server antigravity "${GEMINI}/config/mcp_config.json"
+  codex_server "${CODEX_DIR}/config.toml"
+  json_edit codex "${CODEX_DIR}/hooks.json" hooks claude
 fi
+if command -v gemini >/dev/null 2>&1 || [ -f "${GEMINI_SETTINGS}" ]; then
+  found=1
+  json_edit gemini-cli "${GEMINI_SETTINGS}" mcp
+  json_edit gemini-cli "${GEMINI_SETTINGS}" hooks gemini
+fi
+while IFS='|' read -r label cfg; do
+  [ -n "${cfg}" ] || continue
+  found=1
+  json_edit "${label}" "${cfg}/mcp_config.json" mcp
+  json_edit "${label}" "${cfg}/hooks.json" agy
+done < <(antigravity_dirs)
 [ "${found}" = 1 ] || echo "docker-agents: no agent found (Claude Code, Codex, Gemini CLI, Antigravity): nothing to do" >&2
 
 if [ "${#RESULTS[@]}" -gt 0 ]; then
-  { echo "AGENT|TARGET|STATUS"; printf '%s\n' "${RESULTS[@]}"; } | if command -v column >/dev/null 2>&1; then column -t -s '|'; else tr '|' '\t'; fi
+  # One line per entry, the status before the path: a long path (T3 Code folders) must not hide the status.
+  printf '%s\n' "${RESULTS[@]}" | awk -F'|' '
+    { a[NR] = $1; t[NR] = $2; s[NR] = $3; if (length($1) > w) w = length($1) }
+    END { f = "%-" w "s %s [%s]\n"; for (i = 1; i <= NR; i++) printf f, a[i], s[i], t[i] }'
 fi
 
-if [ "${REMOVE}" = 0 ] && [ -n "${DOCKER}" ]; then
+if [ "${REMOVE}" = 0 ] && [ -n "$(command -v docker || true)" ]; then
   if [ "$(docker inspect -f '{{.State.Running}}' "${CONTAINER}" 2>/dev/null || true)" != "true" ]; then
     echo "docker-agents: container '${CONTAINER}' is not running: start it with 'docker compose up -d' (agents connect to it)" >&2
   else
@@ -259,6 +391,11 @@ if [ "${REMOVE}" = 0 ] && [ -n "${DOCKER}" ]; then
       echo "Checked: '${CONTAINER}' answers over MCP with ${tools} tools."
     else
       echo "docker-agents: '${CONTAINER}' is running but did not answer tools/list: check 'docker logs ${CONTAINER}'" >&2
+    fi
+    # Claude Code's handoff at Stop reads the size of the session from its transcript.
+    transcripts="$(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/host/claude-projects"}}{{.Type}}{{end}}{{end}}' "${CONTAINER}" 2>/dev/null || true)"
+    if [ "${claude_hooks}" = 1 ] && [ "${transcripts}" != "bind" ]; then
+      echo "Note: '${CONTAINER}' cannot read Claude Code's session files, so the handoff of a long session at Stop is off. Set FOOTNOTE_CLAUDE_PROJECTS (DOCKER.md, Section 3.1)."
     fi
   fi
 fi

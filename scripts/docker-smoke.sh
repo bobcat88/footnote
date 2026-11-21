@@ -189,11 +189,13 @@ echo "${exec_out}" | grep -q "${MARKER}" || {
   exit 1
 }
 
-echo "[9/10] Verify scripts/docker-agents.sh registers detected agents with a working MCP command"
+echo "[9/10] Verify scripts/docker-agents.sh registers the MCP server and the memory hooks, and both reach the daemon"
 agents_home="${SCRATCH}/home"
 stub_bin="${SCRATCH}/bin"
-mkdir -p "${agents_home}/.claude" "${agents_home}/.codex" "${agents_home}/.gemini/config" "${stub_bin}"
-# A stub claude shadows any real one: the smoke suite never touches the machine's own agent configuration.
+mkdir -p "${agents_home}/.claude" "${agents_home}/.codex" "${agents_home}/.gemini/config" "${stub_bin}" \
+  "${agents_home}/.t3/userdata/providers/antigravity/smoke1/config"
+# A stub claude shadows any real one, and every agent folder points into the temporary home: the smoke suite never
+# touches the machine's own agent configuration.
 cat >"${stub_bin}/claude" <<'EOF'
 #!/bin/sh
 d="$(dirname "$0")"
@@ -204,10 +206,13 @@ case "$1 $2" in
 esac
 EOF
 chmod +x "${stub_bin}/claude"
-agents_out="$(PATH="${stub_bin}:${PATH}" CODEX_HOME="${agents_home}/.codex" \
-  bash "${REPO_ROOT}/scripts/docker-agents.sh" --home "${agents_home}" --container "${DAEMON_NAME}")"
+agents() {
+  env -u GEMINI_HOME PATH="${stub_bin}:${PATH}" CODEX_HOME="${agents_home}/.codex" CLAUDE_CONFIG_DIR="${agents_home}/.claude" \
+    bash "${REPO_ROOT}/scripts/docker-agents.sh" --home "${agents_home}" --container "${DAEMON_NAME}" "$@"
+}
+agents_out="$(agents)"
 echo "${agents_out}" | grep -q "answers over MCP with 8 tools" || {
-  echo "docker-agents.sh did not verify the hub: ${agents_out}" >&2
+  echo "docker-agents.sh did not verify the daemon: ${agents_out}" >&2
   exit 1
 }
 grep -q "mcp add --scope user footnote-memory -- .* exec -i ${DAEMON_NAME} footnote --db ${DB_PATH} mcp" \
@@ -218,19 +223,40 @@ registered_docker="$(sed -n 's/^command = "\(.*\)"$/\1/p' "${codex_toml}")"
 agent_reply="$(printf '%s\n%s\n' "${INIT}" "${TOOLS_LIST}" \
   | "${registered_docker}" exec -i "${DAEMON_NAME}" footnote --db "${DB_PATH}" mcp | tail -n 1)"
 [ "$(printf '%s' "${agent_reply}" | grep -o '"inputSchema"' | wc -l | tr -d ' ')" = 8 ] || {
-  echo "The registered command did not reach the hub: ${agent_reply}" >&2
+  echo "The registered command did not reach the daemon: ${agent_reply}" >&2
   exit 1
 }
+case "${registered_docker}" in *' '*) hook_command="\"${registered_docker}\" exec -i ${DAEMON_NAME} footnote hook" ;;
+  *) hook_command="${registered_docker} exec -i ${DAEMON_NAME} footnote hook" ;; esac
 if have_python; then
-  python3 - "${agents_home}/.gemini/config/mcp_config.json" "${registered_docker}" "${DAEMON_NAME}" <<'PY'
+  python3 - "${agents_home}" "${registered_docker}" "${DAEMON_NAME}" "${hook_command}" <<'PY'
 import json, sys
-entry = json.load(open(sys.argv[1], encoding="utf-8"))["mcpServers"]["footnote-memory"]
-assert entry["command"] == sys.argv[2], entry
-assert entry["args"] == ["exec", "-i", sys.argv[3], "footnote", "--db", "/state/memory.db", "mcp"], entry
+home, docker, container, hook = sys.argv[1:]
+load = lambda p: json.load(open(f"{home}/{p}", encoding="utf-8"))
+mcp = ["exec", "-i", container, "footnote", "--db", "/state/memory.db", "mcp"]
+for cfg in (".gemini/config", ".t3/userdata/providers/antigravity/smoke1/config"):
+    entry = load(f"{cfg}/mcp_config.json")["mcpServers"]["footnote-memory"]
+    assert entry == {"command": docker, "args": mcp}, (cfg, entry)
+    agy = load(f"{cfg}/hooks.json")["footnote-memory"]
+    assert {k: [(h["command"], h["timeout"]) for h in v] for k, v in agy.items()} == {
+        "SessionStart": [(hook, 15)], "PreInvocation": [(hook, 10)], "Stop": [(hook, 5)]}, (cfg, agy)
+for f in (".claude/settings.json", ".codex/hooks.json"):
+    hooks = load(f)["hooks"]
+    got = {ev: [(h["command"], h["timeout"]) for g in hooks[ev] for h in g["hooks"]] for ev in hooks}
+    assert got == {"SessionStart": [(hook, 15)], "UserPromptSubmit": [(hook, 10)], "Stop": [(hook, 5)]}, (f, got)
 PY
+  [ "$(agents | grep -c 'already registered')" -ge 6 ] || { echo "a second run changed the registration" >&2; exit 1; }
 fi
-PATH="${stub_bin}:${PATH}" CODEX_HOME="${agents_home}/.codex" \
-  bash "${REPO_ROOT}/scripts/docker-agents.sh" --home "${agents_home}" --container "${DAEMON_NAME}" --remove >/dev/null
+# The registered hook command, run through a shell as an agent runs it, answers a session start with the memory pack.
+hook_out="$(printf '{"hook_event_name":"SessionStart","session_id":"smoke-hook","cwd":"%s/footnote"}\n' "${WORKSPACES_DIR}" \
+  | bash -c "${hook_command}")" || { echo "The registered hook command failed" >&2; exit 1; }
+echo "${hook_out}" | grep -q "${MARKER}" || { echo "The hook did not return the memory pack: ${hook_out}" >&2; exit 1; }
+agents --remove >/dev/null
 if grep -q 'footnote-memory' "${codex_toml}"; then echo "--remove left the Codex entry" >&2; exit 1; fi
+if have_python && grep -q 'footnote hook' "${agents_home}/.claude/settings.json" "${agents_home}/.codex/hooks.json" \
+  "${agents_home}/.gemini/config/hooks.json"; then
+  echo "--remove left a memory hook" >&2
+  exit 1
+fi
 
 echo "[10/10] All Docker smoke checks passed."

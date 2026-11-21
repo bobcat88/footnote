@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.7
 
 # Footnote in a hardened Linux container, for hosts that cannot run local builds
-# (Windows Smart App Control / WDAC blocks Cargo build scripts: os error 4551) and for a shared hub (#392).
+# (Windows Smart App Control / WDAC blocks Cargo build scripts: os error 4551), for one person's agents (#392).
 #
 #   docker build -t footnote:local .
 #   docker run --rm --network none --read-only --tmpfs /tmp:rw,noexec,nosuid,size=64m --cap-drop=ALL \

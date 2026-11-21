@@ -108,7 +108,7 @@ footnote docs add https://flask.palletsprojects.com/en/stable/ --site flask
 - **Update & rollback:** `footnote update --from <new-binary>` atomically swaps binaries even while agents run; `footnote rollback` restores the previous one.
 - **Uninstall:** `footnote uninstall --memory --lean` cleanly removes hooks and MCP entries while keeping your databases and backups.
 - **Full OS & harness walkthrough:** see **[HOW-TO.md](HOW-TO.md)**.
-- **Docker (Windows App Control, shared hub):** a hardened image (`Dockerfile`), a long-lived daemon for several agents (`compose.yaml`), and one command that registers Claude Code, Codex, Gemini CLI and Antigravity with it (`scripts/docker-agents.ps1` / `.sh`). See [DOCKER.md](DOCKER.md).
+- **Docker (Windows App Control):** a hardened image (`Dockerfile`), a long-lived daemon for one person's agents (`compose.yaml`), and one command that registers it, MCP server and memory hooks, with Claude Code, Codex, Gemini CLI and Antigravity (`scripts/docker-agents.ps1` / `.sh`). See [DOCKER.md](DOCKER.md).
 
 ### Connect your agent
 
@@ -164,7 +164,7 @@ Footnote assumes retrieved text is **untrusted data** that may contain prompt in
   1. Explicit commands you run: `footnote models install`, `footnote docs add`, `footnote docs refresh`, `footnote docs install <url>`, and `footnote crawl`.
   2. Optional live fetch-on-miss in `footnote find` (and the MCP `footnote_recall` with `all=true`): when cached docs have no strong match, it fetches up to 3 in-scope pages (honoring `robots.txt`, never sending your query text). Set `FOOTNOTE_NO_LIVE_FETCH=1` to disable completely.
 - **Private local state:** User-only permissions/ACLs for state, HMAC daemon handshake, and tamper-evident audit log (`footnote audit verify`). Details in [SECURITY.md](SECURITY.md).
-- **Hardened container:** the `Dockerfile` and `compose.yaml` run as non-root (`10001`) with `--network none`, a read-only rootfs, no capabilities, read-only workspace mounts, a private state volume and digest-pinned base images; a mounted repository's `.git/config` cannot start a program. Docker access is memory access: see [SECURITY.md](SECURITY.md#who-can-reach-the-hub-access-control).
+- **Hardened container:** the `Dockerfile` and `compose.yaml` run as non-root (`10001`) with `--network none`, a read-only rootfs, no capabilities, read-only workspace mounts, a private state volume and digest-pinned base images; a mounted repository's `.git/config` cannot start a program. One person per container: see [SECURITY.md](SECURITY.md#one-person-per-container).
 
 ---
 
