@@ -33,7 +33,7 @@ When running Footnote inside Docker (for example on Windows hosts where Applicat
 
 ### One person per container
 
-Docker support is for one person: their agents, sessions and MCP hosts sharing one memory, as on a host. **Anyone who can use the Docker engine can read, change and delete every memory in the state volume** (through `docker exec`, `docker cp`, or another container on the volume), so do not share a stack between people. A memory's `scope` is a project name, not a permission. Team memory, with authors and per-person access, is designed in #434.
+Docker support is for one person: their agents, sessions and MCP hosts sharing one memory, as on a host. **Anyone who can use the Docker engine can read, change and delete every memory in the state volume** (through `docker exec`, `docker cp`, or another container on the volume), so do not share a stack between people.
 
 - **Backups** (`footnote backup`) hold every memory in clear text. Store them with the same access rules as the volume.
 

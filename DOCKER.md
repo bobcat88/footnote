@@ -5,7 +5,7 @@ Docker support is for **one person**: your agents (Claude Code, Codex, Gemini CL
 - **Windows blocks local builds**: Smart App Control or a managed WDAC / AppLocker policy stops `cargo build` at the first build script (`os error 4551`) and blocks an unsigned `footnote.exe`. Self-signing does not get past it, and turning Smart App Control off cannot be undone without reinstalling Windows: use the container instead of weakening the policy.
 - **You want one warm daemon** for all your agents: it keeps the embedding models loaded, and the memory hooks reach it through `docker exec`.
 
-A stack shared between several people is not a supported mode: see [SECURITY.md → One person per container](SECURITY.md#one-person-per-container). Team memory is designed in #434.
+A stack shared between several people is not a supported mode: see [SECURITY.md → One person per container](SECURITY.md#one-person-per-container).
 
 Like [HOW-TO.md](HOW-TO.md), this guide is written for humans and AI coding agents.
 
