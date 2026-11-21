@@ -1,6 +1,6 @@
 # Documentation map
 
-The product README is [../README.md](../README.md). This folder holds architecture, operations, roadmap, and design documents for Footnote.
+The product README is [../README.md](../README.md) and the cross-platform Linux/Windows setup & LLM testing guide is [../HOW-TO.md](../HOW-TO.md). This folder holds architecture, operations, roadmap, and design documents for Footnote.
 
 ## Current
 

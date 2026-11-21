@@ -31,10 +31,10 @@ Reserve (optional third, not required): **basic-memory** (closest to Footnote ar
 - Default embedder: `openai` (needs key). Local option `fastembed`, default model there `thenlper/gte-large` (`mem0/embeddings/fastembed.py`). Force a small model with `BAAI/bge-small-en-v1.5`, 384 dim.
 - Chunking: none. One `add()` message = one memory = one vector. The embedder truncates at its own max length (512 tokens for bge-small, from model card, UNVERIFIED in this session).
 
-### Windows install (pinned; combination not run)
+### Local install (pinned; combination not run)
 ```powershell
-uv venv --python 3.12 D:\bench\venv-mem0
-uv pip install --python D:\bench\venv-mem0\Scripts\python.exe "mem0ai==2.2.1" "fastembed==0.9.1" "qdrant-client==1.20.0"
+uv venv --python 3.12 .bench/venv-mem0
+uv pip install --python .bench/venv-mem0/Scripts/python.exe "mem0ai==2.2.1" "fastembed==0.9.1" "qdrant-client==1.20.0"
 ```
 Versions read from PyPI 2026-11-13 (fastembed 0.9.1 = 2026-10-24, qdrant-client 1.20.0 = 2026-10-22). Python >=3.10 required. **Do not install `mem0ai[nlp]`/spaCy**: `mem0/utils/spacy_models.py` auto-downloads `en_core_web_sm` from the network when spaCy is present but the model is missing, and the lemmatizer is English-only. Without spaCy, `lemmatize_for_bm25` returns the text unchanged and `extract_entities` returns `[]` (verified in source). fastembed downloads ONNX models and the BM25 stopword files from Hugging Face on first use; pre-warm the cache, then set `HF_HUB_OFFLINE=1`.
 
@@ -42,7 +42,7 @@ Versions read from PyPI 2026-11-13 (fastembed 0.9.1 = 2026-10-24, qdrant-client 
 ```python
 import os
 os.environ["MEM0_TELEMETRY"] = "False"        # BEFORE importing mem0: also disables GitHub-raw notice fetch + posthog
-os.environ["MEM0_DIR"] = r"D:\bench\mem0\home"
+os.environ["MEM0_DIR"] = "./.bench/mem0/home"
 from mem0 import Memory
 
 CFG = {
@@ -52,8 +52,8 @@ CFG = {
                "config": {"model": "BAAI/bge-small-en-v1.5", "embedding_dims": 384}},
   "vector_store": {"provider": "qdrant",
                    "config": {"collection_name": "bench", "embedding_model_dims": 384,   # default dims is 1536: must set
-                              "path": r"D:\bench\mem0\qdrant", "on_disk": True}},
-  "history_db_path": r"D:\bench\mem0\history.db",
+                              "path": "./.bench/mem0/qdrant", "on_disk": True}},
+  "history_db_path": "./.bench/mem0/history.db",
 }
 m = Memory.from_config(CFG)
 
@@ -68,7 +68,7 @@ ranked = [x["metadata"]["doc_id"] for x in r["results"]]
 ```
 Sources: `add()`/`_add_to_vector_store` raw branch, `_create_memory`, `_search_vector_store`, `MemoryItem` (mem0/memory/main.py, mem0/configs/base.py, v2.2.1). A third party uses the same pattern (`infer=False`, `filters={"user_id":...}`, `top_k`, metadata `source_doc_id`): https://github.com/basicmachines-co/basic-memory/blob/main/benchmarks/src/basic_memory_benchmarks/providers/mem0_local.py (read 2026-11-13). Their provider also calls `delete_all` and closes both Qdrant clients (`vector_store.client`, `_telemetry_vector_store.client`) between runs.
 
-(c) On-disk store to measure: `D:\bench\mem0\qdrant` (Qdrant local files; I believe a SQLite-backed `storage.sqlite` inside the collection folder, UNVERIFIED) + `D:\bench\mem0\history.db` (+ `MEM0_DIR\migrations_qdrant` if telemetry was left on). Measure the three together; `history.db` duplicates every text.
+(c) On-disk store to measure: `./.bench/mem0/qdrant` (Qdrant local files; I believe a SQLite-backed `storage.sqlite` inside the collection folder, UNVERIFIED) + `./.bench/mem0/history.db` (+ `MEM0_DIR/migrations_qdrant` if telemetry was left on). Measure the three together; `history.db` duplicates every text.
 
 ### Caveats
 - **Hidden LLM calls**: none with `infer=False` (raw branch does only `embedding_model.embed` + `vector_store.insert`). With `infer=True` (the default!) every `add()` calls the LLM. Forgetting `infer=False` = failure at first add without a key.
@@ -106,10 +106,10 @@ Sources: `add()`/`_add_to_vector_store` raw branch, `_create_memory`, `_search_v
 - Chunking: yes. Default `TextChunker` (paragraph-based), token budget auto-derived (`min(embedding token limit, llm_max_completion_tokens // 2)`; with no key the exact value is UNVERIFIED, so pass `chunk_size=` explicitly). One document yields N chunks, search returns chunks.
 - Graph: built by `cognify`; keyless = GLiNER demo extractor (NER + relations) and summaries "from_extraction" (no LLM) (cognee/modules/cognify/config.py).
 
-### Windows install (pinned; not run)
+### Local install (pinned; not run)
 ```powershell
-uv venv --python 3.12 D:\bench\venv-cognee
-uv pip install --python D:\bench\venv-cognee\Scripts\python.exe "cognee[gliner]==1.6.8" --extra-index-url https://download.pytorch.org/whl/cpu
+uv venv --python 3.12 .bench/venv-cognee
+uv pip install --python .bench/venv-cognee/Scripts/python.exe "cognee[gliner]==1.6.8" --extra-index-url https://download.pytorch.org/whl/cpu
 ```
 `gliner` extra = `gliner2[local]`, `torch>=2.1`, sentencepiece, psutil (pyproject at v1.6.8 line ~295). If you skip the extra, cognee **installs CPU torch + GLiNER at first `cognify`** from `https://download.pytorch.org/whl/cpu` (`gliner_auto_install=True` default, cognee/modules/cognify/config.py); set `GLINER_AUTO_INSTALL=false` to forbid a runtime pip install. GLiNER model and fastembed model are also downloaded from the HF hub on first use (cognee/shared/model_download_notice.py). Pre-warm, then `HF_HUB_OFFLINE=1`. Heavy dependency tree (litellm, openai, lancedb, etc.): expect a multi-GB venv, UNVERIFIED size.
 
@@ -120,7 +120,7 @@ import os, asyncio, uuid
 for v in ("LLM_API_KEY", "OPENAI_API_KEY"): os.environ.pop(v, None)
 os.environ.update({
   "AUTO_FEEDBACK": "false", "TELEMETRY_DISABLED": "true",
-  "SYSTEM_ROOT_DIRECTORY": r"D:\bench\cognee\system", "DATA_ROOT_DIRECTORY": r"D:\bench\cognee\data",
+  "SYSTEM_ROOT_DIRECTORY": "./.bench/cognee/system", "DATA_ROOT_DIRECTORY": "./.bench/cognee/data",
   "EMBEDDING_PROVIDER": "fastembed", "EMBEDDING_MODEL": "BAAI/bge-small-en-v1.5", "EMBEDDING_DIMENSIONS": "384",
   "GRAPH_EXTRACTOR": "gliner_demo", "GLINER_AUTO_INSTALL": "false",
 })

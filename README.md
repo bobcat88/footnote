@@ -2,17 +2,17 @@
 
 # Footnote<sup>1</sup>
 
-**Local memory for AI coding agents. Every answer carries a footnote.**
+**Local memory, docs, code graph, and token-lean tooling for AI coding agents. Every answer carries a footnote.**
 
-Search your own notes and documents from Claude Code, Codex, Hermes or any MCP host.<br>
-Each hit comes back with the file, the line, the content hash and whether the file has changed since.
+One local Rust binary + MCP server for Claude Code, Codex, Gemini CLI, Antigravity, Hermes, or any MCP host.<br>
+Search your notes and docs with file, line, hash, and freshness — plus persistent agent memory, a compiler-grade code graph, native symbol-annotated grep, and preservation-first shell compaction.
 
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-A8281C)](LICENSE)
 [![Rust](https://img.shields.io/badge/built%20with-Rust-1B1915)](Cargo.toml)
 [![MCP](https://img.shields.io/badge/protocol-MCP%20stdio-1B1915)](#connect-your-agent)
 [![Network](https://img.shields.io/badge/network-only%20when%20asked-2F6B3A)](#security-model)
 
-[Install](#install) · [Proof](#proof) · [How it works](#how-it-works) · [Connect your agent](#connect-your-agent) · [Security](#security-model) · [Reproduce](#reproduce-every-number)
+[Setup Guide (`HOW-TO.md`)](HOW-TO.md) · [Install](#install) · [Proof](#proof) · [How it works](#how-it-works) · [Footnote Lean](#footnote-lean--native-search) · [Connect your agent](#connect-your-agent) · [Security](#security-model) · [Reproduce](#reproduce-every-number)
 
 </div>
 
@@ -34,11 +34,20 @@ agent ▸ footnote_recall("why does the WAL checkpoint stall under write load")
 ## What it is
 
 An agent that remembers is only useful if it can tell you where it read something, and whether that source is still true.
-Footnote is a single Rust binary that indexes Markdown, text and PDF on your machine and serves them to your agent over MCP.
+**Footnote One** is a single Apache-2.0 Rust binary bundling four local products — each toggleable independently via `footnote config`:
+
+| Product | What it does |
+|---|---|
+| **Footnote Library** | Hybrid search (Tantivy BM25 + local int8 embeddings) over local Markdown, text, PDFs, and shared crawled docs — every hit bound to file, line, SHA-256, and freshness. |
+| **Footnote Memory** | Persistent per-machine agent memory (preferences, decisions, fixes, session handoffs) with automatic hooks across Claude Code, Codex, Gemini CLI, Antigravity, Grok, and DeepSeek Harness. |
+| **Footnote Code** | Compiler-grade (SCIP) and tree-sitter code graph for definitions, callers, callees, impact radius, file outlines, project stack/framing, and native ripgrep `footnote grep` with enclosing-symbol annotations. |
+| **Footnote Lean** | Preservation-first shell output compaction (`footnote run`, `footnote hook lean`), reversible output handles (`footnote output`), Turn-1 fixed prompt overhead auditing (`footnote audit-prefix`), and real token/cost & missed-command accounting (`footnote usage`, `footnote gain`). |
+
+Core guarantees:
 
 - **Cited.** Every hit is bound to the exact bytes it came from. If the file changed, the hit says `stale`. If it is gone, it says `missing_or_unreadable`.
-- **Local.** One SQLite file, one search index, embeddings computed inside the binary on your CPU. No account, no cloud, no telemetry. The network is used only by two commands you run: `footnote models install` (hash-checked model download) and `footnote crawl` (a documentation site you name).
-- **Your documents are read-only for agents.** An agent can recall and fetch. It cannot write to your corpus; it can only add to its own memory database. Every call is appended to a tamper-evident audit log.
+- **Local.** SQLite + Tantivy + local CPU embeddings inside the binary. No account, no cloud, no telemetry. Outbound network calls happen only on explicit commands you run (`footnote models install`, `footnote docs add`, `footnote crawl`).
+- **Your documents are read-only for agents.** An agent can recall and fetch. It cannot write to your corpus; it can only add to its own memory database. Every MCP call is appended to a tamper-evident audit log.
 - **French and English.** Built and measured for mixed-language work, not as an afterthought.
 
 ## Proof
@@ -117,30 +126,39 @@ Models are public, pinned to a commit and checked against a SHA-256 before every
 
 ## Install
 
-Requirements: Rust 1.92 or later, about 200 MB of disk for the two models. Python 3.10+ is used only to download the models once and for PDF extraction and OCR; search, embeddings and the agent memory hook need none.
+> **Full Linux & Windows setup + LLM-friendly testing guide:** see **[HOW-TO.md](HOW-TO.md)** — written so you (or your coding agent) can build, configure every harness, and run an isolated smoke test in under two minutes.
+
+Requirements: Rust 1.92 or later, about 200 MB of disk for the two default embedding models. Python 3.10+ is optional and used only for PDF extraction and OCR; building, model downloads, hybrid search, Memory, Code, and Lean need none.
 
 ```bash
 git clone https://github.com/bobcat88/footnote && cd footnote
-cargo build --release                      # target/release/footnote
+cargo build --locked --release              # target/release/footnote
 export PATH="$PWD/target/release:$PATH"     # this shell; use an absolute path for MCP
+
+# 1. One-time hash-checked download of the local embedding models (no Python needed):
+footnote models install bekko-a8m gte-small
+footnote models use bekko-a8m gte-small
+
+# 2. Connect persistent agent memory and shell output compaction (preview with --dry-run first):
+footnote install --memory
+footnote install --lean
+
+# 3. Optional: index a local notes/docs corpus into Footnote Library:
 mkdir -p ~/.footnote
-
-python tools/provision_embeddings.py bekko-a8m gte-small   # one-time download of the public models, hash-checked
-
 export DB=~/.footnote/knowledge.db
-footnote --db $DB index --root ~/notes --allow ~/notes
-footnote --db $DB rebuild-embeddings --model artifacts/models/bekko-a8m --model artifacts/models/gte-small
-footnote --db $DB search "your question" --mode hybrid \
-  --model artifacts/models/bekko-a8m --model artifacts/models/gte-small
+footnote --db "$DB" index --root ~/notes --allow ~/notes
+footnote --db "$DB" rebuild-embeddings
+footnote --db "$DB" search "your question" --mode hybrid
+footnote --db "$DB" install
 ```
 
-The commands above use a POSIX shell. On Windows, add `target\release` to `PATH` for the session and create `%USERPROFILE%\.footnote` before indexing. Use absolute executable and database paths in MCP configuration.
+The commands above use a POSIX shell (Linux/macOS). For Windows PowerShell commands, PATH setup, and isolated harness tests, see **[HOW-TO.md](HOW-TO.md)**.
 
-Lexical search works without Python or models; hybrid search needs them. Re-run `index` whenever your files change (only changed files are re-read) and `rebuild-embeddings` afterwards (only new or changed chunks are embedded).
+Lexical search works without downloading models; hybrid search uses the installed models automatically. Re-run `index` whenever your files change (only changed files are re-read) and `rebuild-embeddings` afterwards (only new or changed chunks are embedded).
 
-**Update and rollback.** `footnote update --from <new footnote binary>` checks that the new binary runs, keeps the current one beside it as `footnote.exe.replaced-<time>` (only the newest is kept) and puts the new one in place, even while agents are using it. `footnote rollback` puts the previous one back. Your data lives in the state folder (`%LOCALAPPDATA%\footnote` on Windows, `~/.local/state/footnote` elsewhere, or `FOOTNOTE_STATE_DIR`), apart from the binary, so neither touches it.
+**Update and rollback.** `footnote update --from <new footnote binary>` checks that the new binary runs, keeps the current one beside it as `footnote.replaced-<time>` (only the newest is kept) and puts the new one in place, even while agents are using it. `footnote rollback` puts the previous one back. Your data lives in the state folder (`%LOCALAPPDATA%\footnote` on Windows, `~/.local/state/footnote` elsewhere, or `FOOTNOTE_STATE_DIR`), apart from the binary, so neither touches it.
 
-**Uninstall.** `footnote uninstall --memory` removes the memory hook and MCP server from every agent (memories and settings are kept). Then delete the binary, and the state folder if you no longer want your data, indexes and models.
+**Uninstall.** `footnote uninstall --memory --lean` removes hooks and MCP entries from every detected agent (memories, indexes, and settings are kept). Pass `--memory` or `--lean` individually to remove only one. Then delete the binary, and the state folder if you no longer want your data, indexes and models.
 
 ## Connect your agent
 
@@ -167,17 +185,16 @@ For any other MCP host, add this entry to its MCP settings:
 
 ### Tools the agent sees
 
+Footnote keeps its MCP `tools/list` schema compact (**8 tools, ~4.8 KB total**, enforced under a 5 KB budget) to minimize per-turn fixed prompt overhead. Legacy tool names (`footnote_get_record`, `footnote_stats`, `footnote_health`, `footnote_export`, `footnote_propose`) remain supported on `tools/call`.
+
 | Tool | Purpose |
 |---|---|
-| `footnote_recall` | Search. `mode`: `hybrid` by default when the corpus has vectors from installed models (else `lexical`), or forced; optional `model` and structured filters |
-| `footnote_get` | One chunk by id, with hash, revision, page, line and freshness |
-| `footnote_get_record` | One structured finding with its pinned evidence and validation state |
-| `footnote_wake_up` | A compact starting context for a project |
-| `footnote_stats`, `footnote_health` | Counts and state, so the agent can pick a strategy |
-| `footnote_export` | Bounded export of records |
-| `footnote_propose` | **Refused over MCP.** Writes need an explicit CLI command from you |
-| `footnote_remember`, `footnote_forget` | Agent memory only: add or retire a memory in the memory database. Refused on a document corpus |
-| `footnote_code` | Code: a symbol's signature, place, callers and callees, from the compiler's index of the project |
+| `footnote_recall` | Search (`hybrid` when vectors exist, else `lexical`), with optional `model`, `tags`, `per_source`, and structured filters |
+| `footnote_get` | Read one chunk (default) or structured record (`kind: "record"`) by id, with hash, revision, page, line, and freshness |
+| `footnote_info` | Read-only index metadata: `health` (default), `stats`, or bounded record metadata `export` (no payload text) |
+| `footnote_wake_up` | Compact startup context pack for a project |
+| `footnote_remember`, `footnote_forget`, `footnote_tag` | Agent memory only: save, retire, or tag memories in `memory.db` (refused on document corpora) |
+| `footnote_code` | Code graph: symbol definitions/callers/callees, `body` slice, file `outline`, `unresolved` calls, `impact` radius, `stack`, and `frame` readiness |
 
 ### Agent memory
 
@@ -198,11 +215,23 @@ manager). `footnote personal use --store <folder>`, then `footnote install --mem
 memories an agent receives are in its prompt, so the agent's own transcripts (for example under `~/.claude`) keep them in plain
 text; encryption protects Footnote's store, not what agents write down.
 
-### Usage
+### Footnote Lean & native search
 
-`footnote usage --days 7` counts the tokens your agents used per day, agent and model, from the session files Claude Code and Codex already keep on your computer, and what they would cost at list API prices (a subscription pays a flat fee instead). Only counts are stored; no prompt or answer text is copied. Prices: a table in [src/usage.rs](src/usage.rs), dated, from the providers' pricing pages. Each row splits that price into cache reads, cache writes, uncached input and output. `footnote usage --file <session.jsonl>` prices one Claude Code or Codex session on its own.
+Footnote Lean cuts wasted context tokens across agent turns without dropping errors, stack traces, or edit anchors:
 
-Its `limits` part shows the 5-hour and weekly limits that have not reset yet, with the share used and the reset time. It reads the same files: Codex writes the share used on every turn, while Claude Code writes a limit only when you hit it. No account endpoint is called.
+- **Preservation-first shell compaction (`footnote run`, `footnote install --lean`):** wraps `cargo`, `git`, `pytest`, `jest/vitest`, `rg/grep`, linters, and uniform JSON arrays (`gh issue list --json`, `gh pr list --json`, `gh api`, etc.). Never emits more bytes than raw output, always preserves exact exit codes, refuses to persist outputs containing credentials (fail-closed), and stores full raw output in `<state>/outputs/<id>` for on-demand retrieval via `footnote output <id> [--grep PAT] [--head N] [--tail N] [--lines A:B]`. Consecutive identical failing test/clippy runs collapse to a 3-line repeat delta referencing the prior handle, resetting automatically as soon as any failure line changes or the command passes.
+- **Native symbol-annotated grep (`footnote grep <pattern> [path]`):** powered by ripgrep's pure-Rust crates (`ignore`, `grep-searcher`, `grep-regex`) with `.gitignore` pruning, binary skipping, file-grouped output, a 10 KB inline spillover budget, and enclosing Footnote Code symbol spans (e.g. `L628 [fn enclosing_symbols L628-L681]`) so agents fetch one function instead of reading whole files.
+- **Turn-1 prefix & MCP bloat audit (`footnote audit-prefix [--probe-mcp]`):** measures fixed prompt overhead across instruction files (`CLAUDE.md`, `AGENTS.md`, `GEMINI.md`), skill frontmatter, and configured MCP server schemas — flagging bloated tools that get re-read on every turn.
+- **Usage, savings & missed-command discovery (`footnote usage`, `footnote gain`):**
+  - `footnote usage --days 7` counts tokens per day, agent, and model from local Claude Code and Codex session files, split into cache reads, cache writes, uncached input, and output, plus active 5h/weekly rate-limit windows. Counts only; no prompt or answer text is kept.
+  - `footnote gain --days 7 [--attrib] [--missed]` reports measured bytes saved by shell filters and lean MCP responses, handle re-retrieval miss rate, optional cost-bucket attribution, and (`--missed`) the top uncovered shell command prefixes ranked by raw output bytes (prefixes and counts only; zero arguments or payloads retained).
+
+```sh
+footnote install --lean                     # wire PreToolUse shell compaction across detected agents
+footnote audit-prefix --root . --probe-mcp  # measure Turn-1 fixed overhead and MCP schema bytes
+footnote grep "serde_json" . --glob "*.rs"  # native ripgrep + enclosing Code symbols + 10 KB spillover
+footnote gain --days 7 --attrib --missed    # measured savings, cost buckets, and uncovered commands
+```
 
 ### Code graph
 
@@ -257,7 +286,7 @@ Key rotation, in plain words. To add a next key: run `footnote docs keygen <file
 
 ### Desktop window
 
-`apps/launcher` is Footnote One's window (Tauri 2): an overview of the three products with their on/off switches, one search
+`apps/launcher` is Footnote One's window (Tauri 2): an overview of the four products (Memory, Library, Code, and Lean) with their on/off switches, one search
 over Memory, Library and Code, your projects and connected agents, the code map and symbol view, models (installed from the
 window, with size, licence, progress and cancel), memory activity and token usage, plus a small always-on-top mini mode. It runs
 only a short list of `footnote` commands: reads, a product's switch and a model install. It lives in the tray: a left click opens
