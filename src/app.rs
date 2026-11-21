@@ -365,13 +365,16 @@ enum Action {
         #[arg(long)]
         file: Option<PathBuf>,
     },
-    /// Footnote Lean savings ledger: shell output bytes saved, handle re-retrieval miss rate, MCP trimming, and optional token attribution (#351).
+    /// Footnote Lean savings ledger: shell output bytes saved, handle re-retrieval miss rate, MCP trimming, optional token attribution, and uncovered command discovery (#351, #381).
     Gain {
         #[arg(long, default_value_t = 7, value_parser = clap::value_parser!(u16).range(1..=365))]
         days: u16,
         /// Include session token and cache-bucket attribution from local agent transcripts.
         #[arg(long)]
         attrib: bool,
+        /// Scan local agent transcripts (prefixes and byte counts only) to rank uncovered shell commands by raw output bytes (#381).
+        #[arg(long)]
+        missed: bool,
     },
     /// Browse agent memories, newest first (ids are those `forget` takes).
     #[cfg(feature = "memory")]
@@ -971,7 +974,11 @@ fn execute(cli: Cli) -> Result<Value> {
                 None => crate::usage::usage(*days),
             };
         }
-        Action::Gain { days, attrib } => return crate::usage::gain(*days, *attrib),
+        Action::Gain {
+            days,
+            attrib,
+            missed,
+        } => return crate::usage::gain(*days, *attrib, *missed),
         Action::Grep {
             pattern,
             path,

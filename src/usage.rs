@@ -665,9 +665,10 @@ fn measured_savings(first: &str) -> Value {
     })
 }
 
-/// `footnote gain [--days N] [--attrib]`: Footnote Lean savings ledger (shell output filters, handle re-retrieval
-/// miss rate, trimmed MCP search results) and optional token/cache-bucket attribution from local session transcripts (#351).
-pub fn gain(days: u16, attrib: bool) -> Result<Value> {
+/// `footnote gain [--days N] [--attrib] [--missed]`: Footnote Lean savings ledger (shell output filters, handle
+/// re-retrieval miss rate, trimmed MCP search results), optional token/cache-bucket attribution, and uncovered
+/// shell command discovery (#351, #381).
+pub fn gain(days: u16, attrib: bool, missed: bool) -> Result<Value> {
     let state = crate::state::state_dir()?;
     let first = (time::OffsetDateTime::now_utc().date()
         - time::Duration::days(i64::from(days) - 1))
@@ -704,7 +705,483 @@ pub fn gain(days: u16, attrib: bool) -> Result<Value> {
             "by_day": u["by_day"],
         });
     }
+    if missed {
+        out["missed"] = missed_commands(days, &first);
+    }
     Ok(out)
+}
+
+#[derive(Default)]
+struct MissedAgg {
+    calls: u64,
+    raw_bytes: u64,
+    max_bytes: u64,
+}
+
+/// Sanitize a raw shell invocation into a safe command prefix (binary or `binary subcommand`) with zero
+/// arguments, paths, flags, URLs, or payloads retained (#381).
+/// Returns `(prefix, is_already_covered)`.
+fn classify_shell_prefix(raw_cmd: &str) -> Option<(String, bool)> {
+    const SUBCOMMAND_BINS: &[&str] = &[
+        "git",
+        "cargo",
+        "gh",
+        "npm",
+        "pnpm",
+        "yarn",
+        "bun",
+        "docker",
+        "kubectl",
+        "az",
+        "aws",
+        "gcloud",
+        "wrangler",
+        "cf",
+        "uv",
+        "pip",
+        "python",
+        "python3",
+        "py",
+        "go",
+        "rustup",
+        "footnote",
+        "npx",
+        "pnpx",
+        "bunx",
+        "dotnet",
+        "helm",
+        "terraform",
+        "make",
+        "just",
+    ];
+    // Split on top-level command separators to skip leading `cd <dir>` or env-var assignments.
+    let mut chosen: Option<Vec<String>> = None;
+    for seg in raw_cmd.split([';', '\n']) {
+        for part in seg.split("&&") {
+            let trimmed = part.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+            // Take the left-hand side of any pipe; tokenize whitespace safely without storing arg values.
+            let before_pipe = trimmed.split('|').next().unwrap_or(trimmed).trim();
+            let tokens: Vec<String> = before_pipe
+                .split_whitespace()
+                .map(|t| t.trim_matches(|c| c == '"' || c == '\''))
+                .filter(|t| !t.is_empty())
+                .map(String::from)
+                .collect();
+            let mut idx = 0;
+            // Skip POSIX `KEY=VAL`, PowerShell `$env:KEY = ...`, or `env` prefixes.
+            while idx < tokens.len() {
+                let tok = &tokens[idx];
+                if tok.starts_with("$env:")
+                    || (tok.contains('=') && !tok.starts_with('-'))
+                    || tok == "env"
+                    || tok == "sudo"
+                    || tok == "time"
+                {
+                    // If PowerShell `$env:FOO = 'bar'`, also skip `=` and its value.
+                    if tok.starts_with("$env:")
+                        && tokens.get(idx + 1).is_some_and(|s| s == "=")
+                        && idx + 2 < tokens.len()
+                    {
+                        idx += 3;
+                    } else {
+                        idx += 1;
+                    }
+                    continue;
+                }
+                break;
+            }
+            if idx >= tokens.len() {
+                continue;
+            }
+            let slice = &tokens[idx..];
+            let bin = Path::new(&slice[0])
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or(&slice[0])
+                .to_ascii_lowercase();
+            if matches!(
+                bin.as_str(),
+                "cd" | "pushd" | "set-location" | "export" | "set"
+            ) {
+                continue;
+            }
+            chosen = Some(slice.to_vec());
+            break;
+        }
+        if chosen.is_some() {
+            break;
+        }
+    }
+
+    let words = chosen?;
+    let raw_bin = words.first()?;
+    let bin = Path::new(raw_bin)
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or(raw_bin.as_str())
+        .to_ascii_lowercase();
+    if bin.is_empty()
+        || bin.len() > 32
+        || matches!(
+            bin.as_str(),
+            "const" | "let" | "var" | "await" | "async" | "function" | "import" | "class" | "try"
+        )
+        || !bin
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.'))
+    {
+        return None;
+    }
+
+    let covered = matches!(bin.as_str(), "footnote" | "rtk")
+        || crate::run::classify_command(&words) != crate::run::CommandFamily::Generic;
+
+    let sub = if SUBCOMMAND_BINS.contains(&bin.as_str()) {
+        words
+            .iter()
+            .skip(1)
+            .find(|w| !w.starts_with('-'))
+            .map(|w| w.to_ascii_lowercase())
+            .filter(|s| {
+                !s.is_empty()
+                    && s.len() <= 24
+                    && s.bytes().all(|b| {
+                        b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-' || b == b'_'
+                    })
+            })
+    } else {
+        None
+    };
+
+    let prefix = match sub {
+        Some(s) => format!("{bin} {s}"),
+        None => bin,
+    };
+    Some((prefix, covered))
+}
+
+fn missed_commands(days: u16, first: &str) -> Value {
+    let cutoff = std::time::SystemTime::now()
+        .checked_sub(std::time::Duration::from_secs(
+            (u64::from(days) + 2) * 86_400,
+        ))
+        .unwrap_or(std::time::UNIX_EPOCH);
+
+    let mut files_scanned = 0u64;
+    let mut total_calls = 0u64;
+    let mut covered_calls = 0u64;
+    let mut uncovered_calls = 0u64;
+    let mut uncovered_bytes = 0u64;
+    let mut agg: HashMap<String, MissedAgg> = HashMap::new();
+
+    for (agent, dir, _) in sources() {
+        if !matches!(agent, "claude-code" | "codex") {
+            continue;
+        }
+        for file in sessions(&dir) {
+            if let Ok(meta) = std::fs::metadata(&file)
+                && let Ok(mtime) = meta.modified()
+                && mtime < cutoff
+            {
+                continue;
+            }
+            files_scanned += 1;
+            scan_missed_file(
+                agent,
+                &file,
+                first,
+                &mut total_calls,
+                &mut covered_calls,
+                &mut uncovered_calls,
+                &mut uncovered_bytes,
+                &mut agg,
+            );
+        }
+    }
+
+    let mut ranked: Vec<(String, MissedAgg)> = agg.into_iter().collect();
+    ranked.sort_by(|a, b| {
+        b.1.raw_bytes
+            .cmp(&a.1.raw_bytes)
+            .then_with(|| b.1.calls.cmp(&a.1.calls))
+            .then_with(|| a.0.cmp(&b.0))
+    });
+    ranked.truncate(20);
+
+    let top_uncovered: Vec<Value> = ranked
+        .into_iter()
+        .map(|(prefix, m)| {
+            json!({
+                "prefix": prefix,
+                "calls": m.calls,
+                "raw_bytes": m.raw_bytes,
+                "est_tokens": m.raw_bytes / 4,
+                "avg_bytes": m.raw_bytes.checked_div(m.calls).unwrap_or(0),
+                "max_bytes": m.max_bytes,
+            })
+        })
+        .collect();
+
+    json!({
+        "days": days,
+        "from": first,
+        "files_scanned": files_scanned,
+        "total_shell_calls": total_calls,
+        "covered_calls": covered_calls,
+        "uncovered_calls": uncovered_calls,
+        "uncovered_bytes": uncovered_bytes,
+        "uncovered_tokens_estimate": uncovered_bytes / 4,
+        "note": "command prefixes and byte counts only; zero arguments or raw payloads are retained",
+        "top_uncovered": top_uncovered,
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
+fn scan_missed_file(
+    agent: &str,
+    path: &Path,
+    first: &str,
+    total_calls: &mut u64,
+    covered_calls: &mut u64,
+    uncovered_calls: &mut u64,
+    uncovered_bytes: &mut u64,
+    agg: &mut HashMap<String, MissedAgg>,
+) {
+    let data = if path.extension().is_some_and(|x| x == "zstd") {
+        let Ok(f) = std::fs::File::open(path) else {
+            return;
+        };
+        let Ok(d) = zstd::decode_all(f) else {
+            return;
+        };
+        d
+    } else {
+        let Ok(d) = std::fs::read(path) else {
+            return;
+        };
+        d
+    };
+
+    // Map tool call id -> (prefix, covered, in_date_range)
+    let mut pending: HashMap<String, (String, bool, bool)> = HashMap::new();
+    let mut last_date = String::new();
+
+    for line in data.split(|&b| b == b'\n') {
+        if line.is_empty() {
+            continue;
+        }
+        let has_hint = match agent {
+            "claude-code" => {
+                line.windows(10).any(|w| w == b"\"tool_use\"")
+                    || line.windows(13).any(|w| w == b"\"tool_result\"")
+            }
+            "codex" => {
+                line.windows(15).any(|w| w == b"\"function_call\"")
+                    || line.windows(22).any(|w| w == b"\"function_call_output\"")
+                    || line.windows(18).any(|w| w == b"\"custom_tool_call\"")
+                    || line
+                        .windows(25)
+                        .any(|w| w == b"\"custom_tool_call_output\"")
+            }
+            _ => false,
+        };
+        if !has_hint {
+            continue;
+        }
+        let Ok(v) = serde_json::from_slice::<Value>(line) else {
+            continue;
+        };
+        if let Some(d) = v
+            .get("timestamp")
+            .and_then(Value::as_str)
+            .and_then(|ts| ts.get(..10))
+        {
+            last_date.clear();
+            last_date.push_str(d);
+        }
+        let in_range = last_date.is_empty() || last_date.as_str() >= first;
+
+        match agent {
+            "claude-code" => {
+                let Some(items) = v["message"]["content"].as_array() else {
+                    continue;
+                };
+                for item in items {
+                    match item["type"].as_str().unwrap_or("") {
+                        "tool_use" => {
+                            let name = item["name"].as_str().unwrap_or("");
+                            if !matches!(
+                                name.to_ascii_lowercase().as_str(),
+                                "bash" | "shell" | "run_command" | "terminal"
+                            ) {
+                                continue;
+                            }
+                            let Some(id) = item["id"].as_str() else {
+                                continue;
+                            };
+                            let Some(cmd) = item["input"]["command"]
+                                .as_str()
+                                .or_else(|| item["input"]["CommandLine"].as_str())
+                            else {
+                                continue;
+                            };
+                            if let Some((prefix, covered)) = classify_shell_prefix(cmd) {
+                                pending.insert(id.to_string(), (prefix, covered, in_range));
+                            }
+                        }
+                        "tool_result" => {
+                            let Some(id) = item["tool_use_id"].as_str() else {
+                                continue;
+                            };
+                            let Some((prefix, covered, ok_date)) = pending.remove(id) else {
+                                continue;
+                            };
+                            if !ok_date {
+                                continue;
+                            }
+                            let bytes = tool_result_bytes(&item["content"]);
+                            record_missed(
+                                prefix,
+                                covered,
+                                bytes,
+                                total_calls,
+                                covered_calls,
+                                uncovered_calls,
+                                uncovered_bytes,
+                                agg,
+                            );
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            "codex" => {
+                let payload = &v["payload"];
+                match payload["type"].as_str().unwrap_or("") {
+                    "function_call" | "custom_tool_call" => {
+                        let name = payload["name"].as_str().unwrap_or("");
+                        if !matches!(
+                            name.to_ascii_lowercase().as_str(),
+                            "exec"
+                                | "exec_command"
+                                | "shell"
+                                | "shell_command"
+                                | "bash"
+                                | "run_command"
+                        ) {
+                            continue;
+                        }
+                        let Some(id) = payload["call_id"].as_str() else {
+                            continue;
+                        };
+                        let raw_args = payload.get("arguments").or_else(|| payload.get("input"));
+                        if let Some(cmd) = extract_codex_cmd(raw_args)
+                            && let Some((prefix, covered)) = classify_shell_prefix(&cmd)
+                        {
+                            pending.insert(id.to_string(), (prefix, covered, in_range));
+                        }
+                    }
+                    "function_call_output" | "custom_tool_call_output" => {
+                        let Some(id) = payload["call_id"].as_str() else {
+                            continue;
+                        };
+                        let Some((prefix, covered, ok_date)) = pending.remove(id) else {
+                            continue;
+                        };
+                        if !ok_date {
+                            continue;
+                        }
+                        let bytes = tool_result_bytes(&payload["output"]);
+                        record_missed(
+                            prefix,
+                            covered,
+                            bytes,
+                            total_calls,
+                            covered_calls,
+                            uncovered_calls,
+                            uncovered_bytes,
+                            agg,
+                        );
+                    }
+                    _ => {}
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+fn tool_result_bytes(v: &Value) -> u64 {
+    match v {
+        Value::String(s) => s.len() as u64,
+        Value::Array(items) => items
+            .iter()
+            .map(|it| {
+                it.get("text")
+                    .and_then(Value::as_str)
+                    .map_or(0, |s| s.len() as u64)
+            })
+            .sum(),
+        _ => 0,
+    }
+}
+
+fn extract_codex_cmd(raw: Option<&Value>) -> Option<String> {
+    let v = raw?;
+    if let Some(s) = v.as_str() {
+        let trimmed = s.trim();
+        if trimmed.starts_with('{')
+            && let Ok(parsed) = serde_json::from_str::<Value>(trimmed)
+        {
+            return extract_codex_cmd(Some(&parsed));
+        }
+        return (!trimmed.is_empty()).then(|| trimmed.to_string());
+    }
+    if let Some(obj) = v.as_object() {
+        for key in ["cmd", "command", "CommandLine"] {
+            if let Some(val) = obj.get(key) {
+                if let Some(s) = val.as_str() {
+                    return Some(s.to_string());
+                }
+                if let Some(arr) = val.as_array() {
+                    let joined: Vec<&str> = arr.iter().filter_map(Value::as_str).collect();
+                    if !joined.is_empty() {
+                        return Some(joined.join(" "));
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
+#[allow(clippy::too_many_arguments)]
+fn record_missed(
+    prefix: String,
+    covered: bool,
+    bytes: u64,
+    total_calls: &mut u64,
+    covered_calls: &mut u64,
+    uncovered_calls: &mut u64,
+    uncovered_bytes: &mut u64,
+    agg: &mut HashMap<String, MissedAgg>,
+) {
+    *total_calls += 1;
+    if covered {
+        *covered_calls += 1;
+        return;
+    }
+    *uncovered_calls += 1;
+    *uncovered_bytes += bytes;
+    let e = agg.entry(prefix).or_default();
+    e.calls += 1;
+    e.raw_bytes += bytes;
+    if bytes > e.max_bytes {
+        e.max_bytes = bytes;
+    }
 }
 
 fn lean_ledger(state: &Path, first: &str) -> Value {

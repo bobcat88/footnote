@@ -206,3 +206,118 @@ fn install_lean_remove_rtk_and_uninstall_lean_preserves_memory_hooks() {
         "memory hook was accidentally removed: {after_un}"
     );
 }
+
+#[test]
+fn gain_missed_ranks_uncovered_prefixes_without_leaking_arguments_or_payloads() {
+    let home = TempDir::new().unwrap();
+    let state = TempDir::new().unwrap();
+    let claude_proj = home.path().join(".claude/projects/demo");
+    let codex_sess = home.path().join(".codex/sessions/2026/11/21");
+    fs::create_dir_all(&claude_proj).unwrap();
+    fs::create_dir_all(&codex_sess).unwrap();
+
+    let today = time::OffsetDateTime::now_utc().date().to_string();
+    let ts = format!("{today}T08:00:00Z");
+
+    // Claude transcript: 1 covered (`cargo test`) + 2 uncovered (`gh api`, `curl`) containing sensitive args/payloads.
+    let claude_lines = [
+        json!({
+            "type": "assistant",
+            "timestamp": ts,
+            "message": {"content": [
+                {"type": "tool_use", "id": "t1", "name": "Bash", "input": {"command": "cargo test --workspace"}},
+                {"type": "tool_use", "id": "t2", "name": "Bash", "input": {"command": "cd /private/secret-repo && gh api repos/org/priv/issues?secret=LEAK_ARG_1"}},
+                {"type": "tool_use", "id": "t3", "name": "Bash", "input": {"command": "curl -H 'X-Token: LEAK_HEADER' https://internal.example/v1"}}
+            ]}
+        }),
+        json!({
+            "type": "user",
+            "timestamp": ts,
+            "message": {"content": [
+                {"type": "tool_result", "tool_use_id": "t1", "content": "x".repeat(9000)},
+                {"type": "tool_result", "tool_use_id": "t2", "content": format!("SECRET_PAYLOAD_BODY_{}", "a".repeat(6000))},
+                {"type": "tool_result", "tool_use_id": "t3", "content": format!("RAW_HTTP_BODY_{}", "b".repeat(1500))}
+            ]}
+        }),
+    ];
+    fs::write(
+        claude_proj.join("session.jsonl"),
+        claude_lines
+            .iter()
+            .map(|v| v.to_string() + "\n")
+            .collect::<String>(),
+    )
+    .unwrap();
+
+    // Codex transcript: 1 covered (`git status`) + 1 uncovered (`docker ps`).
+    let codex_lines = [
+        json!({
+            "timestamp": ts,
+            "type": "response_item",
+            "payload": {"type": "function_call", "call_id": "c1", "name": "exec_command", "arguments": "{\"cmd\":\"git status\"}"}
+        }),
+        json!({
+            "timestamp": ts,
+            "type": "response_item",
+            "payload": {"type": "function_call_output", "call_id": "c1", "output": "On branch main\n"}
+        }),
+        json!({
+            "timestamp": ts,
+            "type": "response_item",
+            "payload": {"type": "function_call", "call_id": "c2", "name": "exec_command", "arguments": "{\"cmd\":\"docker ps --filter name=PRIVATE_CONTAINER_99\"}"}
+        }),
+        json!({
+            "timestamp": ts,
+            "type": "response_item",
+            "payload": {"type": "function_call_output", "call_id": "c2", "output": format!("CONTAINER_ROW_{}", "c".repeat(3200))}
+        }),
+    ];
+    fs::write(
+        codex_sess.join("rollout.jsonl"),
+        codex_lines
+            .iter()
+            .map(|v| v.to_string() + "\n")
+            .collect::<String>(),
+    )
+    .unwrap();
+
+    let out = cargo_bin_cmd!("footnote")
+        .env("USERPROFILE", home.path())
+        .env("HOME", home.path())
+        .env("CLAUDE_CONFIG_DIR", home.path().join(".claude"))
+        .env("CODEX_HOME", home.path().join(".codex"))
+        .env("FOOTNOTE_STATE_DIR", state.path())
+        .args(["gain", "--missed", "--days", "7"])
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "{out:?}");
+    let raw_out = String::from_utf8(out.stdout).unwrap();
+    let v: Value = serde_json::from_str(&raw_out).unwrap();
+    let m = &v["missed"];
+    assert_eq!(m["total_shell_calls"], 5, "{v}");
+    assert_eq!(m["covered_calls"], 2, "{v}");
+    assert_eq!(m["uncovered_calls"], 3, "{v}");
+
+    let top = m["top_uncovered"].as_array().unwrap();
+    assert_eq!(top.len(), 3, "{top:?}");
+    assert_eq!(top[0]["prefix"], "gh api");
+    assert_eq!(top[1]["prefix"], "docker ps");
+    assert_eq!(top[2]["prefix"], "curl");
+
+    // Privacy invariant: zero arguments, paths, headers, or raw payloads may appear in the report.
+    for forbidden in [
+        "LEAK_ARG_1",
+        "LEAK_HEADER",
+        "PRIVATE_CONTAINER_99",
+        "SECRET_PAYLOAD_BODY",
+        "RAW_HTTP_BODY",
+        "CONTAINER_ROW",
+        "/private/secret-repo",
+        "internal.example",
+    ] {
+        assert!(
+            !raw_out.contains(forbidden),
+            "forbidden token `{forbidden}` leaked into gain --missed output:\n{raw_out}"
+        );
+    }
+}

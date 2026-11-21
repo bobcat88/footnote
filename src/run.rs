@@ -20,6 +20,14 @@ use std::{
 
 /// Default threshold above which generic (unrecognized) command output is summarized.
 const GENERIC_THRESHOLD_BYTES: usize = 12 * 1024;
+/// Minimum stdout size for uniform JSON-array compaction (#381).
+const JSON_ARRAY_MIN_BYTES: usize = 2 * 1024;
+/// Minimum object count for uniform JSON-array compaction (#381).
+const JSON_ARRAY_MIN_ITEMS: usize = 8;
+/// Session window (seconds) during which identical consecutive failures collapse to a 3-line repeat delta (#381).
+const REPEAT_WINDOW_SECS: u64 = 30 * 60;
+/// Maximum number of `(cwd, command)` repeat-run entries retained on disk (#381).
+const MAX_REPEAT_ENTRIES: usize = 64;
 /// Expire stored raw output handles older than 24 hours.
 const HANDLE_TTL_SECS: u64 = 24 * 3600;
 /// Cap the local handle store to at most this many files (oldest evicted first).
@@ -36,6 +44,7 @@ pub enum CommandFamily {
     Git,
     Search,
     Linter,
+    JsonArray,
     Generic,
 }
 
@@ -49,6 +58,7 @@ impl CommandFamily {
             Self::Git => "git",
             Self::Search => "search",
             Self::Linter => "linter",
+            Self::JsonArray => "json-array",
             Self::Generic => "generic",
         }
     }
@@ -62,6 +72,7 @@ impl CommandFamily {
             "git" => Some(Self::Git),
             "search" => Some(Self::Search),
             "linter" => Some(Self::Linter),
+            "json-array" => Some(Self::JsonArray),
             "generic" => Some(Self::Generic),
             _ => None,
         }
@@ -116,6 +127,13 @@ pub fn classify_command(cmd: &[String]) -> CommandFamily {
             }
         }
         "ruff" | "eslint" | "tsc" | "mypy" | "flake8" | "biome" | "pylint" => CommandFamily::Linter,
+        "gh" if matches!(
+            sub.as_deref(),
+            Some("issue" | "pr" | "run" | "release" | "repo")
+        ) && cmd.iter().any(|a| a == "--json") =>
+        {
+            CommandFamily::JsonArray
+        }
         "npx" | "pnpx" | "bunx" => match sub.as_deref() {
             Some("jest" | "vitest" | "mocha" | "playwright") => CommandFamily::TestRunner,
             Some("eslint" | "tsc" | "biome") => CommandFamily::Linter,
@@ -272,17 +290,81 @@ fn run_inner(opts: &RunOptions) -> Result<i32> {
         .find(|a| !a.starts_with('-'))
         .map(String::as_str);
 
-    // Fail-open on any filter panic: fall back to raw output untouched.
-    let filtered_body = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        filter_output(family, family_sub, &raw_output)
-    }))
-    .unwrap_or_else(|_| raw_output.clone());
+    // Track whether uniform JSON-array compaction fired so `footnote gain` attributes it cleanly (#381).
+    let (effective_family, filtered_body) =
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            if matches!(family, CommandFamily::Generic | CommandFamily::JsonArray)
+                && !has_secrets
+                && let Some(compact) = filter_json_array(&raw_output)
+            {
+                return (CommandFamily::JsonArray, compact);
+            }
+            (family, filter_output(family, family_sub, &raw_output))
+        }))
+        .unwrap_or_else(|_| (family, raw_output.clone()));
+
+    let repeat_eligible = !opts.stdin_mode
+        && !opts.command.is_empty()
+        && !has_secrets
+        && !opts.no_store
+        && matches!(
+            effective_family,
+            CommandFamily::CargoTest
+                | CommandFamily::CargoBuild
+                | CommandFamily::TestRunner
+                | CommandFamily::Linter
+        );
+
+    if repeat_eligible && exit_code == 0 {
+        clear_repeat_entry(&cwd, &opts.command);
+    }
+
+    // Consecutive identical failing run delta (#381): collapse repeat diagnostics to 3 lines referencing prior handle.
+    let fail_sig = if repeat_eligible && exit_code != 0 {
+        let sig = failure_signature(&filtered_body);
+        if let Some((prior_handle, count)) =
+            check_and_bump_repeat(&cwd, &opts.command, &sig, exit_code)
+            && let Some(repeat_out) = format_repeat_delta(
+                effective_family,
+                &opts.command,
+                exit_code,
+                count,
+                &filtered_body,
+                raw_bytes,
+                &prior_handle,
+            )
+            && repeat_out.len() < raw_bytes
+        {
+            let mut stdout = std::io::stdout().lock();
+            let _ = stdout.write_all(repeat_out.as_bytes());
+            let _ = stdout.flush();
+            log_lean_run(
+                effective_family,
+                raw_bytes,
+                repeat_out.len(),
+                None,
+                exit_code,
+            );
+            return Ok(exit_code);
+        }
+        Some(sig)
+    } else {
+        None
+    };
 
     if filtered_body.len() >= raw_bytes {
+        // On a failing diagnostic run that passed through raw, quietly keep a handle so an identical retry
+        // can emit a 3-line repeat delta without losing access to the full diagnostic (#381).
+        if let Some(sig) = fail_sig
+            && (512..=MAX_STORE_BYTES).contains(&raw_bytes)
+            && let Ok(id) = store_raw_output(&raw_output)
+        {
+            record_repeat_entry(&cwd, &opts.command, sig, id, exit_code, raw_bytes);
+        }
         let mut stdout = std::io::stdout().lock();
         let _ = stdout.write_all(raw_output.as_bytes());
         let _ = stdout.flush();
-        log_lean_run(family, raw_bytes, raw_bytes, None, exit_code);
+        log_lean_run(effective_family, raw_bytes, raw_bytes, None, exit_code);
         return Ok(exit_code);
     }
 
@@ -308,31 +390,37 @@ fn run_inner(opts: &RunOptions) -> Result<i32> {
     let provisional_footer = if has_secrets {
         format!(
             "\n[footnote: {} {}B -> {}B | full output not stored: potential credentials detected]\n",
-            family.as_str(),
+            effective_family.as_str(),
             raw_bytes,
             candidate_without_footer.len()
         )
     } else if opts.no_store || raw_bytes > MAX_STORE_BYTES {
         format!(
             "\n[footnote: {} {}B -> {}B | full output not stored]\n",
-            family.as_str(),
+            effective_family.as_str(),
             raw_bytes,
             candidate_without_footer.len()
         )
     } else {
         format!(
             "\n[footnote: {} {}B -> {}B (-99%) | full: footnote output h-000000000000 [--grep pat]]\n",
-            family.as_str(),
+            effective_family.as_str(),
             raw_bytes,
             candidate_without_footer.len()
         )
     };
 
     if candidate_without_footer.len() + provisional_footer.len() >= raw_bytes {
+        if let Some(sig) = fail_sig
+            && (512..=MAX_STORE_BYTES).contains(&raw_bytes)
+            && let Ok(id) = store_raw_output(&raw_output)
+        {
+            record_repeat_entry(&cwd, &opts.command, sig, id, exit_code, raw_bytes);
+        }
         let mut stdout = std::io::stdout().lock();
         let _ = stdout.write_all(raw_output.as_bytes());
         let _ = stdout.flush();
-        log_lean_run(family, raw_bytes, raw_bytes, None, exit_code);
+        log_lean_run(effective_family, raw_bytes, raw_bytes, None, exit_code);
         return Ok(exit_code);
     }
 
@@ -352,7 +440,7 @@ fn run_inner(opts: &RunOptions) -> Result<i32> {
     let footer = match &handle_id {
         Some(id) => format!(
             "\n[footnote: {} {}B -> {}B (-{}%) | full: footnote output {} [--grep pat]]\n",
-            family.as_str(),
+            effective_family.as_str(),
             raw_bytes,
             body_trimmed.len(),
             pct,
@@ -360,14 +448,14 @@ fn run_inner(opts: &RunOptions) -> Result<i32> {
         ),
         None if has_secrets => format!(
             "\n[footnote: {} {}B -> {}B (-{}%) | full output not stored: potential credentials detected]\n",
-            family.as_str(),
+            effective_family.as_str(),
             raw_bytes,
             body_trimmed.len(),
             pct
         ),
         None => format!(
             "\n[footnote: {} {}B -> {}B (-{}%)]\n",
-            family.as_str(),
+            effective_family.as_str(),
             raw_bytes,
             body_trimmed.len(),
             pct
@@ -382,15 +470,19 @@ fn run_inner(opts: &RunOptions) -> Result<i32> {
         let mut stdout = std::io::stdout().lock();
         let _ = stdout.write_all(raw_output.as_bytes());
         let _ = stdout.flush();
-        log_lean_run(family, raw_bytes, raw_bytes, None, exit_code);
+        log_lean_run(effective_family, raw_bytes, raw_bytes, None, exit_code);
         return Ok(exit_code);
+    }
+
+    if let (Some(sig), Some(id)) = (fail_sig, &handle_id) {
+        record_repeat_entry(&cwd, &opts.command, sig, id.clone(), exit_code, raw_bytes);
     }
 
     let mut stdout = std::io::stdout().lock();
     let _ = stdout.write_all(final_out.as_bytes());
     let _ = stdout.flush();
     log_lean_run(
-        family,
+        effective_family,
         raw_bytes,
         final_out.len(),
         handle_id.as_deref(),
@@ -459,8 +551,404 @@ pub fn filter_output(family: CommandFamily, subcommand: Option<&str>, raw: &str)
         CommandFamily::Git => filter_git(subcommand, raw),
         CommandFamily::Search => filter_search(raw),
         CommandFamily::Linter => filter_linter(raw),
-        CommandFamily::Generic => filter_generic(raw),
+        CommandFamily::JsonArray => filter_json_array(raw).unwrap_or_else(|| filter_generic(raw)),
+        CommandFamily::Generic => filter_json_array(raw).unwrap_or_else(|| filter_generic(raw)),
     }
+}
+
+/// Compact a uniform JSON array of >= 8 objects (> 2 KB) with zero detected secrets into a schema-preserving
+/// summary + key distributions + sample rows (#381). Returns `None` if criteria do not match.
+#[must_use]
+pub fn filter_json_array(raw: &str) -> Option<String> {
+    if raw.len() <= JSON_ARRAY_MIN_BYTES || contains_secrets(raw) {
+        return None;
+    }
+    let trimmed = raw.trim();
+    if !trimmed.starts_with('[') || !trimmed.ends_with(']') {
+        return None;
+    }
+    let Value::Array(items) = serde_json::from_str::<Value>(trimmed).ok()? else {
+        return None;
+    };
+    if items.len() < JSON_ARRAY_MIN_ITEMS {
+        return None;
+    }
+    let objs: Vec<&serde_json::Map<String, Value>> = items
+        .iter()
+        .map(Value::as_object)
+        .collect::<Option<Vec<_>>>()?;
+    if objs.iter().any(|o| o.is_empty()) {
+        return None;
+    }
+
+    // Check schema uniformity: keys present in >= 50% of items form the core schema; every item must have
+    // >= 60% of its keys in that core set.
+    let mut key_counts: BTreeMap<&str, usize> = BTreeMap::new();
+    for obj in &objs {
+        for k in obj.keys() {
+            *key_counts.entry(k.as_str()).or_default() += 1;
+        }
+    }
+    let min_common = objs.len().div_ceil(2);
+    let core_keys: std::collections::HashSet<&str> = key_counts
+        .iter()
+        .filter(|(_, c)| **c >= min_common)
+        .map(|(k, _)| *k)
+        .collect();
+    if core_keys.is_empty() {
+        return None;
+    }
+    for obj in &objs {
+        let shared = obj
+            .keys()
+            .filter(|k| core_keys.contains(k.as_str()))
+            .count();
+        if shared * 5 < obj.len() * 3 {
+            return None;
+        }
+    }
+
+    const PRIORITY_KEYS: &[&str] = &[
+        "number", "id", "key", "name", "title", "state", "status", "kind", "type", "url",
+    ];
+    let mut ordered_keys: Vec<&str> = Vec::with_capacity(key_counts.len());
+    for &pk in PRIORITY_KEYS {
+        if key_counts.contains_key(pk) {
+            ordered_keys.push(pk);
+        }
+    }
+    for &k in key_counts.keys() {
+        if !ordered_keys.contains(&k) {
+            ordered_keys.push(k);
+        }
+    }
+
+    let listed_keys = if ordered_keys.len() > 12 {
+        format!(
+            "{}, +{} more",
+            ordered_keys[..12].join(", "),
+            ordered_keys.len() - 12
+        )
+    } else {
+        ordered_keys.join(", ")
+    };
+
+    let mut out = Vec::new();
+    out.push(format!(
+        "json array: {} items, {} keys ({listed_keys})",
+        objs.len(),
+        ordered_keys.len()
+    ));
+
+    // Summarize low-cardinality categorical fields (e.g. `state: OPEN=12, CLOSED=3`).
+    let mut dists = Vec::new();
+    for &field in &["state", "status", "kind", "type", "conclusion"] {
+        if !key_counts.contains_key(field) {
+            continue;
+        }
+        let mut counts: BTreeMap<&str, usize> = BTreeMap::new();
+        for obj in &objs {
+            if let Some(s) = obj.get(field).and_then(Value::as_str) {
+                *counts.entry(s).or_default() += 1;
+            }
+        }
+        if !counts.is_empty() && counts.len() <= 6 {
+            let parts: Vec<String> = counts
+                .into_iter()
+                .map(|(k, c)| format!("{k}={c}"))
+                .collect();
+            dists.push(format!("{field}: {}", parts.join(", ")));
+        }
+    }
+    if !dists.is_empty() {
+        out.push(format!("summary: {}", dists.join(" | ")));
+    }
+
+    // Pick up to 4 most informative non-blob keys for compact one-line sample rows.
+    let display_keys: Vec<&str> = ordered_keys
+        .iter()
+        .copied()
+        .filter(|k| !matches!(*k, "body" | "description" | "content" | "diff" | "raw"))
+        .take(4)
+        .collect();
+    let display_keys = if display_keys.is_empty() {
+        ordered_keys.iter().copied().take(3).collect()
+    } else {
+        display_keys
+    };
+
+    let format_row = |idx: usize, obj: &serde_json::Map<String, Value>| -> String {
+        let mut parts = Vec::new();
+        for &k in &display_keys {
+            if let Some(v) = obj.get(k) {
+                let rendered = compact_json_val(v);
+                if !rendered.is_empty() {
+                    parts.push(format!("{k}={rendered}"));
+                }
+            }
+        }
+        format!("  [{idx}] {}", parts.join(" "))
+    };
+
+    let head = 3usize.min(objs.len());
+    for (i, obj) in objs.iter().take(head).enumerate() {
+        out.push(format_row(i, obj));
+    }
+    if objs.len() > 5 {
+        out.push(format!("  ... {} more items ...", objs.len() - 5));
+        let start = objs.len() - 2;
+        for (offset, obj) in objs[start..].iter().enumerate() {
+            out.push(format_row(start + offset, obj));
+        }
+    } else if objs.len() > head {
+        for (offset, obj) in objs[head..].iter().enumerate() {
+            out.push(format_row(head + offset, obj));
+        }
+    }
+
+    let rendered = out.join("\n");
+    (rendered.len() < raw.len()).then_some(rendered)
+}
+
+fn compact_json_val(v: &Value) -> String {
+    match v {
+        Value::Null => String::new(),
+        Value::Bool(b) => b.to_string(),
+        Value::Number(n) => n.to_string(),
+        Value::String(s) => {
+            let one_line: String = s.split_whitespace().collect::<Vec<_>>().join(" ");
+            if one_line.chars().count() > 64 {
+                let cut: String = one_line.chars().take(61).collect();
+                format!("\"{cut}...\"")
+            } else {
+                format!("\"{one_line}\"")
+            }
+        }
+        Value::Array(arr) => {
+            if arr.is_empty() {
+                "[]".into()
+            } else {
+                let names: Vec<&str> = arr
+                    .iter()
+                    .take(3)
+                    .filter_map(|it| {
+                        it.as_str()
+                            .or_else(|| it.get("name").and_then(Value::as_str))
+                            .or_else(|| it.get("login").and_then(Value::as_str))
+                    })
+                    .collect();
+                if names.is_empty() {
+                    format!("[{} items]", arr.len())
+                } else if arr.len() > 3 {
+                    format!("[{}, +{}]", names.join(","), arr.len() - 3)
+                } else {
+                    format!("[{}]", names.join(","))
+                }
+            }
+        }
+        Value::Object(map) => {
+            for k in ["login", "name", "id", "title"] {
+                if let Some(s) = map.get(k).and_then(Value::as_str) {
+                    return s.to_string();
+                }
+            }
+            format!("{{{} keys}}", map.len())
+        }
+    }
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+struct RepeatEntry {
+    sig: String,
+    handle: String,
+    exit_code: i32,
+    raw_bytes: usize,
+    count: u32,
+    updated_at_secs: u64,
+}
+
+fn now_secs() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
+}
+
+fn repeat_state_path() -> Result<PathBuf> {
+    let dir = crate::state::state_dir()?.join("usage");
+    crate::state::ensure_private_dir(&dir)?;
+    Ok(dir.join("repeat-runs.json"))
+}
+
+fn repeat_key(cwd: &Path, cmd: &[String]) -> String {
+    let joined = format!("{}|{}", cwd.to_string_lossy(), cmd.join("\0"));
+    footnote_core::hash(joined.as_bytes())[..16].to_string()
+}
+
+/// Normalize timing/address jitter out of failing diagnostics while keeping every error, path, line number,
+/// and assertion value intact (#381).
+fn failure_signature(filtered: &str) -> String {
+    static TIME_RE: OnceLock<Option<Regex>> = OnceLock::new();
+    static HEX_RE: OnceLock<Option<Regex>> = OnceLock::new();
+    let time_re = TIME_RE
+        .get_or_init(|| Regex::new(r"\b\d+(?:\.\d+)?\s*(?:ms|s)\b").ok())
+        .as_ref();
+    let hex_re = HEX_RE
+        .get_or_init(|| Regex::new(r"\b0x[0-9a-fA-F]{6,}\b").ok())
+        .as_ref();
+
+    let clean = strip_ansi(filtered);
+    let mut norm = String::new();
+    for line in clean.lines() {
+        let t = line.trim();
+        if t.is_empty() {
+            continue;
+        }
+        let s = match time_re {
+            Some(re) => re.replace_all(t, "<T>").into_owned(),
+            None => t.to_string(),
+        };
+        let s = match hex_re {
+            Some(re) => re.replace_all(&s, "<HEX>").into_owned(),
+            None => s,
+        };
+        norm.push_str(&s);
+        norm.push('\n');
+    }
+    footnote_core::hash(norm.as_bytes())[..24].to_string()
+}
+
+fn load_repeat_state(path: &Path) -> BTreeMap<String, RepeatEntry> {
+    fs::read_to_string(path)
+        .ok()
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_default()
+}
+
+fn save_repeat_state(path: &Path, mut map: BTreeMap<String, RepeatEntry>) {
+    let now = now_secs();
+    map.retain(|_, v| now.saturating_sub(v.updated_at_secs) <= REPEAT_WINDOW_SECS);
+    if map.len() > MAX_REPEAT_ENTRIES {
+        let mut by_age: Vec<(u64, String)> = map
+            .iter()
+            .map(|(k, v)| (v.updated_at_secs, k.clone()))
+            .collect();
+        by_age.sort_by_key(|(t, _)| *t);
+        for (_, old_k) in by_age.into_iter().take(map.len() - MAX_REPEAT_ENTRIES) {
+            map.remove(&old_k);
+        }
+    }
+    let tmp = path.with_extension("json.tmp");
+    if let Ok(bytes) = serde_json::to_vec(&map)
+        && fs::write(&tmp, bytes).is_ok()
+    {
+        let _ = fs::rename(&tmp, path);
+    }
+}
+
+fn clear_repeat_entry(cwd: &Path, cmd: &[String]) {
+    let Ok(path) = repeat_state_path() else {
+        return;
+    };
+    if !path.is_file() {
+        return;
+    }
+    let mut map = load_repeat_state(&path);
+    if map.remove(&repeat_key(cwd, cmd)).is_some() {
+        save_repeat_state(&path, map);
+    }
+}
+
+fn check_and_bump_repeat(
+    cwd: &Path,
+    cmd: &[String],
+    sig: &str,
+    exit_code: i32,
+) -> Option<(String, u32)> {
+    let path = repeat_state_path().ok()?;
+    let mut map = load_repeat_state(&path);
+    let key = repeat_key(cwd, cmd);
+    let now = now_secs();
+    let entry = map.get_mut(&key)?;
+    if now.saturating_sub(entry.updated_at_secs) > REPEAT_WINDOW_SECS
+        || entry.sig != sig
+        || entry.exit_code != exit_code
+    {
+        return None;
+    }
+    let handle_file = outputs_dir().ok()?.join(format!("{}.txt", entry.handle));
+    if !handle_file.is_file() {
+        return None;
+    }
+    entry.count = entry.count.saturating_add(1);
+    entry.updated_at_secs = now;
+    let res = (entry.handle.clone(), entry.count);
+    save_repeat_state(&path, map);
+    Some(res)
+}
+
+fn record_repeat_entry(
+    cwd: &Path,
+    cmd: &[String],
+    sig: String,
+    handle: String,
+    exit_code: i32,
+    raw_bytes: usize,
+) {
+    let Ok(path) = repeat_state_path() else {
+        return;
+    };
+    let mut map = load_repeat_state(&path);
+    map.insert(
+        repeat_key(cwd, cmd),
+        RepeatEntry {
+            sig,
+            handle,
+            exit_code,
+            raw_bytes,
+            count: 1,
+            updated_at_secs: now_secs(),
+        },
+    );
+    save_repeat_state(&path, map);
+}
+
+fn format_repeat_delta(
+    family: CommandFamily,
+    cmd: &[String],
+    exit_code: i32,
+    count: u32,
+    filtered: &str,
+    raw_bytes: usize,
+    prior_handle: &str,
+) -> Option<String> {
+    let cmd_preview: String = cmd.join(" ").chars().take(72).collect();
+    let diag_lines = filtered.lines().filter(|l| !l.trim().is_empty()).count();
+    let first_marker = filtered
+        .lines()
+        .find(|l| is_important_line(l))
+        .or_else(|| filtered.lines().find(|l| !l.trim().is_empty()))
+        .unwrap_or("identical failure")
+        .trim();
+    let first_marker: String = first_marker.chars().take(100).collect();
+    let line1 =
+        format!("repeat failure (#{count} identical in session, exit {exit_code}): {cmd_preview}");
+    let line2 = format!("same diagnostic ({diag_lines} lines) — {first_marker}");
+    let body_len = line1.len() + 1 + line2.len();
+    let pct = 100usize.saturating_sub(
+        (body_len.saturating_mul(100))
+            .checked_div(raw_bytes)
+            .unwrap_or(100),
+    );
+    let line3 = format!(
+        "[footnote: {} repeat-delta {}B -> {}B (-{}%) | prior full: footnote output {} [--grep pat]]",
+        family.as_str(),
+        raw_bytes,
+        body_len,
+        pct,
+        prior_handle
+    );
+    Some(format!("{line1}\n{line2}\n{line3}\n"))
 }
 
 fn strip_ansi(s: &str) -> String {
