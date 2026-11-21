@@ -2039,17 +2039,6 @@ pub fn pre_tool_use_hook(event: &Value) -> Option<Value> {
 /// Never fails closed against the user's shell; any parse or I/O error passes through silently.
 pub fn run_lean_hook() {
     const MAX_HOOK_EVENT: u64 = 2 * 1024 * 1024;
-    if let Ok(state) = crate::state::state_dir() {
-        let on = footnote_core::config::product_settings(&state, "usage")
-            .map_or(true, |v| v["lean_log"].as_bool().unwrap_or(true));
-        // Respect explicit company/user opt-out if usage.lean_enabled is set to false.
-        let enabled = footnote_core::config::product_settings(&state, "usage")
-            .map_or(true, |v| v["lean_enabled"].as_bool().unwrap_or(true));
-        let _ = on;
-        if !enabled {
-            return;
-        }
-    }
     let mut raw = String::new();
     if std::io::stdin()
         .take(MAX_HOOK_EVENT + 1)
@@ -2063,13 +2052,23 @@ pub fn run_lean_hook() {
     let Ok(event) = serde_json::from_str::<Value>(&raw) else {
         return;
     };
-    let wants_empty_json = event.get("toolCall").is_some()
+    let is_agy = event.get("toolCall").is_some()
         || event.get("conversationId").is_some()
-        || event.get("hookEventName").is_some()
-        || event["hook_event_name"].as_str() == Some("BeforeTool");
-    if let Some(out) = pre_tool_use_hook(&event) {
+        || event.get("hookEventName").is_some();
+    let is_gemini_cli = event["hook_event_name"].as_str() == Some("BeforeTool");
+
+    // Respect explicit company/user opt-out if usage.lean_enabled is set to false.
+    let enabled = crate::state::state_dir().ok().is_none_or(|state| {
+        footnote_core::config::product_settings(&state, "usage")
+            .ok()
+            .is_none_or(|v| v["lean_enabled"].as_bool().unwrap_or(true))
+    });
+    if enabled && let Some(out) = pre_tool_use_hook(&event) {
         println!("{out}");
-    } else if wants_empty_json {
+    } else if is_agy {
+        // Antigravity PreToolUse requires an explicit `decision`; `{}` denies the tool call.
+        println!("{{\"decision\":\"allow\"}}");
+    } else if is_gemini_cli {
         println!("{{}}");
     }
 }

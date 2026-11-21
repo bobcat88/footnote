@@ -113,7 +113,8 @@ fn hook_lean_rewrites_antigravity_tool_call_and_gemini_cli_before_tool() {
         "Antigravity must not receive Claude hookSpecificOutput: {agy_v}"
     );
 
-    // Antigravity passthrough (chained command) must emit valid empty JSON `{}`.
+    // Antigravity passthrough (chained command) must emit explicit `{"decision": "allow"}`
+    // because Antigravity treats a missing `decision` field as a denial.
     let agy_chain = json!({
         "conversationId": "conv-123",
         "hookEventName": "PreToolUse",
@@ -133,7 +134,7 @@ fn hook_lean_rewrites_antigravity_tool_call_and_gemini_cli_before_tool() {
     assert!(agy_pass.status.success(), "{agy_pass:?}");
     assert_eq!(
         serde_json::from_slice::<Value>(&agy_pass.stdout).unwrap(),
-        json!({})
+        json!({"decision": "allow"})
     );
 
     // 2. Gemini CLI BeforeTool sends `tool_name: "run_shell_command"`, `tool_input: { command }`
