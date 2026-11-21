@@ -26,3 +26,5 @@ copied):
 - prisma/skills, MIT, https://github.com/prisma/skills
 - mattpocock/skills, MIT, https://github.com/mattpocock/skills
 - obra/superpowers, MIT, https://github.com/obra/superpowers
+- vercel-labs/agent-browser, Apache-2.0, https://github.com/vercel-labs/agent-browser
+- microsoft/playwright-cli, Apache-2.0, https://github.com/microsoft/playwright-cli
