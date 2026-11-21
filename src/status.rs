@@ -87,7 +87,7 @@ fn memory(state: &Path) -> Result<Value> {
         "db": db,
         "encrypted": crate::app::personal_dir(&db).is_some(),
         "agents": crate::install::memory_registrations()?,
-        "daemon_running": crate::daemon::connect(&db).is_ok(),
+        "daemon_running": db.exists() && crate::daemon::connect(&db).is_ok(),
     });
     if db.exists() {
         let c = crate::app::open(&db, false)?;

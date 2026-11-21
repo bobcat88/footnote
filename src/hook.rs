@@ -660,18 +660,6 @@ fn note(s: &Settings, dir: &Path, event: &str, project: &str, v: &Value) {
     if !s.activity || ids.is_empty() {
         return;
     }
-    let t = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |d| d.as_millis() as u64);
-    append_activity(
-        dir,
-        &json!({"t": t, "event": event, "project": project, "ids": ids}),
-    );
-}
-
-/// Append one entry to `<dir>/activity.jsonl` (the hook's [`note`] and MCP recalls). Best effort, capped: past 512 KB the
-/// older half is dropped.
-pub(crate) fn append_activity(dir: &Path, entry: &Value) {
     let path = dir.join("activity.jsonl");
     if fs::metadata(&path).is_ok_and(|m| m.len() > 512 * 1024)
         && let Ok(text) = fs::read_to_string(&path)
@@ -679,7 +667,13 @@ pub(crate) fn append_activity(dir: &Path, entry: &Value) {
         let lines: Vec<&str> = text.lines().collect();
         let _ = fs::write(&path, lines[lines.len() / 2..].join("\n") + "\n");
     }
-    let _ = crate::state::append_line(&path, &entry.to_string());
+    let t = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_millis() as u64);
+    let _ = crate::state::append_line(
+        &path,
+        &json!({"t": t, "event": event, "project": project, "ids": ids}).to_string(),
+    );
 }
 
 fn handle(state: &Path, s: &Settings, event: &Value) -> Result<Option<Value>> {
