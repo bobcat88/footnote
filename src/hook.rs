@@ -181,6 +181,12 @@ struct Session {
     /// Skills already suggested in this context, by name; reset at SessionStart.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     skills_shown: Vec<String>,
+    /// Suggested skills watched in the session file for reads and script runs (#443); kept across compactions.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    skill_watch: Vec<crate::skill_outcomes::Watch>,
+    /// Session-file offset the skill scan has reached (#443).
+    #[serde(skip_serializing_if = "is_zero")]
+    scan_from: u64,
     /// Whether this session was already asked for a handoff (#250).
     handoff_asked: bool,
     /// Recorded at UserPromptSubmit when resuming after idle cache expiry: `(idle_minutes, tokens)` (#379).
@@ -190,6 +196,82 @@ struct Session {
     /// turn's prompt so tool-loop steps only count and recall once; cleared when the turn finishes. Hash only, never text.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     turn_prompt_hash: Option<String>,
+}
+
+fn is_zero(n: &u64) -> bool {
+    *n == 0
+}
+
+/// Most of a session file one Stop scans for skill outcomes; past it, only the newest part is read.
+const MAX_SCAN: u64 = 8 * 1024 * 1024;
+
+/// Watches the skills just suggested (#443): logs the suggestion, and on the first watch starts the scan at the end of the
+/// session file, since only what follows a suggestion matters.
+#[cfg(feature = "library")]
+fn watch_skills(state: &Path, st: &mut Session, e: &Event, project: &str, picked: &[Value]) {
+    for p in picked {
+        let name = p["name"].as_str().unwrap_or_default();
+        let dir = Path::new(p["path"].as_str().unwrap_or_default())
+            .parent()
+            .map(|d| d.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        if name.is_empty() || dir.is_empty() {
+            continue;
+        }
+        if st.skill_watch.is_empty() && st.scan_from == 0 && !e.transcript.is_empty() {
+            st.scan_from = fs::metadata(&e.transcript).map_or(0, |m| m.len());
+        }
+        let w = crate::skill_outcomes::Watch {
+            name: name.into(),
+            theme: p["theme"].as_str().unwrap_or_default().into(),
+            dir,
+            read: false,
+        };
+        crate::skill_outcomes::append(state, project, &w, "suggested", None);
+        match st.skill_watch.iter_mut().find(|x| x.name == w.name) {
+            Some(x) => *x = w, // suggested again: a new read counts again
+            None => st.skill_watch.push(w),
+        }
+    }
+}
+
+/// Scans the session file written since the last scan for reads and script runs of watched skills (#443). Best effort.
+fn scan_skills(state: &Path, st: &mut Session, e: &Event, project: &str) {
+    use std::io::{Seek, SeekFrom};
+    if st.skill_watch.is_empty() || e.transcript.is_empty() {
+        return;
+    }
+    let Ok(mut f) = fs::File::open(&e.transcript) else {
+        return;
+    };
+    let len = f.metadata().map_or(0, |m| m.len());
+    let from = if st.scan_from > len {
+        0 // a new file at the same path
+    } else {
+        st.scan_from.max(len.saturating_sub(MAX_SCAN))
+    };
+    let mut buf = Vec::new();
+    if f.seek(SeekFrom::Start(from)).is_err() || f.take(len - from).read_to_end(&mut buf).is_err() {
+        return;
+    }
+    // Only whole lines: a line still being written is scanned next time.
+    let Some(end) = buf.iter().rposition(|&b| b == b'\n').map(|i| i + 1) else {
+        return;
+    };
+    for (i, seen) in crate::skill_outcomes::scan(&buf[..end], &st.skill_watch) {
+        let w = &mut st.skill_watch[i];
+        match seen {
+            crate::skill_outcomes::Seen::Read if !w.read => {
+                w.read = true;
+                crate::skill_outcomes::append(state, project, w, "read", None);
+            }
+            crate::skill_outcomes::Seen::Read => {}
+            crate::skill_outcomes::Seen::Run { ok } => {
+                crate::skill_outcomes::append(state, project, w, "run", Some(ok));
+            }
+        }
+    }
+    st.scan_from = from + end as u64;
 }
 
 fn prompt_hash(prompt: &str) -> String {
@@ -761,6 +843,9 @@ fn handle(state: &Path, s: &Settings, event: &Value) -> Result<Option<Value>> {
                             .iter()
                             .filter_map(|v| v["name"].as_str().map(String::from)),
                     );
+                    if s.activity {
+                        watch_skills(state, &mut st, &e, &project, &picked);
+                    }
                     let lines = crate::skills::render(&picked);
                     if !lines.is_empty() {
                         recalled = if recalled.is_empty() {
@@ -784,6 +869,9 @@ fn handle(state: &Path, s: &Settings, event: &Value) -> Result<Option<Value>> {
             }
         }
         "Stop" | "AfterAgent" => {
+            if s.activity {
+                scan_skills(state, &mut st, &e, &project);
+            }
             let agy_non_normal =
                 e.agy && !e.termination_reason.is_empty() && e.termination_reason != "NO_TOOL_CALL";
             let tail = (!st.handoff_asked && !e.transcript.is_empty())

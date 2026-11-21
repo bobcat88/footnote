@@ -122,6 +122,13 @@ Supersedes decisions 1 and 4 above. Footnote Memory is for agents and by agents:
 - **Vectors:** agents call the tool without model paths, so the hook computes vectors for new memories in the background after a save and at session start.
 - **Not verified yet:** whether Codex honors a Stop hook's request to continue; Claude Code, Grok and DeepSeek's bridge do.
 
+## 7c. Skills the agent revises; the harness stays fixed (21 November 2026, #442)
+
+- **The harness is not agent-modifiable.** Hooks, pack, recall, the Stop request and their thresholds are measured and stay as they are.
+- **Only skills may be rewritten by the agent**, in a second, agent-owned layer that shadows the curated skills and keeps every revision (#444, #445).
+- **Rewriting is opt-in** (`skill_rewrite`, off by default). The user is told what it is for and what it costs before turning it on: one extra agent turn per edit request, edited skills re-read by later sessions, and possible roll-back and re-edit cycles (#446, #447).
+- **The signal is passive and free** (#443): the Stop hook reads the session file written since its last check and logs, per suggested skill, whether the agent read its `SKILL.md` and how its scripts ran. No LLM grades a session, and the agent never grades itself. These logs decide when to ask for an edit, whether an edit survives its trial, and which never-read skills stop being suggested (#448).
+
 ## 8. Built so far (14 November 2026)
 
 - **Rust core** (`crates/memory`, schema 5 in `crates/search/src/store.rs`):

@@ -716,6 +716,8 @@ enum SkillsAction {
     List,
     /// Switch a theme off: delete its index.
     Remove { theme: String },
+    /// Per skill: times suggested, read by the agent, and its scripts' runs and failures (#443).
+    Stats,
 }
 
 #[derive(Subcommand)]
@@ -1154,6 +1156,7 @@ fn execute(cli: Cli) -> Result<Value> {
                 }
                 SkillsAction::List => crate::skills::list(&state),
                 SkillsAction::Remove { theme } => crate::skills::remove(&state, theme),
+                SkillsAction::Stats => crate::skill_outcomes::stats(&state),
             };
         }
         Action::Find { query, limit } => return crate::find::find(query, usize::from(*limit)),
