@@ -259,6 +259,12 @@ enum Action {
         /// /remember in Claude Code, Codex, Grok and DeepSeek Harness (no --db needed).
         #[arg(long)]
         memory: bool,
+        /// Install Footnote Lean PreToolUse hooks (`footnote hook lean`) across detected agents (#351).
+        #[arg(long)]
+        lean: bool,
+        /// Disconnect external RTK hooks and MCP entries from detected agent configs (#351).
+        #[arg(long)]
+        remove_rtk: bool,
     },
     /// Replace this binary with a newer one; the current one is kept beside it so `rollback` can put it back. Data in the state
     /// folder is not touched.
@@ -269,19 +275,20 @@ enum Action {
     },
     /// Put back the binary that the last `update` replaced.
     Rollback,
-    /// Remove Footnote Memory from every agent (hooks, MCP server, /remember). Memories and settings are kept.
-    #[cfg(feature = "memory")]
+    /// Remove Footnote hooks/integrations from detected agents (`--memory` and/or `--lean`). Data and settings are kept.
     Uninstall {
         #[arg(long)]
         dry_run: bool,
-        /// Required: what to remove (only Footnote Memory can be uninstalled this way today).
-        #[arg(long, required = true)]
+        /// Remove Footnote Memory (hooks, MCP server, /remember).
+        #[arg(long)]
         memory: bool,
+        /// Remove Footnote Lean PreToolUse hooks only (leaves Memory untouched).
+        #[arg(long)]
+        lean: bool,
     },
-    #[cfg(feature = "memory")]
-    /// Agent memory hook: read an event as JSON on stdin, without Python (settings: <state dir>/memory.json).
+    /// Agent hook processor: memory events (default) or Lean PreToolUse shell rewriter (`lean`).
     Hook {
-        /// Background step: encode new memories with the configured models.
+        /// Sub-step: `embed` (background memory embedding) or `lean` (PreToolUse command rewriter).
         #[arg(hide = true)]
         step: Option<HookStep>,
     },
@@ -357,6 +364,14 @@ enum Action {
         /// Price one Claude Code or Codex session file instead (tokens per category, list price, per model).
         #[arg(long)]
         file: Option<PathBuf>,
+    },
+    /// Footnote Lean savings ledger: shell output bytes saved, handle re-retrieval miss rate, MCP trimming, and optional token attribution (#351).
+    Gain {
+        #[arg(long, default_value_t = 7, value_parser = clap::value_parser!(u16).range(1..=365))]
+        days: u16,
+        /// Include session token and cache-bucket attribution from local agent transcripts.
+        #[arg(long)]
+        attrib: bool,
     },
     /// Browse agent memories, newest first (ids are those `forget` takes).
     #[cfg(feature = "memory")]
@@ -520,10 +535,11 @@ enum Action {
         lines: Option<String>,
     },
 }
-#[cfg(feature = "memory")]
 #[derive(Clone, clap::ValueEnum)]
 enum HookStep {
+    #[cfg(feature = "memory")]
     Embed,
+    Lean,
 }
 #[derive(Subcommand)]
 enum ModelsAction {
@@ -764,7 +780,18 @@ fn execute(cli: Cli) -> Result<Value> {
             crate::daemon::proxy(&shared)?;
             return Ok(Value::Null);
         }
-        Action::Install { dry_run, memory } => {
+        Action::Install {
+            dry_run,
+            memory,
+            lean,
+            remove_rtk,
+        } => {
+            if *lean {
+                return crate::install::lean(*dry_run, *remove_rtk);
+            }
+            if *remove_rtk && !*memory {
+                return crate::install::remove_rtk(*dry_run);
+            }
             return if *memory {
                 #[cfg(feature = "memory")]
                 return crate::install::memory(*dry_run);
@@ -906,6 +933,7 @@ fn execute(cli: Cli) -> Result<Value> {
                 None => crate::usage::usage(*days),
             };
         }
+        Action::Gain { days, attrib } => return crate::usage::gain(*days, *attrib),
         #[cfg(feature = "library")]
         Action::Docs { action } => {
             let state = crate::state::state_dir()?;
@@ -1018,8 +1046,30 @@ fn execute(cli: Cli) -> Result<Value> {
                 ModelsAction::Recommend => crate::models::recommend(cli.db.as_deref()),
             };
         }
-        #[cfg(feature = "memory")]
-        Action::Uninstall { dry_run, .. } => return crate::install::uninstall_memory(*dry_run),
+        Action::Uninstall {
+            dry_run,
+            memory,
+            lean,
+        } => {
+            if !*memory && !*lean {
+                bail!("pass `--memory` and/or `--lean` to `footnote uninstall`");
+            }
+            if *lean && !*memory {
+                return crate::install::uninstall_lean(*dry_run);
+            }
+            if *memory && !*lean {
+                #[cfg(feature = "memory")]
+                return crate::install::uninstall_memory(*dry_run);
+                #[cfg(not(feature = "memory"))]
+                bail!("this build has no Footnote Memory");
+            }
+            let lean_out = crate::install::uninstall_lean(*dry_run)?;
+            #[cfg(feature = "memory")]
+            let mem_out = crate::install::uninstall_memory(*dry_run)?;
+            #[cfg(not(feature = "memory"))]
+            let mem_out = json!({"error": "this build has no Footnote Memory"});
+            return Ok(json!({"dry_run": dry_run, "memory": mem_out, "lean": lean_out}));
+        }
         Action::Update { from } => return crate::update::update(from),
         Action::Rollback => return crate::update::rollback(),
         Action::Config { action } => {
@@ -1180,7 +1230,7 @@ fn execute(cli: Cli) -> Result<Value> {
         Action::Serve { .. } => unreachable!("serve is dispatched before the database is opened"),
         Action::Mcp => unreachable!("mcp is dispatched before the database is opened"),
         #[cfg(feature = "memory")]
-        Action::Uninstall { .. } | Action::Activity { .. } | Action::MemoryReview { .. } => {
+        Action::Activity { .. } | Action::MemoryReview { .. } => {
             unreachable!("dispatched before the database is opened")
         }
         Action::Usage { .. } | Action::Find { .. } | Action::Corpora { .. } => {
@@ -1210,9 +1260,10 @@ fn execute(cli: Cli) -> Result<Value> {
         }
         #[cfg(feature = "memory")]
         Action::Projects => unreachable!("dispatched before the database is opened"),
-        #[cfg(feature = "memory")]
         Action::Hook { .. } => unreachable!("the hook is dispatched before the database is opened"),
         Action::Install { .. }
+        | Action::Uninstall { .. }
+        | Action::Gain { .. }
         | Action::Embed { .. }
         | Action::Update { .. }
         | Action::Rollback
@@ -1362,7 +1413,6 @@ fn action_name(a: &Action) -> &'static str {
         Action::Serve { .. } => "serve",
         Action::Mcp => "mcp",
         Action::Install { .. } => "install",
-        #[cfg(feature = "memory")]
         Action::Hook { .. } => "hook",
         Action::Audit { .. } => "audit",
         Action::Run { .. } => "run",
@@ -1391,6 +1441,7 @@ fn action_name(a: &Action) -> &'static str {
         #[cfg(feature = "memory")]
         Action::Activity { .. } => "activity",
         Action::Usage { .. } => "usage",
+        Action::Gain { .. } => "gain",
         Action::Find { .. } => "find",
         Action::Corpora { .. } => "corpora",
         #[cfg(feature = "library")]
@@ -1398,7 +1449,6 @@ fn action_name(a: &Action) -> &'static str {
         #[cfg(feature = "memory")]
         Action::MemoryList { .. } => "memory-list",
         Action::Models { .. } => "models",
-        #[cfg(feature = "memory")]
         Action::Uninstall { .. } => "uninstall",
         Action::Config { .. } => "config",
         Action::Update { .. } => "update",
@@ -1470,9 +1520,15 @@ pub fn run() {
         return;
     }
     // Hook stdout belongs to the agent's event protocol. Failures must never block a session.
-    #[cfg(feature = "memory")]
     if let Action::Hook { step } = &cli.command {
-        crate::hook::run(step.is_some());
+        if matches!(step, Some(HookStep::Lean)) {
+            crate::run::run_lean_hook();
+            return;
+        }
+        #[cfg(feature = "memory")]
+        {
+            crate::hook::run(matches!(step, Some(HookStep::Embed)));
+        }
         return;
     }
     // `footnote run` emits the filtered/raw command output directly and preserves the exact child exit code.

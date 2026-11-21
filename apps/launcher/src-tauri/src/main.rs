@@ -19,9 +19,9 @@ use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent}
 fn allowed(args: &[String]) -> bool {
     let a: Vec<&str> = args.iter().map(String::as_str).collect();
     match a.as_slice() {
-        ["status"] | ["projects"] | ["activity"] | ["jobs"] | ["models", "list"] => true,
+        ["status"] | ["projects"] | ["activity"] | ["jobs"] | ["gain"] | ["models", "list"] => true,
         ["code", name, "--root", _] => !name.starts_with('-'),
-        ["activity" | "usage", "--days", d] => d.parse::<u16>().is_ok(),
+        ["activity" | "usage" | "gain", "--days", d] => d.parse::<u16>().is_ok(),
         ["code-map", "--root", _] => true,
         // The impact radius before a change: a read, like `code`.
         ["code-impact", name, "--root", _] => !name.starts_with('-'),
@@ -260,7 +260,13 @@ mod tests {
         assert!(!ok("jobs --bad"));
         assert!(!ok("forget 12") && !ok("install --memory") && !ok("models remove jina-v5-nano"));
         assert!(!ok("code --root . --root") && !ok("code-map --root . --depth 2;rm"));
-        assert!(ok("usage --days 30") && ok("activity --days 7") && !ok("usage --days x"));
+        assert!(
+            ok("usage --days 30")
+                && ok("activity --days 7")
+                && ok("gain")
+                && ok("gain --days 7")
+                && !ok("usage --days x")
+        );
         assert!(ok("config set code.enabled false") && ok("config set memory.enabled true"));
         assert!(
             ok("models install jina-v5-nano")

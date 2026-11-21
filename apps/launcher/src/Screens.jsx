@@ -243,27 +243,34 @@ const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD",
 const tokens = (n) => (n >= 1e9 ? `${(n / 1e9).toFixed(1)} B` : n >= 1e6 ? `${(n / 1e6).toFixed(1)} M` : num(n));
 const AGENT = { "claude-code": "Claude Code", codex: "Codex", "deepseek-harness": "DeepSeek Harness" };
 
-/** Measured savings only (goal 19): what RTK trimmed from command output before agents read it. Not priced, never added to the
- * totals: a trimmed result would also have been re-read at cache rates later, so any money figure would be an estimate. */
+/** Measured savings only (goal 19): what Footnote Lean trimmed from shell commands (`footnote run`) and search results before
+ * agents read them. Not priced, never added to the totals: a trimmed result would also have been re-read at cache rates later,
+ * so any money figure would be an estimate. */
 function Trimmed({ s }) {
-  const r = s?.rtk;
+  const sh = s?.shell;
+  const fn = s?.footnote;
+  const totalTok = s?.total_saved_tokens_estimate ?? ((sh?.saved_tokens_estimate ?? 0) + (fn?.saved_tokens_estimate ?? 0));
+  const hasAny = (sh?.commands ?? 0) > 0 || (fn?.calls ?? 0) > 0;
   return (
     <section className="card">
       <h2>Trimmed before agents read it</h2>
-      {r ? (
+      {hasAny ? (
         <>
-          <div className="big">{tokens(r.saved_tokens)}</div>
-          <div className="sub">
-            {Math.round(100 * r.saved_share)} % of {tokens(r.before_tokens)} command output, measured by RTK. Not priced.
-          </div>
+          <div className="big">{tokens(totalTok)}</div>
+          {sh?.commands > 0 && (
+            <div className="sub">
+              {Math.round(100 * (sh.saved_share ?? 0))} % of {tokens(Math.round((sh.before_bytes ?? 0) / 4))} shell output over {num(sh.commands)} {sh.commands === 1 ? "command" : "commands"}
+              {sh.handles_retrieved > 0 ? ` · ${num(sh.handles_retrieved)} full ${sh.handles_retrieved === 1 ? "read" : "reads"}` : ""}. Not priced.
+            </div>
+          )}
+          {fn?.calls > 0 && (
+            <div className="sub">
+              Footnote's trimmed search results: {mb(fn.saved_bytes) === "0 MB" ? `${num(Math.round(fn.saved_bytes / 1000))} kB` : mb(fn.saved_bytes)} fewer over {num(fn.calls)} {fn.calls === 1 ? "search" : "searches"}, about {tokens(fn.saved_tokens_estimate)} tokens.
+            </div>
+          )}
         </>
       ) : (
-        <div className="sub">{s?.reason ?? "No measured savings for this period."}</div>
-      )}
-      {s?.footnote?.calls > 0 && (
-        <div className="sub">
-          Footnote's trimmed search results: {mb(s.footnote.saved_bytes) === "0 MB" ? `${num(Math.round(s.footnote.saved_bytes / 1000))} kB` : mb(s.footnote.saved_bytes)} fewer over {num(s.footnote.calls)} {s.footnote.calls === 1 ? "search" : "searches"}, about {tokens(s.footnote.saved_tokens_estimate)} tokens.
-        </div>
+        <div className="sub">No measured savings for this period. Run <code>footnote install --lean</code> to enable shell output filtering.</div>
       )}
     </section>
   );

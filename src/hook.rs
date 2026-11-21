@@ -544,6 +544,9 @@ fn note(s: &Settings, dir: &Path, event: &str, project: &str, v: &Value) {
 
 fn handle(state: &Path, s: &Settings, event: &Value) -> Result<Option<Value>> {
     let e = Event::normalize(event);
+    if e.name == "PreToolUse" {
+        return Ok(crate::run::pre_tool_use_hook(event));
+    }
     let project = project_of(&e.cwd);
     let dir = state.join("memory-hook");
     crate::state::ensure_private_dir(&dir)?;

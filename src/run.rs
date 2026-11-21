@@ -1438,6 +1438,86 @@ fn log_lean_retrieve(handle: &str, returned_bytes: usize) {
         fs::create_dir_all(&dir).and_then(|()| crate::state::append_line(&path, &row.to_string()));
 }
 
+/// Handle a `PreToolUse` hook event JSON payload: rewrite eligible shell commands to `footnote run -- <cmd>`.
+/// Returns `None` when the event is not a rewritable shell call (passthrough untouched).
+#[must_use]
+pub fn pre_tool_use_hook(event: &Value) -> Option<Value> {
+    let ev_name = event["hook_event_name"]
+        .as_str()
+        .or_else(|| event["hookEventName"].as_str())
+        .unwrap_or("");
+    if !ev_name.is_empty() && ev_name != "PreToolUse" {
+        return None;
+    }
+    let tool = event["tool_name"]
+        .as_str()
+        .or_else(|| event["toolName"].as_str())
+        .unwrap_or("");
+    let is_shell = matches!(
+        tool.to_ascii_lowercase().as_str(),
+        "bash" | "shell" | "run_command" | "command" | "terminal"
+    );
+    if !is_shell {
+        return None;
+    }
+    let input = event
+        .get("tool_input")
+        .or_else(|| event.get("toolInput"))
+        .and_then(Value::as_object)?;
+    let (cmd_key, cmd_str) = if let Some(s) = input.get("command").and_then(Value::as_str) {
+        ("command", s)
+    } else {
+        let s = input.get("CommandLine").and_then(Value::as_str)?;
+        ("CommandLine", s)
+    };
+    let rewritten = rewrite_command(cmd_str)?;
+    let mut updated = input.clone();
+    updated.insert(cmd_key.to_string(), json!(rewritten));
+    Some(json!({
+        "hookSpecificOutput": {
+            "hookEventName": "PreToolUse",
+            "permissionDecision": "allow",
+            "updatedInput": updated,
+        }
+    }))
+}
+
+/// Standalone `footnote hook lean` entrypoint: fast, SQLite-free PreToolUse command rewriter.
+/// Never fails closed against the user's shell; any parse or I/O error passes through silently.
+pub fn run_lean_hook() {
+    const MAX_HOOK_EVENT: u64 = 2 * 1024 * 1024;
+    if let Ok(state) = crate::state::state_dir() {
+        let on = footnote_core::config::product_settings(&state, "usage")
+            .map_or(true, |v| v["lean_log"].as_bool().unwrap_or(true));
+        // Respect explicit company/user opt-out if usage.lean_enabled is set to false.
+        let enabled = footnote_core::config::product_settings(&state, "usage")
+            .map_or(true, |v| v["lean_enabled"].as_bool().unwrap_or(true));
+        let _ = on;
+        if !enabled {
+            return;
+        }
+    }
+    let mut raw = String::new();
+    if std::io::stdin()
+        .take(MAX_HOOK_EVENT + 1)
+        .read_to_string(&mut raw)
+        .is_err()
+        || raw.len() as u64 > MAX_HOOK_EVENT
+        || raw.trim().is_empty()
+    {
+        return;
+    }
+    let Ok(event) = serde_json::from_str::<Value>(&raw) else {
+        return;
+    };
+    let agy = event.get("conversationId").is_some() || event.get("hookEventName").is_some();
+    if let Some(out) = pre_tool_use_hook(&event) {
+        println!("{out}");
+    } else if agy {
+        println!("{{}}");
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

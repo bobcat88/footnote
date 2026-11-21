@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
-if command -v rtk >/dev/null 2>&1; then RUN=(rtk); else RUN=(); fi
 
 pick_python() {
   for cand in "$@"; do
@@ -19,12 +18,12 @@ elif [[ -x .venv/bin/python ]]; then PY=.venv/bin/python
 fi
 PY_SYS="$(pick_python python3 python || true)"
 
-"${RUN[@]}" cargo fmt --all --check
-"${RUN[@]}" cargo clippy --locked --workspace --all-targets -- -D warnings
-"${RUN[@]}" cargo clippy --locked --workspace --all-targets --no-default-features --features library -- -D warnings
-"${RUN[@]}" cargo clippy --locked --workspace --all-targets --no-default-features --features memory -- -D warnings
-"${RUN[@]}" cargo clippy --locked --workspace --all-targets --no-default-features --features code -- -D warnings
-"${RUN[@]}" cargo test --locked --workspace --all-targets
+cargo fmt --all --check
+cargo clippy --locked --workspace --all-targets -- -D warnings
+cargo clippy --locked --workspace --all-targets --no-default-features --features library -- -D warnings
+cargo clippy --locked --workspace --all-targets --no-default-features --features memory -- -D warnings
+cargo clippy --locked --workspace --all-targets --no-default-features --features code -- -D warnings
+cargo test --locked --workspace --all-targets
 
 if command -v node >/dev/null 2>&1; then
   node --test "apps/launcher/src/**/*.test.js"
@@ -35,20 +34,20 @@ fi
 
 case "$(uname -s)" in
   MINGW*|MSYS*|CYGWIN*)
-    "${RUN[@]}" cargo test --locked --manifest-path apps/launcher/src-tauri/Cargo.toml
+    cargo test --locked --manifest-path apps/launcher/src-tauri/Cargo.toml
     ;;
   Linux*)
     if command -v pkg-config >/dev/null 2>&1 && pkg-config --exists webkit2gtk-4.1; then
-      "${RUN[@]}" cargo test --locked --manifest-path apps/launcher/src-tauri/Cargo.toml
+      cargo test --locked --manifest-path apps/launcher/src-tauri/Cargo.toml
     fi
     ;;
 esac
 
-"${RUN[@]}" cargo build --locked --release
+cargo build --locked --release
 
 if [[ -n $PY ]]; then
   if command -v uv >/dev/null 2>&1; then
-    "${RUN[@]}" uv pip check --python "$PY"
+    uv pip check --python "$PY"
   else
     "$PY" -m pip check
   fi
@@ -62,4 +61,4 @@ else
   fi
 fi
 
-"${RUN[@]}" git diff --check
+git diff --check

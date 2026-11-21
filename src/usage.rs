@@ -643,109 +643,220 @@ fn limits(index: &Index, now: i64) -> Value {
            "note": "from the agents' session files only: Codex writes the share used on every turn; Claude Code writes a limit only when one is hit (100 %), so it shows here only until that limit resets; times in Unix seconds"})
 }
 
-/// Savings measured where the output was filtered, shown apart from the token counts and prices above. Today the only
-/// measured source is RTK (output filtering of shell commands): it records the size before and after each filtered command, and
-/// what it removes never reaches the agent, so it is not in the session counts above (no double counting).
+/// Savings measured directly where Footnote filtered shell output (`footnote run`) or trimmed MCP search results,
+/// read from `<state>/usage/lean.jsonl` (+ `.old`). Never shells out to external tools (#351).
 fn measured_savings(first: &str) -> Value {
     let not_measured = json!([
-        "behaviour skills such as ponytail: a saving exists only against a benchmark without them, so it is an estimate, not shown here"
+        "behaviour skills: a saving exists only against a benchmark without them, so it is an estimate, not shown here"
     ]);
-    let rtk = run_rtk().map(|v| rtk_days(&v, first));
-    match rtk {
-        Ok(days) => {
-            json!({"source": "rtk gain --daily (RTK's own count of tokens before and after its filters)", "footnote": lean_days(first),
-                           "note": "tokens the agent never had to read; dates as RTK records them (local time); not priced, because a trimmed result would also have been re-read at cache rates on later turns",
-                           "rtk": days, "not_measured": not_measured})
-        }
-        Err(e) => {
-            json!({"source": "rtk", "available": false, "reason": format!("{e:#}"), "footnote": lean_days(first), "not_measured": not_measured})
-        }
-    }
-}
-
-fn run_rtk() -> Result<Value> {
-    use wait_timeout::ChildExt;
-    let mut cmd = std::process::Command::new("rtk");
-    cmd.args(["gain", "--daily", "--format", "json"])
-        .stdin(std::process::Stdio::null())
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::null());
-    #[cfg(windows)]
-    std::os::windows::process::CommandExt::creation_flags(&mut cmd, 0x08000000); // CREATE_NO_WINDOW
-    let mut child = cmd
-        .spawn()
-        .map_err(|_| anyhow::anyhow!("RTK is not installed (rtk not on PATH)"))?;
-    let mut out = Vec::new();
-    let mut stdout = child.stdout.take().expect("piped");
-    let reader =
-        std::thread::spawn(move || std::io::Read::read_to_end(&mut stdout, &mut out).map(|_| out));
-    if child
-        .wait_timeout(std::time::Duration::from_secs(5))?
-        .is_none()
-    {
-        let _ = child.kill();
-        anyhow::bail!("rtk gain did not answer within 5 s");
-    }
-    let out = reader
-        .join()
-        .map_err(|_| anyhow::anyhow!("rtk output reader failed"))??;
-    serde_json::from_slice(&out).map_err(|_| {
-        anyhow::anyhow!("rtk gain gave no JSON (an RTK version without --format json?)")
+    let ledger = crate::state::state_dir()
+        .map(|s| lean_ledger(&s, first))
+        .unwrap_or_else(|_| lean_ledger_from_lines(&[], first));
+    json!({
+        "source": "Footnote Lean (usage/lean.jsonl: shell output filters and trimmed search results)",
+        "note": "bytes measured directly before and after filtering; tokens estimated as bytes / 4; not priced, because trimmed output would also have been re-read at cache rates on later turns",
+        "shell": ledger["shell"],
+        "footnote": ledger["footnote"],
+        "total_saved_bytes": ledger["total_saved_bytes"],
+        "total_saved_tokens_estimate": ledger["total_saved_tokens_estimate"],
+        "not_measured": not_measured,
     })
 }
 
-/// Footnote's own lean results from `first` on: bytes before and after trimming, summed per day (dates in UTC), from
-/// usage/lean.jsonl. Tokens are an estimate (bytes / 4); bytes are what was measured.
-fn lean_days(first: &str) -> Value {
-    let Ok(state) = crate::state::state_dir() else {
-        return json!(null);
-    };
-    let dir = state.join("usage");
-    let mut by: BTreeMap<String, (u64, u64, u64)> = BTreeMap::new();
-    for file in ["lean.jsonl.old", "lean.jsonl"] {
-        let text = std::fs::read_to_string(dir.join(file)).unwrap_or_default();
-        for v in text
-            .lines()
-            .filter_map(|l| serde_json::from_str::<Value>(l).ok())
-        {
-            let date = v["t"]
-                .as_i64()
-                .and_then(|ms| time::OffsetDateTime::from_unix_timestamp(ms / 1000).ok())
-                .map(|t| t.date().to_string());
-            let Some(date) = date.filter(|d| d.as_str() >= first) else {
-                continue;
-            };
-            let e = by.entry(date).or_default();
-            e.0 += 1;
-            e.1 += v["before"].as_u64().unwrap_or(0);
-            e.2 += v["after"].as_u64().unwrap_or(0);
-        }
+/// `footnote gain [--days N] [--attrib]`: Footnote Lean savings ledger (shell output filters, handle re-retrieval
+/// miss rate, trimmed MCP search results) and optional token/cache-bucket attribution from local session transcripts (#351).
+pub fn gain(days: u16, attrib: bool) -> Result<Value> {
+    let state = crate::state::state_dir()?;
+    let first = (time::OffsetDateTime::now_utc().date()
+        - time::Duration::days(i64::from(days) - 1))
+    .to_string();
+    let ledger = lean_ledger(&state, &first);
+    let mut out = json!({
+        "days": days,
+        "from": first,
+        "source": "Footnote Lean (usage/lean.jsonl)",
+        "shell": ledger["shell"],
+        "footnote": ledger["footnote"],
+        "total_saved_bytes": ledger["total_saved_bytes"],
+        "total_saved_tokens_estimate": ledger["total_saved_tokens_estimate"],
+    });
+    if attrib {
+        let u = usage(days)?;
+        let t = &u["totals"];
+        let input = t["input"].as_u64().unwrap_or(0);
+        let cache_read = t["cache_read"].as_u64().unwrap_or(0);
+        let cache_write =
+            t["cache_write_5m"].as_u64().unwrap_or(0) + t["cache_write_1h"].as_u64().unwrap_or(0);
+        let prompt_total = input + cache_read + cache_write;
+        let cache_hit_share = if prompt_total > 0 {
+            ((cache_read as f64 / prompt_total as f64) * 1000.0).round() / 1000.0
+        } else {
+            0.0
+        };
+        out["attribution"] = json!({
+            "prices": u["prices"],
+            "totals": u["totals"],
+            "cache_hit_share": cache_hit_share,
+            "by_agent": u["by_agent"],
+            "by_model": u["by_model"],
+            "by_day": u["by_day"],
+        });
     }
-    let (calls, before, after) = by
-        .values()
-        .fold((0, 0, 0), |a, d| (a.0 + d.0, a.1 + d.1, a.2 + d.2));
-    json!({"source": "Footnote's lean search results, measured on each agent call (usage.lean_log)",
-        "calls": calls, "before_bytes": before, "after_bytes": after, "saved_bytes": before.saturating_sub(after),
-        "saved_tokens_estimate": before.saturating_sub(after) / 4,
-        "by_day": by.into_iter().map(|(d, (c, b, a))| json!({"date": d, "calls": c, "before_bytes": b, "after_bytes": a})).collect::<Vec<_>>()})
+    Ok(out)
 }
 
-/// RTK's daily rows from `first` on, plus their totals.
-fn rtk_days(v: &Value, first: &str) -> Value {
-    let days: Vec<Value> = v["daily"]
-        .as_array()
+fn lean_ledger(state: &Path, first: &str) -> Value {
+    let dir = state.join("usage");
+    let mut lines = Vec::new();
+    for file in ["lean.jsonl.old", "lean.jsonl"] {
+        if let Ok(text) = std::fs::read_to_string(dir.join(file)) {
+            lines.extend(text.lines().map(String::from));
+        }
+    }
+    lean_ledger_from_lines(&lines, first)
+}
+
+fn lean_ledger_from_lines(lines: &[String], first: &str) -> Value {
+    // MCP search trimming: date -> (calls, before, after)
+    let mut mcp_by_day: BTreeMap<String, (u64, u64, u64)> = BTreeMap::new();
+    // Shell (`footnote run`): date -> (commands, before, after, stored, retrieved)
+    let mut sh_by_day: BTreeMap<String, (u64, u64, u64, u64, u64)> = BTreeMap::new();
+    // Shell per command family: family -> (commands, before, after)
+    let mut sh_by_family: BTreeMap<String, (u64, u64, u64)> = BTreeMap::new();
+
+    for raw in lines {
+        let Ok(v) = serde_json::from_str::<Value>(raw) else {
+            continue;
+        };
+        let date = v["t"]
+            .as_i64()
+            .and_then(|ms| time::OffsetDateTime::from_unix_timestamp(ms / 1000).ok())
+            .map(|t| t.date().to_string());
+        let Some(date) = date.filter(|d| d.as_str() >= first) else {
+            continue;
+        };
+        match v["tool"].as_str().unwrap_or("") {
+            "run" => {
+                let before = v["before"].as_u64().unwrap_or(0);
+                let after = v["after"].as_u64().unwrap_or(0);
+                let stored = u64::from(v["stored"].as_bool().unwrap_or(false));
+                let e = sh_by_day.entry(date).or_default();
+                e.0 += 1;
+                e.1 += before;
+                e.2 += after;
+                e.3 += stored;
+                let fam = v["family"].as_str().unwrap_or("generic").to_string();
+                let f = sh_by_family.entry(fam).or_default();
+                f.0 += 1;
+                f.1 += before;
+                f.2 += after;
+            }
+            "output" => {
+                if v["miss"].as_bool().unwrap_or(true) {
+                    let e = sh_by_day.entry(date).or_default();
+                    e.4 += 1;
+                }
+            }
+            _ => {
+                let e = mcp_by_day.entry(date).or_default();
+                e.0 += 1;
+                e.1 += v["before"].as_u64().unwrap_or(0);
+                e.2 += v["after"].as_u64().unwrap_or(0);
+            }
+        }
+    }
+
+    let (sh_cmds, sh_before, sh_after, sh_stored, sh_retrieved) = sh_by_day
+        .values()
+        .fold((0u64, 0u64, 0u64, 0u64, 0u64), |a, d| {
+            (a.0 + d.0, a.1 + d.1, a.2 + d.2, a.3 + d.3, a.4 + d.4)
+        });
+    let sh_saved = sh_before.saturating_sub(sh_after);
+    let sh_share = if sh_before > 0 {
+        ((sh_saved as f64 / sh_before as f64) * 1000.0).round() / 1000.0
+    } else {
+        0.0
+    };
+    let miss_rate = if sh_stored > 0 {
+        ((sh_retrieved as f64 / sh_stored as f64) * 1000.0).round() / 1000.0
+    } else {
+        0.0
+    };
+
+    let (mcp_calls, mcp_before, mcp_after) = mcp_by_day
+        .values()
+        .fold((0u64, 0u64, 0u64), |a, d| (a.0 + d.0, a.1 + d.1, a.2 + d.2));
+    let mcp_saved = mcp_before.saturating_sub(mcp_after);
+    let total_saved = sh_saved + mcp_saved;
+
+    let by_family: Vec<Value> = sh_by_family
         .into_iter()
-        .flatten()
-        .filter(|d| d["date"].as_str().is_some_and(|date| date >= first))
-        .map(|d| {
-            json!({"date": d["date"], "commands": d["commands"], "before_tokens": d["input_tokens"],
-                        "after_tokens": d["output_tokens"], "saved_tokens": d["saved_tokens"]})
+        .map(|(family, (commands, before, after))| {
+            let saved = before.saturating_sub(after);
+            let share = if before > 0 {
+                ((saved as f64 / before as f64) * 1000.0).round() / 1000.0
+            } else {
+                0.0
+            };
+            json!({
+                "family": family,
+                "commands": commands,
+                "before_bytes": before,
+                "after_bytes": after,
+                "saved_bytes": saved,
+                "saved_tokens_estimate": saved / 4,
+                "saved_share": share,
+            })
         })
         .collect();
-    let sum = |k: &str| days.iter().map(|d| d[k].as_u64().unwrap_or(0)).sum::<u64>();
-    let (before, saved) = (sum("before_tokens"), sum("saved_tokens"));
-    json!({"by_day": days, "commands": sum("commands"), "before_tokens": before, "after_tokens": sum("after_tokens"),
-           "saved_tokens": saved, "saved_share": if before > 0 { saved as f64 / before as f64 } else { 0.0 }})
+
+    let shell_days: Vec<Value> = sh_by_day
+        .into_iter()
+        .map(|(d, (commands, before, after, stored, retrieved))| {
+            json!({
+                "date": d,
+                "commands": commands,
+                "before_bytes": before,
+                "after_bytes": after,
+                "saved_bytes": before.saturating_sub(after),
+                "handles_stored": stored,
+                "handles_retrieved": retrieved,
+            })
+        })
+        .collect();
+
+    let mcp_days: Vec<Value> = mcp_by_day
+        .into_iter()
+        .map(|(d, (c, b, a))| json!({"date": d, "calls": c, "before_bytes": b, "after_bytes": a}))
+        .collect();
+
+    json!({
+        "shell": {
+            "source": "Footnote Lean shell output filters (`footnote run`, usage/lean.jsonl)",
+            "commands": sh_cmds,
+            "before_bytes": sh_before,
+            "after_bytes": sh_after,
+            "saved_bytes": sh_saved,
+            "saved_tokens_estimate": sh_saved / 4,
+            "saved_share": sh_share,
+            "handles_stored": sh_stored,
+            "handles_retrieved": sh_retrieved,
+            "miss_rate": miss_rate,
+            "by_family": by_family,
+            "by_day": shell_days,
+        },
+        "footnote": {
+            "source": "Footnote's lean search results, measured on each agent call (usage.lean_log)",
+            "calls": mcp_calls,
+            "before_bytes": mcp_before,
+            "after_bytes": mcp_after,
+            "saved_bytes": mcp_saved,
+            "saved_tokens_estimate": mcp_saved / 4,
+            "by_day": mcp_days,
+        },
+        "total_saved_bytes": total_saved,
+        "total_saved_tokens_estimate": total_saved / 4,
+    })
 }
 
 #[cfg(test)]
@@ -817,23 +928,27 @@ mod tests {
     }
 
     #[test]
-    fn rtk_savings_keep_the_window_and_sum_it() {
-        let v = json!({"daily": [
-            {"date": "2026-11-10", "commands": 5, "input_tokens": 100, "output_tokens": 90, "saved_tokens": 10},
-            {"date": "2026-11-16", "commands": 2, "input_tokens": 400, "output_tokens": 100, "saved_tokens": 300},
-            {"date": "2026-11-17", "commands": 1, "input_tokens": 100, "output_tokens": 0, "saved_tokens": 100}]});
-        let r = rtk_days(&v, "2026-11-16");
-        assert_eq!(r["by_day"].as_array().unwrap().len(), 2);
-        assert_eq!(
-            (
-                r["commands"].as_u64(),
-                r["saved_tokens"].as_u64(),
-                r["before_tokens"].as_u64()
-            ),
-            (Some(3), Some(400), Some(500))
-        );
-        assert_eq!(r["saved_share"], 0.8);
-        assert_eq!(rtk_days(&json!({}), "2026-11-16")["saved_tokens"], 0);
+    fn lean_savings_separate_shell_mcp_and_track_retrieve_misses() {
+        // 2026-11-10T00:00:00Z = 1794268800_000, 2026-11-16T12:00:00Z = 1794830400_000
+        let lines = vec![
+            json!({"t": 1_794_268_800_000_i64, "tool": "run", "family": "git", "before": 1000, "after": 200, "stored": true}).to_string(),
+            json!({"t": 1_794_830_400_000_i64, "tool": "run", "family": "cargo-test", "before": 4000, "after": 800, "stored": true}).to_string(),
+            json!({"t": 1_794_830_405_000_i64, "tool": "run", "family": "search", "before": 1000, "after": 800, "stored": true}).to_string(),
+            json!({"t": 1_794_830_410_000_i64, "tool": "output", "handle": "h-abc", "miss": true, "before": 0, "after": 120}).to_string(),
+            json!({"t": 1_794_830_420_000_i64, "tool": "footnote_recall", "before": 2000, "after": 1200}).to_string(),
+        ];
+        let r = lean_ledger_from_lines(&lines, "2026-11-16");
+        assert_eq!(r["shell"]["commands"], 2);
+        assert_eq!(r["shell"]["before_bytes"], 5000);
+        assert_eq!(r["shell"]["after_bytes"], 1600);
+        assert_eq!(r["shell"]["saved_bytes"], 3400);
+        assert_eq!(r["shell"]["handles_stored"], 2);
+        assert_eq!(r["shell"]["handles_retrieved"], 1);
+        assert_eq!(r["shell"]["miss_rate"], 0.5);
+        assert_eq!(r["footnote"]["calls"], 1);
+        assert_eq!(r["footnote"]["saved_bytes"], 800);
+        assert_eq!(r["total_saved_bytes"], 4200);
+        assert_eq!(r["total_saved_tokens_estimate"], 1050);
     }
 
     #[test]

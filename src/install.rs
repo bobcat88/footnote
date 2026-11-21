@@ -397,7 +397,6 @@ fn add_agy_hooks(path: &Path, command: &str, dry_run: bool) -> Result<&'static s
     })
 }
 
-#[cfg(feature = "memory")]
 /// Quote a path only when it must be: an unquoted command runs the same under bash (Claude Code), PowerShell (Grok) and cmd.
 fn shell_word(path: &Path, warnings: &mut Vec<String>) -> String {
     let p = portable(path);
@@ -409,6 +408,373 @@ fn shell_word(path: &Path, warnings: &mut Vec<String>) -> String {
     } else {
         p
     }
+}
+
+const LEAN_SERVER: &str = "footnote-lean";
+
+fn is_lean_hook(command: &str) -> bool {
+    command
+        .trim()
+        .strip_suffix(" hook lean")
+        .is_some_and(|exe| {
+            let exe = exe.trim_matches(['\'', '"']).replace('\\', "/");
+            matches!(exe.rsplit('/').next(), Some("footnote" | "footnote.exe"))
+        })
+}
+
+fn is_rtk_hook(command: &str) -> bool {
+    let trimmed = command.trim();
+    let Some((first, rest)) = trimmed.split_once(char::is_whitespace) else {
+        return false;
+    };
+    let bin = first.trim_matches(['\'', '"']).replace('\\', "/");
+    let exe = bin.rsplit('/').next().unwrap_or("");
+    matches!(exe.to_ascii_lowercase().as_str(), "rtk" | "rtk.exe")
+        && rest.trim_start().starts_with("hook")
+}
+
+/// Add or update a Claude-format matcher hook entry (e.g. `PreToolUse` with `matcher: "Bash"`).
+fn add_matcher_hook(
+    path: &Path,
+    event: &str,
+    matcher: &str,
+    timeout: u64,
+    command: &str,
+    is_ours: fn(&str) -> bool,
+    dry_run: bool,
+) -> Result<&'static str> {
+    merge_json(path, dry_run, |root| {
+        let hooks = root
+            .entry("hooks".to_string())
+            .or_insert_with(|| json!({}))
+            .as_object_mut()
+            .with_context(|| format!("{}: hooks is not an object", path.display()))?;
+        let list = hooks
+            .entry(event.to_string())
+            .or_insert_with(|| json!([]))
+            .as_array_mut()
+            .with_context(|| format!("{}: hooks.{event} is not an array", path.display()))?;
+        let mut changed = false;
+        let mut found = false;
+        for group in list.iter_mut() {
+            for hook in group["hooks"].as_array_mut().into_iter().flatten() {
+                if hook["command"].as_str().is_some_and(is_ours) {
+                    found = true;
+                    if hook["command"] != command {
+                        hook["command"] = json!(command);
+                        changed = true;
+                    }
+                }
+            }
+        }
+        if !found {
+            list.push(json!({
+                "matcher": matcher,
+                "hooks": [{"type": "command", "command": command, "timeout": timeout}]
+            }));
+            changed = true;
+        }
+        Ok(changed)
+    })
+}
+
+fn remove_matching_hooks(
+    path: &Path,
+    predicate: fn(&str) -> bool,
+    dry_run: bool,
+) -> Result<&'static str> {
+    if !path.exists() {
+        return Ok("not present");
+    }
+    let status = merge_json(path, dry_run, |root| {
+        let mut changed = false;
+        if let Some(events) = root.get_mut("hooks").and_then(Value::as_object_mut) {
+            for list in events.values_mut().filter_map(Value::as_array_mut) {
+                for group in list.iter_mut() {
+                    if let Some(hooks) = group.get_mut("hooks").and_then(Value::as_array_mut) {
+                        let before = hooks.len();
+                        hooks.retain(|h| !h["command"].as_str().is_some_and(predicate));
+                        changed |= hooks.len() != before;
+                    }
+                }
+                list.retain(|g| g["hooks"].as_array().is_none_or(|h| !h.is_empty()));
+            }
+            events.retain(|_, list| list.as_array().is_none_or(|l| !l.is_empty()));
+        }
+        Ok(changed)
+    })?;
+    Ok(if status == "registered" {
+        "removed"
+    } else {
+        "not present"
+    })
+}
+
+fn remove_mcp_entry(path: &Path, server: &str, dry_run: bool) -> Result<&'static str> {
+    if !path.exists() {
+        return Ok("not present");
+    }
+    let status = merge_json(path, dry_run, |root| {
+        Ok(root
+            .get_mut("mcpServers")
+            .and_then(Value::as_object_mut)
+            .is_some_and(|s| s.remove(server).is_some()))
+    })?;
+    Ok(if status == "registered" {
+        "removed"
+    } else {
+        "not present"
+    })
+}
+
+fn remove_rtk_entries(home: &Path, dry_run: bool) -> Result<Vec<Value>> {
+    let mut removed = Vec::new();
+    let mut push =
+        |agent: &str, what: &str, path: &Path, status: Result<&'static str>| -> Result<()> {
+            removed.push(
+                json!({"agent": agent, "what": what, "path": portable(path), "status": status?}),
+            );
+            Ok(())
+        };
+    let claude_settings = home.join(".claude/settings.json");
+    push(
+        "claude-code + grok",
+        "rtk hook",
+        &claude_settings,
+        remove_matching_hooks(&claude_settings, is_rtk_hook, dry_run),
+    )?;
+    let claude_mcp = home.join(".claude.json");
+    push(
+        "claude-code + grok",
+        "rtk mcp server",
+        &claude_mcp,
+        remove_mcp_entry(&claude_mcp, "rtk", dry_run),
+    )?;
+    let codex_hooks = home.join(".codex/hooks.json");
+    push(
+        "codex",
+        "rtk hook",
+        &codex_hooks,
+        remove_matching_hooks(&codex_hooks, is_rtk_hook, dry_run),
+    )?;
+    let codex_toml = home.join(".codex/config.toml");
+    push(
+        "codex",
+        "rtk mcp server",
+        &codex_toml,
+        edit_text(&codex_toml, dry_run, |t| without_toml_table(t, "rtk")),
+    )?;
+    let gemini_settings = home.join(".gemini/settings.json");
+    push(
+        "gemini-cli",
+        "rtk hook",
+        &gemini_settings,
+        remove_matching_hooks(&gemini_settings, is_rtk_hook, dry_run),
+    )?;
+    push(
+        "gemini-cli",
+        "rtk mcp server",
+        &gemini_settings,
+        remove_mcp_entry(&gemini_settings, "rtk", dry_run),
+    )?;
+    let agy_hooks = home.join(".gemini/config/hooks.json");
+    if agy_hooks.exists() {
+        let st = merge_json(&agy_hooks, dry_run, |root| {
+            let mut changed = root.remove("rtk").is_some();
+            for val in root.values_mut() {
+                if let Some(obj) = val.as_object_mut() {
+                    for list in obj.values_mut().filter_map(Value::as_array_mut) {
+                        let before = list.len();
+                        list.retain(|h| !h["command"].as_str().is_some_and(is_rtk_hook));
+                        changed |= list.len() != before;
+                    }
+                }
+            }
+            Ok(changed)
+        })?;
+        push(
+            "antigravity",
+            "rtk hook",
+            &agy_hooks,
+            Ok(if st == "registered" {
+                "removed"
+            } else {
+                "not present"
+            }),
+        )?;
+    }
+    let agy_mcp = home.join(".gemini/config/mcp_config.json");
+    push(
+        "antigravity",
+        "rtk mcp server",
+        &agy_mcp,
+        remove_mcp_entry(&agy_mcp, "rtk", dry_run),
+    )?;
+    Ok(removed)
+}
+
+/// `footnote install --lean [--remove-rtk]`: install Footnote Lean PreToolUse hooks across detected agents (#351).
+pub fn lean(dry_run: bool, remove_rtk: bool) -> Result<Value> {
+    let home = home()?;
+    let exe = std::env::current_exe().context("locate this executable")?;
+    let mut warnings = Vec::new();
+    let command = format!("{} hook lean", shell_word(&exe, &mut warnings));
+    let mut report = Vec::new();
+    let mut add =
+        |agent: &str, what: &str, path: &Path, status: Result<&'static str>| -> Result<()> {
+            report.push(
+                json!({"agent": agent, "what": what, "path": portable(path), "status": status?}),
+            );
+            Ok(())
+        };
+
+    let claude = home.join(".claude");
+    if claude.exists() || home.join(".grok").exists() {
+        let hooks = claude.join("settings.json");
+        add(
+            "claude-code + grok",
+            "lean PreToolUse hook",
+            &hooks,
+            add_matcher_hook(
+                &hooks,
+                "PreToolUse",
+                "Bash",
+                5,
+                &command,
+                is_lean_hook,
+                dry_run,
+            ),
+        )?;
+    }
+    let codex = home.join(".codex");
+    if codex.exists() {
+        let hooks = codex.join("hooks.json");
+        add(
+            "codex",
+            "lean PreToolUse hook",
+            &hooks,
+            add_matcher_hook(
+                &hooks,
+                "PreToolUse",
+                "Bash",
+                5,
+                &command,
+                is_lean_hook,
+                dry_run,
+            ),
+        )?;
+    }
+    let gemini = home.join(".gemini");
+    if gemini.exists() {
+        let hooks = gemini.join("settings.json");
+        add(
+            "gemini-cli",
+            "lean PreToolUse hook",
+            &hooks,
+            add_matcher_hook(
+                &hooks,
+                "PreToolUse",
+                "Bash",
+                5,
+                &command,
+                is_lean_hook,
+                dry_run,
+            ),
+        )?;
+    }
+    if has_antigravity(&home) {
+        let hooks = home.join(".gemini/config/hooks.json");
+        let desired = json!({
+            "PreToolUse": [{"type": "command", "command": command, "timeout": 5}],
+        });
+        let st = merge_json(&hooks, dry_run, |root| {
+            if root.get(LEAN_SERVER) == Some(&desired) {
+                return Ok(false);
+            }
+            root.insert(LEAN_SERVER.to_string(), desired);
+            Ok(true)
+        });
+        add("antigravity", "lean PreToolUse hook", &hooks, st)?;
+    }
+
+    let rtk_removed = if remove_rtk {
+        remove_rtk_entries(&home, dry_run)?
+    } else {
+        vec![]
+    };
+
+    Ok(json!({
+        "dry_run": dry_run,
+        "hook": command,
+        "targets": report,
+        "rtk_removed": rtk_removed,
+        "warnings": warnings,
+        "note": "restart each agent to reload hooks; `footnote uninstall --lean` removes only Lean hooks without touching Memory",
+    }))
+}
+
+/// `footnote install --remove-rtk`: disconnect RTK hooks and MCP entries across detected agents (#351).
+pub fn remove_rtk(dry_run: bool) -> Result<Value> {
+    let home = home()?;
+    let removed = remove_rtk_entries(&home, dry_run)?;
+    Ok(json!({
+        "dry_run": dry_run,
+        "rtk_removed": removed,
+        "note": "restart each agent to unload removed hooks; backups were kept as *.footnote-backup",
+    }))
+}
+
+/// `footnote uninstall --lean`: remove Footnote Lean PreToolUse hooks without touching Memory hooks or data (#351).
+pub fn uninstall_lean(dry_run: bool) -> Result<Value> {
+    let home = home()?;
+    let mut report = Vec::new();
+    let mut add =
+        |agent: &str, what: &str, path: &Path, status: Result<&'static str>| -> Result<()> {
+            report.push(
+                json!({"agent": agent, "what": what, "path": portable(path), "status": status?}),
+            );
+            Ok(())
+        };
+    let claude = home.join(".claude/settings.json");
+    add(
+        "claude-code + grok",
+        "lean PreToolUse hook",
+        &claude,
+        remove_matching_hooks(&claude, is_lean_hook, dry_run),
+    )?;
+    let codex = home.join(".codex/hooks.json");
+    add(
+        "codex",
+        "lean PreToolUse hook",
+        &codex,
+        remove_matching_hooks(&codex, is_lean_hook, dry_run),
+    )?;
+    let gemini = home.join(".gemini/settings.json");
+    add(
+        "gemini-cli",
+        "lean PreToolUse hook",
+        &gemini,
+        remove_matching_hooks(&gemini, is_lean_hook, dry_run),
+    )?;
+    let agy_hooks = home.join(".gemini/config/hooks.json");
+    let agy_st = if !agy_hooks.exists() {
+        Ok("not present")
+    } else {
+        let s = merge_json(&agy_hooks, dry_run, |root| {
+            Ok(root.remove(LEAN_SERVER).is_some())
+        })?;
+        Ok(if s == "registered" {
+            "removed"
+        } else {
+            "not present"
+        })
+    };
+    add("antigravity", "lean PreToolUse hook", &agy_hooks, agy_st)?;
+    Ok(json!({
+        "dry_run": dry_run,
+        "targets": report,
+        "kept": "Footnote Memory hooks, memories, and usage/lean.jsonl ledger",
+    }))
 }
 
 /// `install --memory`: one agent memory database for every detected agent, its MCP server, the memory hook and a
@@ -599,7 +965,6 @@ pub fn memory(dry_run: bool) -> Result<Value> {
 }
 
 /// Edit a text file through `change` (None: nothing of ours in it); backup, atomic replace, and an empty result deletes the file.
-#[cfg(feature = "memory")]
 fn edit_text(
     path: &Path,
     dry_run: bool,
@@ -625,7 +990,6 @@ fn edit_text(
 }
 
 /// Drop a TOML table and its sub-tables (`[mcp_servers.<name>]`, `[mcp_servers.<name>.env]`).
-#[cfg(feature = "memory")]
 fn without_toml_table(text: &str, name: &str) -> Option<String> {
     let table = format!("[mcp_servers.{name}]");
     let sub = format!("[mcp_servers.{name}.");

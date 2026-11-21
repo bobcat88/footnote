@@ -157,7 +157,13 @@ const usage = {
   ],
   by_agent: [{ agent: "claude-code", requests: 4050 }, { agent: "codex", requests: 580 }],
   unpriced_models: [],
-  measured_savings: { source: "rtk gain --daily", footnote: { calls: 412, saved_bytes: 1_840_000, saved_tokens_estimate: 460_000 }, rtk: { saved_tokens: 419000, before_tokens: 2998000, after_tokens: 2579000, saved_share: 0.14, commands: 6400, by_day: [] } },
+  measured_savings: {
+    source: "Footnote Lean (usage/lean.jsonl)",
+    total_saved_bytes: 3_516_000,
+    total_saved_tokens_estimate: 879_000,
+    shell: { commands: 640, before_bytes: 2_998_000, after_bytes: 1_322_000, saved_bytes: 1_676_000, saved_tokens_estimate: 419_000, saved_share: 0.559, handles_stored: 512, handles_retrieved: 11, miss_rate: 0.021, by_family: [], by_day: [] },
+    footnote: { calls: 412, saved_bytes: 1_840_000, saved_tokens_estimate: 460_000 },
+  },
 };
 
 export const fixtures = {
@@ -196,7 +202,7 @@ export const fixtures = {
     projects: { projects: [] },
     activity: { activity_log: false, days: [], most_used: [] },
     usage: { ...usage, totals: Object.fromEntries(Object.keys(usage.totals).map((k) => [k, 0])), by_day: [], by_model: [], by_agent: [],
-      measured_savings: { source: "rtk", available: false, reason: "RTK is not installed (rtk not on PATH)" } },
+      measured_savings: { source: "Footnote Lean (usage/lean.jsonl)", total_saved_bytes: 0, total_saved_tokens_estimate: 0, shell: { commands: 0, before_bytes: 0, after_bytes: 0, saved_bytes: 0, saved_tokens_estimate: 0, saved_share: 0, handles_stored: 0, handles_retrieved: 0, miss_rate: 0, by_family: [], by_day: [] }, footnote: { calls: 0, saved_bytes: 0, saved_tokens_estimate: 0 } } },
     "models list": { ...models, models: models.models.map((m) => ({ ...m, installed: false, bytes: undefined })) },
   },
 };
