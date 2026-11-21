@@ -18,6 +18,8 @@ jobs:
       - name: Smoke test CLI and MCP
         run: |
           docker run --rm -v fn-state:/state footnote:local status
+          docker run --rm -v fn-state:/state -v "$PWD:/workspace" footnote:local code-index .
+          docker run --rm -v fn-state:/state -v "$PWD:/workspace" footnote:local grep state_dir
           printf '%s\n' \
             '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"smoke","version":"1"}}}' \
             '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}' \
