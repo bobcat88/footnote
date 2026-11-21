@@ -533,3 +533,77 @@ fn memory_db_cold_start_read_tools_return_empty_without_creating_db() {
         "cold-start read tools must never create memory.db"
     );
 }
+
+/// One `serve --mcp` session on `<state>/memory.db`, the configured memory database: the result of each tool call.
+#[cfg(feature = "memory")]
+fn memory_session(state: &Path, calls: &[(&str, Value)]) -> Vec<Value> {
+    let input: String = calls
+        .iter()
+        .enumerate()
+        .map(|(i, (name, arguments))| {
+            format!(
+                "{}\n",
+                json!({"jsonrpc":"2.0","id":i + 1,"method":"tools/call","params":{"name":name,"arguments":arguments}})
+            )
+        })
+        .collect();
+    let out = cmd(&state.join("memory.db"))
+        .env("FOOTNOTE_STATE_DIR", state)
+        .args(["serve", "--mcp"])
+        .write_stdin(input)
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let results: Vec<Value> = responses(&String::from_utf8(out).unwrap())
+        .into_iter()
+        .map(|r| r["result"].clone())
+        .collect();
+    assert_eq!(results.len(), calls.len());
+    results
+}
+
+/// Three memories: two for `alpha-app` (a fact tagged `perf` and a preference), one fact for `beta-app`.
+#[cfg(feature = "memory")]
+fn three_memories() -> (&'static str, Value) {
+    (
+        "footnote_remember",
+        json!({"memories": [
+            {"kind": "fact", "scope": "alpha-app", "text": "Connection pool size 64 increased tail latency", "observed_at": "2026-11-21", "tags": ["perf"]},
+            {"kind": "fact", "scope": "beta-app", "text": "Connection pool note for another project", "observed_at": "2026-11-21"},
+            {"kind": "preference", "scope": "alpha-app", "text": "Always run integration checks before merging", "observed_at": "2026-11-21"}
+        ]}),
+    )
+}
+
+#[cfg(feature = "memory")]
+#[test]
+fn memory_recall_project_filter_is_the_memory_scope() {
+    let t = tmp();
+    let state = t.path().join("state");
+    fs::create_dir(&state).unwrap();
+    let r = memory_session(
+        &state,
+        &[
+            three_memories(),
+            (
+                "footnote_recall",
+                json!({"query": "Connection pool", "project": "alpha-app", "mode": "lexical"}),
+            ),
+            (
+                "footnote_recall",
+                json!({"query": "Connection pool", "project": "alpha-app", "tags": ["perf"], "mode": "lexical"}),
+            ),
+        ],
+    );
+    for (i, x) in r.iter().enumerate() {
+        assert_eq!(x["isError"], json!(false), "call {}: {x}", i + 1);
+    }
+    let scoped: Value = serde_json::from_str(&text(&r[1])).unwrap();
+    let hits = scoped["results"].as_array().unwrap();
+    assert_eq!(hits.len(), 1, "only the alpha-app memory: {scoped}");
+    assert!(hits[0]["text"].as_str().unwrap().contains("tail latency"));
+    let tagged: Value = serde_json::from_str(&text(&r[2])).unwrap();
+    assert_eq!(tagged["results"].as_array().unwrap().len(), 1, "{tagged}");
+}

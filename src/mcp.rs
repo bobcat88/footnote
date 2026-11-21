@@ -713,6 +713,20 @@ fn is_configured_memory_db(db: &Path) -> bool {
     }
 }
 
+/// Whether an open database is an agent memory store (already holds memories, or is an empty configured memory DB).
+fn is_memory_store(db: &Path, c: &Connection) -> Result<bool> {
+    #[cfg(feature = "memory")]
+    {
+        Ok(crate::memory::is_memory_db(c)?
+            || (is_configured_memory_db(db) && !crate::memory::has_files(c)?))
+    }
+    #[cfg(not(feature = "memory"))]
+    {
+        let _ = (db, c);
+        Ok(false)
+    }
+}
+
 /// Read-only connection. Read tools never create a database.
 fn read_db(db: &Path) -> Result<Connection> {
     if !db.exists() {
@@ -807,13 +821,25 @@ fn recall(db: &Path, args: &Value) -> Result<Value> {
     let c = read_db(db)?;
     #[allow(unused_mut)]
     let mut filters = filters;
+    let is_mem = is_memory_store(db, &c)?;
+    // On a memory database, `project` is the memory's scope (its own memories plus the global ones), with or without tags.
     #[cfg(feature = "memory")]
     if !args["tags"].is_null() {
-        if !crate::memory::is_memory_db(&c)? {
+        if !is_mem {
             bail!("`tags` filters agent memories; this database is a document corpus");
         }
-        filters.only = Some(crate::memory::candidates(&c, None, &tags_arg(args)?)?);
+        let scope = filters.project.take();
+        filters.only = Some(crate::memory::candidates(
+            &c,
+            scope.as_deref(),
+            &tags_arg(args)?,
+        )?);
+    } else if is_mem && filters.project.is_some() {
+        let scope = filters.project.take();
+        filters.only = Some(crate::memory::candidates(&c, scope.as_deref(), &[])?);
     }
+    #[cfg(not(feature = "memory"))]
+    let _ = is_mem;
     let given = if args["model"].is_null() {
         vec![]
     } else {
