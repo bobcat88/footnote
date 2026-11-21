@@ -479,3 +479,57 @@ fn serve_without_the_mcp_flag_fails_with_a_clear_error() {
     let stderr = String::from_utf8(out).unwrap();
     assert!(stderr.contains("--mcp"), "stderr: {stderr}");
 }
+
+#[cfg(feature = "memory")]
+#[test]
+fn memory_db_cold_start_read_tools_return_empty_without_creating_db() {
+    let t = tmp();
+    let state = t.path().join("state");
+    fs::create_dir(&state).unwrap();
+    let db = state.join("memory.db");
+
+    let reqs = [
+        json!({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"footnote_info","arguments":{"op":"health"}}}),
+        json!({"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"footnote_info","arguments":{"op":"stats"}}}),
+        json!({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"footnote_info","arguments":{"op":"export"}}}),
+        json!({"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"footnote_recall","arguments":{"query":"anything","project":"demo"}}}),
+    ];
+    let input: String = reqs.iter().map(|r| format!("{r}\n")).collect();
+    let out = cmd(&db)
+        .env("FOOTNOTE_STATE_DIR", &state)
+        .args(["serve", "--mcp"])
+        .write_stdin(input)
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let replies: Vec<Value> = String::from_utf8(out)
+        .unwrap()
+        .lines()
+        .map(|l| serde_json::from_str(l).unwrap())
+        .collect();
+    assert_eq!(replies.len(), 4);
+    for (i, r) in replies.iter().enumerate() {
+        assert_eq!(
+            r["result"]["isError"],
+            json!(false),
+            "cold-start call {} returned error: {r}",
+            i + 1
+        );
+    }
+    let health: Value =
+        serde_json::from_str(replies[0]["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+    assert_eq!(health["chunks"], 0);
+    assert_eq!(health["semantic_state"], "empty");
+    assert_eq!(health["database_exists"], false);
+
+    let recall: Value =
+        serde_json::from_str(replies[3]["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+    assert_eq!(recall["results"], json!([]));
+
+    assert!(
+        !db.exists(),
+        "cold-start read tools must never create memory.db"
+    );
+}
