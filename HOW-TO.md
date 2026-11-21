@@ -457,6 +457,16 @@ Use the **absolute path to your `docker` executable** so GUI MCP hosts (Cursor, 
 - **Windows (`pwsh`):** `(Get-Command docker).Source -replace '\\', '/'`
 - **Linux (`bash`):** `command -v docker`
 
+Every agent gets the same command: `docker exec -i footnote footnote --db /state/memory.db mcp`. It is not a one-shot container: the process lives as long as the agent's session and talks to the running daemon, whose models stay loaded (`docker run --rm -i … mcp`, in Section 2, is the one-shot form that starts a container and loads the models again for every session). Replace `docker` with its absolute path for GUI hosts, and `footnote` (the container) with `FOOTNOTE_CONTAINER_NAME` for a team stack.
+
+| Agent | Register it once (user scope) |
+|---|---|
+| Claude Code | `claude mcp add footnote-memory --scope user -- docker exec -i footnote footnote --db /state/memory.db mcp` |
+| Codex | `codex mcp add footnote-memory -- docker exec -i footnote footnote --db /state/memory.db mcp` |
+| Gemini CLI | `mcpServers` entry below in `~/.gemini/settings.json` |
+| Antigravity | `mcpServers` entry below in `~/.gemini/config/mcp_config.json` |
+| Cursor, Windsurf, Cline and other `mcpServers` hosts | `mcpServers` entry below in the host's MCP settings file |
+
 ```json
 {
   "mcpServers": {
@@ -467,6 +477,8 @@ Use the **absolute path to your `docker` executable** so GUI MCP hosts (Cursor, 
   }
 }
 ```
+
+Check a registration with `claude mcp get footnote-memory` (it connects and reports `✔ Connected`) or `codex mcp get footnote-memory`. Remove it with `claude mcp remove footnote-memory --scope user` or `codex mcp remove footnote-memory`.
 
 ### Host-to-Container Path Mapping (`FOOTNOTE_PATH_MAP`)
 
