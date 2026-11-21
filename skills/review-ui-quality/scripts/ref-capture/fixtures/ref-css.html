@@ -1,0 +1,11 @@
+<!doctype html><meta charset=utf-8><title>css-only fixture</title><meta name=description content="static fixture">
+<style>
+body{margin:0;background:#101418;color:#e8e6e1;font:400 18px/1.5 Georgia,serif}
+main{max-width:1000px;margin:0 auto;padding:64px 0}
+h1{font:700 64px/1.05 Georgia,serif;transition:transform .6s cubic-bezier(.22,1,.36,1)}
+a{color:#ffb86b;transition:color .3s cubic-bezier(.4,0,.2,1)}
+.card{border-radius:14px;background:#1b222a;box-shadow:0 8px 24px rgba(0,0,0,.4);padding:24px;animation:rise .4s both}
+@keyframes rise{from{opacity:0}to{opacity:1}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important}}
+</style>
+<main><h1>Plain CSS motion</h1><p>Body copy with a <a href="#">link</a>.</p><div class=card>A card with a radius and a shadow.</div></main>

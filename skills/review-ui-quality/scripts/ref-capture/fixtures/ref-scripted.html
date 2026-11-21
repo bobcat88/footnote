@@ -1,0 +1,11 @@
+<!doctype html><meta charset=utf-8><title>scripted webgl fixture</title>
+<style>body{margin:0;background:#fff;color:#111;font:16px system-ui}canvas{display:block;width:800px;height:600px}</style>
+<canvas id=c width=800 height=600></canvas><h1>Scripted and WebGL</h1>
+<script>
+window.gsap = {}; window.ScrollTrigger = {};
+const gl = document.getElementById('c').getContext('webgl2') || document.getElementById('c').getContext('webgl');
+(function loop(){ requestAnimationFrame(loop); })();
+const frag = 'precision highp float; void main(){ gl_FragColor = vec4(1.0); }';
+const t = () => gsap.timeline();
+if (document.startViewTransition) document.startViewTransition(() => {});
+</script>

@@ -1,0 +1,10 @@
+<!doctype html><meta charset=utf-8><style>
+:root{--bg:#fff;--fg:#1a1a1a;--brand:#4f46e5;--r:12px}
+@font-face{font-family:X;src:local(Arial);font-display:swap}
+body{margin:0;padding:24px;font:16px/24px system-ui;background:var(--bg);color:var(--fg);min-height:100dvh}
+button{height:48px;padding:0 24px;border:0;border-radius:var(--r);background:var(--brand);color:#fff;font:inherit;cursor:pointer;transition:transform 150ms ease-out,opacity 150ms ease-out}
+button:hover{transform:translateY(-1px)}button:active{transform:translateY(0)}button:focus-visible{outline:3px solid var(--fg);outline-offset:2px}
+@keyframes rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+h1{animation:rise 300ms ease-out both}
+@media (prefers-reduced-motion:reduce){h1{animation:none}}
+</style><h1>Title</h1><img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" width=40 height=40 alt=""><button>Go</button>

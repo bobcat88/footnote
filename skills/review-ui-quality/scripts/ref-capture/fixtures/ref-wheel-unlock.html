@@ -1,0 +1,4 @@
+<!doctype html><meta charset=utf-8><title>wheel unlock fixture</title>
+<style>body{margin:0;font:16px system-ui}html,body{height:1080px;overflow:hidden}.tall{height:5000px;background:linear-gradient(#fff,#ccc)}</style>
+<h1>Reports one screen until the first wheel</h1>
+<script>let done = false; addEventListener('wheel', () => { if (done) return; done = true; setTimeout(() => { document.documentElement.style.cssText = document.body.style.cssText = 'height:auto;overflow:visible'; document.body.insertAdjacentHTML('beforeend', '<div class=tall>Unlocked</div>'); }, 300); }, { passive: true });</script>

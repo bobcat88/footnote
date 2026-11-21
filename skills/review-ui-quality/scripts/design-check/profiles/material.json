@@ -1,0 +1,99 @@
+{
+  "name": "material",
+  "input": "touch",
+  "minTarget": 48,
+  "grid": 4,
+  "extras": [
+    "css",
+    "material"
+  ],
+  "tokens": {
+    "researched": "2026-11-20",
+    "note": "Values read from implementing code (androidx Compose token files, material-web v0.192 SCSS, developer.android.com), not from m3.material.io (JS-rendered). Shape, motion and state values were re-checked against the raw material-web files on 2026-11-20. 1 dp = 1 CSS px.",
+    "touchTargetPx": 48,
+    "shapeRadiiPx": [
+      0,
+      4,
+      8,
+      12,
+      16,
+      20,
+      28,
+      32,
+      48
+    ],
+    "shapeFull": "radius at least half the element height (9999px in web tokens)",
+    "typeSizesPx": [
+      11,
+      12,
+      14,
+      16,
+      22,
+      24,
+      28,
+      32,
+      36,
+      45,
+      57
+    ],
+    "durationsMs": [
+      50,
+      100,
+      150,
+      200,
+      250,
+      300,
+      350,
+      400,
+      450,
+      500,
+      550,
+      600,
+      700,
+      800,
+      900,
+      1000
+    ],
+    "easings": [
+      "cubic-bezier(0.2, 0, 0, 1)",
+      "cubic-bezier(0.3, 0, 0.8, 0.15)",
+      "cubic-bezier(0.05, 0.7, 0.1, 1)",
+      "cubic-bezier(0.3, 0, 1, 1)",
+      "cubic-bezier(0, 0, 0, 1)",
+      "cubic-bezier(0.4, 0, 0.2, 1)",
+      "cubic-bezier(0.4, 0, 1, 1)",
+      "cubic-bezier(0, 0, 0.2, 1)",
+      "cubic-bezier(0, 0, 1, 1)",
+      "linear"
+    ],
+    "stateLayerOpacity": {
+      "hover": 0.08,
+      "focus": [
+        0.1,
+        0.12
+      ],
+      "pressed": [
+        0.1,
+        0.12
+      ],
+      "dragged": 0.16
+    },
+    "disabled": {
+      "contentOpacity": 0.38,
+      "containerOpacity": 0.12
+    },
+    "contrast": {
+      "text": 4.5,
+      "largeText": 3
+    },
+    "unverified": [
+      "layout margins and gutters",
+      "4dp vs 8dp rule",
+      "spacing between touch targets",
+      "top app bar heights",
+      "per-pair contrast numbers",
+      "tonal palette tones"
+    ],
+    "webStatus": "@material/web is in maintenance mode since 2024-06-10 and has no Expressive support; Compose Material3 1.5.0 (Expressive) went stable 2026-11-18."
+  }
+}

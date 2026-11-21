@@ -1,0 +1,11 @@
+{
+  "name": "apple",
+  "input": "touch",
+  "minTarget": 44,
+  "grid": 4,
+  "extras": [
+    "css",
+    "apple"
+  ],
+  "note": "44 pt is the iOS touch target; pass --input pointer for macOS/desktop UI"
+}

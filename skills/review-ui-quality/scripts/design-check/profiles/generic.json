@@ -1,0 +1,9 @@
+{
+  "name": "generic",
+  "input": "pointer",
+  "minTarget": 44,
+  "grid": 4,
+  "extras": [
+    "css"
+  ]
+}

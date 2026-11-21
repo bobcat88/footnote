@@ -1,0 +1,33 @@
+{
+  "project": "Quorra",
+  "kind": "page",
+  "subtitle": "Example: three directions for Quorra, a fictional evaluation platform for voice agents. Pick one, tune it, lock it.",
+  "preview": {
+    "nav": ["Simulate", "Score", "Monitor", "Pricing", "Docs"],
+    "cta": "Start testing",
+    "cta2": "Book a demo",
+    "headline": "Hear every call before your customers do",
+    "lede": "Quorra puts realistic callers on the line with your voice agent and scores every turn against your rubric.",
+    "badge": "84 / 100, below release gate",
+    "caption": "refund-flow v3.2, last 12 runs",
+    "series": [71, 74, 72, 78, 80, 77, 83, 85, 82, 88, 86, 84],
+    "features": [["Simulate", "Thousands of impatient, noisy, accented callers before launch."], ["Score", "Every turn checked against your own rubric, with the failing turn explained."], ["Monitor", "Production calls scored live, with alerts when a release drifts."]]
+  },
+  "directions": [
+    {
+      "id": "D1", "name": "Night signal", "line": "Near-black, thin type, a pointer-reactive particle lens.", "refs": ["a developer-platform site"],
+      "image": "directions/D1/shot-top.png",
+      "tokens": { "theme": "dark", "accent": "#7fc8ff", "warmth": -0.6, "tint": 2.5, "radius": 7, "density": 1, "scale": 1.333, "display": "Hanken Grotesk", "dweight": 200, "body": "Hanken Grotesk", "motion": "lively" }
+    },
+    {
+      "id": "D2", "name": "Waveform", "line": "Dark, tight tracking, the hero visual shaped like speech.", "refs": ["a developer-platform site"],
+      "image": "directions/D2/shot-top.png",
+      "tokens": { "theme": "dark", "accent": "#5b9bff", "warmth": -0.5, "tint": 2, "radius": 4, "density": 1, "scale": 1.333, "display": "Geist", "dweight": 400, "body": "Geist", "motion": "lively" }
+    },
+    {
+      "id": "D3", "name": "Product first", "line": "Light and warm, the hero is a scored call with the failure explained.", "refs": ["category standard"],
+      "image": "directions/D3/shot-top.png",
+      "tokens": { "theme": "light", "accent": "#e8501c", "warmth": 0.5, "tint": 1.5, "radius": 12, "density": 1, "scale": 1.25, "display": "Geist", "dweight": 600, "body": "Geist", "motion": "subtle" }
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+<!doctype html><meta charset=utf-8><title>signatures in text only</title>
+<style>body{margin:0;font:16px system-ui}main{max-width:900px;margin:0 auto;padding:48px 0}</style>
+<main><h1>Library names in a bundle, nothing running</h1></main>
+<script>
+// A framework runtime carries these strings without using them: no canvas, no WebGL context, no View Transition call.
+function neverCalled(d) { return d.startViewTransition; }
+const shaderText = 'precision highp float; void main(){ gl_FragColor = vec4(1.0); }';
+</script>

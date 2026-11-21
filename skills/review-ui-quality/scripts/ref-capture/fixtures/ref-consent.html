@@ -1,0 +1,4 @@
+<!doctype html><meta charset=utf-8><title>consent gate fixture</title>
+<style>body{margin:0;font:16px system-ui}html,body{height:1080px;overflow:hidden}.banner{position:fixed;left:24px;bottom:24px;background:#000;color:#fff;padding:16px}.tall{height:4000px}</style>
+<h1>Locked until consent</h1><div class=banner>We use cookies. <button id=c>Confirm</button></div>
+<script>document.getElementById('c').onclick = () => { document.documentElement.style.cssText = document.body.style.cssText = 'height:auto;overflow:visible'; document.body.insertAdjacentHTML('beforeend', '<div class=tall>Now the page scrolls</div>'); document.querySelector('.banner').remove(); };</script>

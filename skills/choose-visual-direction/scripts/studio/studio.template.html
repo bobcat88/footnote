@@ -1,0 +1,332 @@
+<title>/*TITLE*/Design Studio</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a design studio bench. Directions on the left, the live preview in the middle, the controls on the right. */
+:root {
+  --bg: #eceef2; --paper: #ffffff; --ink: #15171c; --muted: #5b6170; --line: #d5d9e1;
+  --pencil: #2552c9; --pencil-soft: #dde6fb; --ok: #1d7347; --warn: #94560a;
+  --font-ui: "Figtree", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "Cascadia Code", monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --bg: #121419; --paper: #1a1d24; --ink: #e8eaf0; --muted: #9ba2b0; --line: #2b303a; --pencil: #86a6ff; --pencil-soft: #1e2a4a; --ok: #62c693; --warn: #e3a94f; color-scheme: dark; }
+}
+:root[data-theme="dark"] { --bg: #121419; --paper: #1a1d24; --ink: #e8eaf0; --muted: #9ba2b0; --line: #2b303a; --pencil: #86a6ff; --pencil-soft: #1e2a4a; --ok: #62c693; --warn: #e3a94f; color-scheme: dark; }
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 400 14px/1.5 var(--font-ui); }
+.wrap { max-width: 1600px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 24px 48px; display: grid; gap: 20px; }
+header.top { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px 24px; align-items: end; }
+h1 { font: 700 28px/1.1 var(--font-ui); margin: 0 0 4px; letter-spacing: -0.01em; }
+.sub { margin: 0; color: var(--muted); max-width: 70ch; }
+.status { font: 500 12px var(--font-mono); color: var(--muted); }
+.status.ok { color: var(--ok); } .status.err { color: var(--warn); }
+.bench { display: grid; grid-template-columns: 260px minmax(0, 1fr) 300px; gap: 20px; align-items: start; }
+.panel { background: var(--paper); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: grid; gap: 14px; min-width: 0; }
+.panel h2 { font: 600 13px var(--font-ui); margin: 0; color: var(--muted); }
+.dir { display: grid; gap: 6px; text-align: left; padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: transparent; color: var(--ink); cursor: pointer; font: inherit; }
+.dir[aria-pressed="true"] { border-color: var(--pencil); background: var(--pencil-soft); }
+.dir:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--pencil); outline-offset: 2px; }
+.dir img { width: 100%; max-width: 100%; aspect-ratio: 16 / 10; object-fit: cover; object-position: top; border-radius: 5px; border: 1px solid var(--line); display: block; }
+.dir strong { font-size: 14px; }
+.dir span { color: var(--muted); font-size: 12px; }
+.linkish { font: 500 12px var(--font-ui); color: var(--pencil); background: none; border: 0; padding: 0; cursor: pointer; text-align: left; }
+.ctl { display: grid; gap: 6px; }
+.ctl label, .ctl .lab { font-weight: 600; font-size: 13px; display: flex; justify-content: space-between; gap: 8px; }
+.ctl output { font: 500 12px var(--font-mono); color: var(--muted); }
+input[type="range"] { width: 100%; accent-color: var(--pencil); }
+select, textarea { width: 100%; font: 400 14px var(--font-ui); color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+textarea { min-height: 80px; resize: vertical; }
+.seg { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.seg button { font: 500 13px var(--font-ui); padding: 7px 4px; border: 0; border-left: 1px solid var(--line); background: transparent; color: var(--ink); cursor: pointer; }
+.seg button:first-child { border-left: 0; }
+.seg button[aria-pressed="true"] { background: var(--pencil-soft); color: var(--pencil); }
+.colorrow { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+input[type="color"] { width: 44px; height: 32px; padding: 0; border: 1px solid var(--line); border-radius: 6px; background: none; }
+.sw { width: 24px; height: 24px; border-radius: 50%; border: 1px solid var(--line); cursor: pointer; padding: 0; }
+.checks { display: grid; gap: 4px; font: 400 12px var(--font-mono); }
+.checks .pass { color: var(--ok); } .checks .fail { color: var(--warn); }
+.lock { font: 600 14px var(--font-ui); padding: 10px 14px; border-radius: 8px; border: 1px solid var(--pencil); background: var(--pencil); color: var(--paper); cursor: pointer; }
+.lock[data-locked="true"] { background: var(--ok); border-color: var(--ok); }
+.ghost { font: 500 13px var(--font-ui); padding: 7px 12px; border-radius: 8px; border: 1px solid var(--line); background: transparent; color: var(--ink); cursor: pointer; }
+.stage { border-radius: 10px; border: 1px solid var(--line); overflow: hidden; min-width: 0; }
+.stage-bar { display: flex; justify-content: space-between; gap: 8px; align-items: center; padding: 8px 12px; background: var(--paper); border-bottom: 1px solid var(--line); font: 500 12px var(--font-mono); color: var(--muted); flex-wrap: wrap; }
+dialog { border: 0; padding: 0; background: transparent; max-width: min(96vw, 1700px); }
+dialog img { width: 100%; height: auto; border-radius: 8px; display: block; }
+dialog::backdrop { background: rgb(0 0 0 / .75); }
+
+/* ---- The preview: everything below reads only the --p-* tokens the controls write. ---- */
+.pv { --p-bg: #fff; --p-surface: #fff; --p-text: #111; --p-muted: #555; --p-line: #ddd; --p-accent: #2552c9; --p-ink: #fff;
+  --p-r: 10px; --p-s: 1; --p-dur: 200ms; --p-display: system-ui; --p-body: system-ui; --p-dw: 600;
+  --p-h1: 48px; --p-h2: 32px; --p-h3: 21px; --p-small: 13px;
+  background: var(--p-bg); color: var(--p-text); font-family: var(--p-body); font-size: 16px; line-height: 1.55; min-height: 560px; }
+.pv * { transition: background-color var(--p-dur) ease-out, color var(--p-dur) ease-out, border-color var(--p-dur) ease-out, transform var(--p-dur) ease-out, box-shadow var(--p-dur) ease-out; }
+.pv .disp { font-family: var(--p-display); font-weight: var(--p-dw); letter-spacing: -0.02em; line-height: 1.08; margin: 0; text-wrap: balance; }
+.pv .btn { font: 600 calc(14px * var(--p-s)) var(--p-body); padding: calc(10px * var(--p-s)) calc(18px * var(--p-s)); border-radius: var(--p-r); border: 1px solid var(--p-accent); background: var(--p-accent); color: var(--p-ink); cursor: pointer; }
+.pv .btn.alt { background: transparent; color: var(--p-text); border-color: var(--p-line); }
+.pv .btn:hover { transform: translateY(-1px); }
+.pv .card { background: var(--p-surface); border: 1px solid var(--p-line); border-radius: var(--p-r); padding: calc(16px * var(--p-s)); min-width: 0; }
+.pv .pill { display: inline-block; font-size: var(--p-small); padding: 2px 8px; border-radius: 999px; border: 1px solid var(--p-line); color: var(--p-muted); }
+.pv .pill.good { border-color: color-mix(in srgb, var(--p-accent) 50%, var(--p-line)); color: var(--p-accent); }
+.pv .muted { color: var(--p-muted); }
+.pv input { font: 400 calc(14px * var(--p-s)) var(--p-body); padding: calc(9px * var(--p-s)) 12px; border-radius: var(--p-r); border: 1px solid var(--p-line); background: var(--p-bg); color: var(--p-text); width: 100%; }
+/* app kind */
+.pv.app { display: grid; grid-template-columns: calc(200px * var(--p-s)) minmax(0, 1fr); }
+.pv.app aside { border-right: 1px solid var(--p-line); padding: calc(20px * var(--p-s)) calc(14px * var(--p-s)); display: grid; gap: calc(4px * var(--p-s)); align-content: start; background: var(--p-surface); }
+.pv.app aside .brand { font: var(--p-dw) 17px var(--p-display); margin-bottom: calc(14px * var(--p-s)); }
+.pv.app aside a { color: var(--p-muted); text-decoration: none; padding: calc(7px * var(--p-s)) 10px; border-radius: var(--p-r); font-size: 14px; }
+.pv.app aside a.on { background: color-mix(in srgb, var(--p-accent) 14%, transparent); color: var(--p-text); }
+.pv.app main { padding: calc(24px * var(--p-s)) calc(28px * var(--p-s)); display: grid; gap: calc(20px * var(--p-s)); align-content: start; min-width: 0; }
+.pv .row { display: flex; justify-content: space-between; align-items: end; gap: 12px; flex-wrap: wrap; }
+.pv .kpis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: calc(12px * var(--p-s)); }
+.pv .kpi .v { font: var(--p-dw) var(--p-h2)/1.1 var(--p-display); font-variant-numeric: tabular-nums; }
+.pv .kpi .d { font-size: var(--p-small); }
+.pv .split { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: calc(12px * var(--p-s)); }
+.pv svg { display: block; width: 100%; height: auto; }
+.pv table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.pv td { padding: calc(9px * var(--p-s)) 4px; border-top: 1px solid var(--p-line); }
+/* page kind */
+.pv.page nav { display: flex; justify-content: space-between; align-items: center; padding: calc(18px * var(--p-s)) calc(32px * var(--p-s)); border-bottom: 1px solid var(--p-line); gap: 12px; }
+.pv.page nav .links { display: flex; gap: calc(22px * var(--p-s)); color: var(--p-muted); font-size: 14px; }
+.pv.page .hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: calc(32px * var(--p-s)); padding: calc(48px * var(--p-s)) calc(32px * var(--p-s)); align-items: center; }
+.pv.page .hero p { font-size: calc(18px * var(--p-s)); max-width: 44ch; }
+.pv.page .feats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: calc(14px * var(--p-s)); padding: 0 calc(32px * var(--p-s)) calc(40px * var(--p-s)); }
+/* motion */
+.pv .enter { animation: pv-in calc(var(--p-dur) * 2.4) cubic-bezier(.2,.8,.2,1) both; }
+.pv .enter:nth-child(2) { animation-delay: calc(var(--p-dur) * .4); } .pv .enter:nth-child(3) { animation-delay: calc(var(--p-dur) * .8); } .pv .enter:nth-child(4) { animation-delay: calc(var(--p-dur) * 1.2); }
+.pv.lively .card:hover { transform: translateY(-3px); box-shadow: 0 10px 24px -12px color-mix(in srgb, var(--p-text) 40%, transparent); }
+.pv.still *, .pv.still .enter { animation: none !important; transition: none !important; }
+@keyframes pv-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .pv .enter { animation: none; } .pv * { transition: none; } }
+@media (max-width: 1180px) { .bench { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 700px) { .pv.app { grid-template-columns: minmax(0, 1fr); } .pv.app aside { display: none; } .pv .kpis, .pv .split, .pv.page .hero, .pv.page .feats { grid-template-columns: minmax(0, 1fr); } .pv.page nav .links { display: none; } }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1 id="title">Design Studio</h1>
+      <p class="sub" id="subtitle">Pick the direction closest to what you want, then tune it. The preview updates live. When it feels right, lock it and tell your agent to build.</p>
+    </div>
+    <span class="status" id="db-status">Connecting…</span>
+  </header>
+  <div class="bench">
+    <section class="panel" aria-labelledby="dirs-h"><h2 id="dirs-h">1. Directions</h2><div id="dirs" style="display:grid;gap:10px"></div></section>
+    <section class="stage" aria-label="Live preview">
+      <div class="stage-bar"><span id="stage-label">Preview</span><span><button type="button" class="ghost" id="replay">Replay motion</button></span></div>
+      <div id="pv" class="pv"></div>
+    </section>
+    <section class="panel" aria-labelledby="ctl-h">
+      <h2 id="ctl-h">2. Tune</h2>
+      <div class="ctl"><span class="lab">Theme</span><div class="seg" id="theme"><button type="button" data-v="light">Light</button><button type="button" data-v="dark">Dark</button></div></div>
+      <div class="ctl"><span class="lab">Accent colour</span><div class="colorrow"><input type="color" id="accent" aria-label="Accent colour"><span id="swatches" class="colorrow"></span></div></div>
+      <div class="ctl"><label for="warmth">Neutral warmth <output id="o-warmth"></output></label><input type="range" id="warmth" min="-1" max="1" step="0.05"></div>
+      <div class="ctl"><label for="tint">Neutral tint <output id="o-tint"></output></label><input type="range" id="tint" min="0" max="6" step="0.5"></div>
+      <div class="ctl"><label for="radius">Corner radius <output id="o-radius"></output></label><input type="range" id="radius" min="0" max="28" step="1"></div>
+      <div class="ctl"><label for="density">Density <output id="o-density"></output></label><input type="range" id="density" min="0.8" max="1.3" step="0.05"></div>
+      <div class="ctl"><label for="scale">Type contrast <output id="o-scale"></output></label><input type="range" id="scale" min="1.125" max="1.5" step="0.005"></div>
+      <div class="ctl"><label for="display">Display font</label><select id="display"></select></div>
+      <div class="ctl"><label for="dweight">Display weight <output id="o-dweight"></output></label><input type="range" id="dweight" min="200" max="800" step="100"></div>
+      <div class="ctl"><label for="body">Body font</label><select id="body"></select></div>
+      <div class="ctl"><span class="lab">Motion</span><div class="seg" id="motion"><button type="button" data-v="none">None</button><button type="button" data-v="subtle">Subtle</button><button type="button" data-v="lively">Lively</button></div></div>
+      <div class="ctl"><span class="lab">Contrast (WCAG)</span><div class="checks" id="checks" aria-live="polite"></div></div>
+      <div class="ctl"><label for="notes">Notes for the build</label><textarea id="notes" placeholder="e.g. keep the hero animation from D2, but calmer; charts must be readable at a glance"></textarea></div>
+      <button type="button" class="lock" id="lock" data-locked="false">Lock this direction</button>
+      <span class="status" id="save-status" aria-live="polite"></span>
+    </section>
+  </div>
+</div>
+<dialog id="zoom" aria-label="Enlarged direction"></dialog>
+
+<script>
+const CONFIG = /*CONFIG*/{};
+// <lib> pure helpers; selfcheck.mjs extracts and tests this block
+const LIB = (() => {
+  const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
+  const toLin = (c) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+  const toGam = (c) => (c <= 0.0031308 ? 12.92 * c : 1.055 * c ** (1 / 2.4) - 0.055);
+  function hexToRgb(hex) { const h = hex.replace("#", ""); const n = parseInt(h.length === 3 ? h.split("").map((x) => x + x).join("") : h, 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
+  function rgbToHex([r, g, b]) { return "#" + [r, g, b].map((v) => Math.round(clamp(v, 0, 255)).toString(16).padStart(2, "0")).join(""); }
+  function oklchToHex(L, C, H) {
+    const h = (H * Math.PI) / 180, a = C * Math.cos(h), b = C * Math.sin(h);
+    const l_ = L + 0.3963377774 * a + 0.2158037573 * b, m_ = L - 0.1055613458 * a - 0.0638541728 * b, s_ = L - 0.0894841775 * a - 1.291485548 * b;
+    const l = l_ ** 3, m = m_ ** 3, s = s_ ** 3;
+    const r = 4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s;
+    const g = -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s;
+    const bb = -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s;
+    return rgbToHex([r, g, bb].map((c) => toGam(clamp(c, 0, 1)) * 255));
+  }
+  function luminance(hex) { const [r, g, b] = hexToRgb(hex).map((v) => toLin(v / 255)); return 0.2126 * r + 0.7152 * g + 0.0722 * b; }
+  function contrast(a, b) { const x = luminance(a), y = luminance(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); }
+  // warmth -1 (cool blue, hue 255) .. +1 (warm sand, hue 70); tint 0..6 sets neutral chroma in hundredths
+  function palette(t) {
+    const hue = 255 - ((t.warmth + 1) / 2) * 185, c = t.tint / 100;
+    const P = t.theme === "dark"
+      ? { bg: oklchToHex(0.17, c, hue), surface: oklchToHex(0.215, c, hue), text: oklchToHex(0.95, c * 0.5, hue), muted: oklchToHex(0.74, c, hue), line: oklchToHex(0.31, c, hue) }
+      : { bg: oklchToHex(0.975, c * 0.6, hue), surface: oklchToHex(0.995, c * 0.3, hue), text: oklchToHex(0.22, c, hue), muted: oklchToHex(0.47, c, hue), line: oklchToHex(0.89, c, hue) };
+    P.accent = t.accent;
+    P.ink = contrast(t.accent, "#ffffff") >= contrast(t.accent, "#101114") ? "#ffffff" : "#101114";
+    return P;
+  }
+  function typeScale(ratio, kind) { const cap = kind === "page" ? 88 : 56; return { small: Math.round(16 / ratio), h3: Math.round(16 * ratio ** 2), h2: Math.round(16 * ratio ** 3), h1: Math.min(cap, Math.round(16 * ratio ** (kind === "page" ? 5 : 4))) }; }
+  function spacing(density) { return [4, 8, 12, 16, 24, 32, 48, 64].map((v) => Math.round(v * density)); }
+  function checks(P) {
+    return [
+      ["Text on background", contrast(P.text, P.bg), 4.5],
+      ["Muted text on background", contrast(P.muted, P.bg), 4.5],
+      ["Text on surface", contrast(P.text, P.surface), 4.5],
+      ["Button text on accent", contrast(P.ink, P.accent), 4.5],
+      ["Accent on background (UI)", contrast(P.accent, P.bg), 3],
+    ].map(([name, ratio, need]) => ({ name, ratio: Math.round(ratio * 100) / 100, need, pass: ratio >= need }));
+  }
+  return { oklchToHex, contrast, palette, typeScale, spacing, checks, hexToRgb };
+})();
+// </lib>
+
+const FONTS = { "Hanken Grotesk": [100, 900], "Geist": [100, 900], "Instrument Sans": [400, 700], "Manrope": [200, 800], "Figtree": [300, 900], "Plus Jakarta Sans": [200, 800], "Sora": [100, 800], "Bricolage Grotesque": [200, 800], "DM Sans": [100, 900], "Outfit": [100, 900], "Montserrat": [100, 900], "Fraunces": [100, 900], "Newsreader": [200, 800], "Source Serif 4": [200, 900], "JetBrains Mono": [100, 800] };
+const DEFAULT = { theme: "light", accent: "#2552c9", warmth: 0, tint: 2, radius: 10, density: 1, scale: 1.25, display: "Hanken Grotesk", dweight: 600, body: "Figtree", motion: "subtle" };
+const dirs = CONFIG.directions || [];
+let current = { direction: dirs[0] ? dirs[0].id : null, tokens: Object.assign({}, DEFAULT, dirs[0] ? dirs[0].tokens : {}), notes: "", locked: false };
+let db = null, dirty = false, writing = false, again = false, timer = null;
+const $ = (id) => document.getElementById(id);
+const loaded = new Set();
+function loadFont(name) {
+  if (!FONTS[name] || loaded.has(name)) return; loaded.add(name);
+  const [a, b] = FONTS[name];
+  const l = document.createElement("link"); l.rel = "stylesheet";
+  l.href = "https://fonts.googleapis.com/css2?family=" + encodeURIComponent(name).replace(/%20/g, "+") + ":wght@" + a + ".." + b + "&display=swap";
+  document.head.append(l);
+}
+const stack = (name) => '"' + name + '", ' + (/(Fraunces|Newsreader|Serif)/.test(name) ? "Georgia, serif" : /Mono/.test(name) ? "ui-monospace, monospace" : "system-ui, sans-serif");
+const P0 = CONFIG.preview || {};
+const kind = CONFIG.kind === "page" ? "page" : "app";
+
+function previewHTML() {
+  const p = P0, name = CONFIG.project || "Product";
+  if (kind === "page") {
+    const feats = (p.features || [["Simulate", "Thousands of realistic callers before launch."], ["Score", "Every turn against your own rubric."], ["Monitor", "Live calls, with alerts on drift."]]).map(([t, d]) => '<div class="card enter"><div class="disp" style="font-size:var(--p-h3)">' + t + '</div><p class="muted" style="margin:.4em 0 0">' + d + "</p></div>").join("");
+    return '<nav><strong class="disp" style="font-size:20px">' + name + '</strong><span class="links">' + (p.nav || ["Product", "Pricing", "Docs", "Customers"]).map((x) => "<span>" + x + "</span>").join("") + '</span><button class="btn" type="button">' + (p.cta || "Get started") + "</button></nav>" +
+      '<div class="hero"><div class="enter"><h2 class="disp" style="font-size:var(--p-h1)">' + (p.headline || "Your headline here") + '</h2><p class="muted">' + (p.lede || "One sentence on what it does and for whom.") + '</p><div style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn" type="button">' + (p.cta || "Get started") + '</button><button class="btn alt" type="button">' + (p.cta2 || "Book a demo") + '</button></div></div><div class="card enter">' + chart() + '<div class="row" style="margin-top:8px"><span class="pill good">' + (p.badge || "84 / 100") + '</span><span class="muted" style="font-size:var(--p-small)">' + (p.caption || "Last 7 days") + "</span></div></div></div>" +
+      '<div class="feats">' + feats + "</div>";
+  }
+  const kpis = (p.kpis || [["Calls scored", "48,213", "+12%"], ["Pass rate", "91.4%", "−0.8 pts"], ["Median latency", "640 ms", "−40 ms"]]).map(([l, v, d]) => '<div class="card kpi enter"><div class="muted" style="font-size:var(--p-small)">' + l + '</div><div class="v">' + v + '</div><div class="d muted">' + d + "</div></div>").join("");
+  const rows = (p.rows || [["refund-flow v3.2", "Today 14:02", "Failed"], ["booking v1.9", "Today 13:40", "Passed"], ["triage v0.7", "Yesterday", "Passed"], ["billing v2.0", "Yesterday", "Review"]]).map(([a, b, c]) => "<tr><td>" + a + '</td><td class="muted">' + b + '</td><td><span class="pill' + (/pass|ok|done|live/i.test(c) ? " good" : "") + '">' + c + "</span></td></tr>").join("");
+  return '<aside><div class="brand">' + name + "</div>" + (p.nav || ["Overview", "Runs", "Scorecards", "Monitors", "Settings"]).map((x, i) => '<a href="#" class="' + (i === 0 ? "on" : "") + '">' + x + "</a>").join("") + "</aside>" +
+    '<main><div class="row enter"><div><h2 class="disp" style="font-size:var(--p-h1)">' + (p.screenTitle || "Overview") + '</h2><div class="muted">' + (p.screenSub || "Last 7 days") + '</div></div><div style="display:flex;gap:8px"><button class="btn alt" type="button">' + (p.cta2 || "Export") + '</button><button class="btn" type="button">' + (p.cta || "New run") + "</button></div></div>" +
+    '<div class="kpis">' + kpis + '</div><div class="split"><div class="card enter"><div class="disp" style="font-size:var(--p-h3)">' + (p.chartTitle || "Pass rate") + "</div>" + chart() + '</div><div class="card enter"><div class="disp" style="font-size:var(--p-h3)">' + (p.tableTitle || "Recent runs") + '</div><table><tbody>' + rows + "</tbody></table></div></div>" +
+    '<div class="card enter"><label class="muted" style="font-size:var(--p-small)" for="pv-search">' + (p.inputLabel || "Search runs") + '</label><input id="pv-search" placeholder="' + (p.inputPlaceholder || "agent, version or call id") + '"></div></main>';
+}
+function chart() {
+  const pts = (P0.series || [62, 64, 61, 70, 73, 71, 78, 76, 82, 85, 83, 88]);
+  const w = 480, h = 150, max = Math.max(...pts) * 1.08, min = Math.min(...pts) * 0.92;
+  const xy = pts.map((v, i) => [Math.round((i / (pts.length - 1)) * (w - 8) + 4), Math.round(h - 8 - ((v - min) / (max - min)) * (h - 16))]);
+  const line = xy.map((p, i) => (i ? "L" : "M") + p.join(",")).join(" ");
+  return '<svg viewBox="0 0 ' + w + " " + h + '" role="img" aria-label="Trend, rising"><path d="' + line + " L" + (w - 4) + "," + (h - 4) + " L4," + (h - 4) + ' Z" fill="var(--p-accent)" opacity=".12"/><path d="' + line + '" fill="none" stroke="var(--p-accent)" stroke-width="2.5"/><circle cx="' + xy[xy.length - 1][0] + '" cy="' + xy[xy.length - 1][1] + '" r="4.5" fill="var(--p-accent)"/></svg>';
+}
+
+function apply() {
+  const t = current.tokens, P = LIB.palette(t), T = LIB.typeScale(t.scale, kind), pv = $("pv");
+  loadFont(t.display); loadFont(t.body);
+  const [lo, hi] = FONTS[t.display] || [100, 900];
+  t.dweight = Math.min(hi, Math.max(lo, t.dweight));
+  const vars = { "--p-bg": P.bg, "--p-surface": P.surface, "--p-text": P.text, "--p-muted": P.muted, "--p-line": P.line, "--p-accent": P.accent, "--p-ink": P.ink,
+    "--p-r": t.radius + "px", "--p-s": t.density, "--p-dur": ({ none: 0, subtle: 160, lively: 260 })[t.motion] + "ms", "--p-display": stack(t.display), "--p-body": stack(t.body), "--p-dw": t.dweight,
+    "--p-h1": T.h1 + "px", "--p-h2": T.h2 + "px", "--p-h3": T.h3 + "px", "--p-small": T.small + "px" };
+  for (const [k, v] of Object.entries(vars)) pv.style.setProperty(k, v);
+  pv.className = "pv " + kind + (t.motion === "lively" ? " lively" : "") + (t.motion === "none" ? " still" : "");
+  for (const id of ["warmth", "tint", "radius", "density", "scale", "dweight"]) { $(id).value = t[id]; }
+  $("o-warmth").textContent = t.warmth < -0.2 ? "cool" : t.warmth > 0.2 ? "warm" : "neutral";
+  $("o-tint").textContent = t.tint;
+  $("o-radius").textContent = t.radius + "px";
+  $("o-density").textContent = t.density < 0.95 ? "compact" : t.density > 1.1 ? "airy" : "comfortable";
+  $("o-scale").textContent = "×" + Number(t.scale).toFixed(3) + " (h1 " + T.h1 + "px)";
+  $("o-dweight").textContent = t.dweight;
+  $("accent").value = t.accent; $("display").value = t.display; $("body").value = t.body;
+  paintSeg("theme", t.theme); paintSeg("motion", t.motion);
+  $("checks").replaceChildren(...LIB.checks(P).map((c) => { const d = document.createElement("div"); d.className = c.pass ? "pass" : "fail"; d.textContent = (c.pass ? "✓ " : "✗ ") + c.name + "  " + c.ratio + ":1 (needs " + c.need + ")"; return d; }));
+  document.querySelectorAll(".dir").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.id === current.direction)));
+  const d = dirs.find((x) => x.id === current.direction);
+  $("stage-label").textContent = "Preview · based on " + (d ? d.id + " " + d.name : "defaults") + (current.locked ? " · locked" : "");
+  $("lock").dataset.locked = String(current.locked);
+  $("lock").textContent = current.locked ? (db ? "Locked. Tell your agent to build" : "Locked. Send choice.json to your agent") : "Lock this direction";
+  $("notes").value === current.notes || ($("notes").value = current.notes);
+}
+function paintSeg(id, v) { $(id).querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.v === v))); }
+function change(mut) { mut(current.tokens); current.locked = false; apply(); queue(); }
+function replay() { const pv = $("pv"); pv.querySelectorAll(".enter").forEach((e) => { e.classList.remove("enter"); void e.offsetWidth; e.classList.add("enter"); }); }
+
+function build() {
+  if (CONFIG.project) { $("title").textContent = CONFIG.project + " · Design Studio"; document.title = CONFIG.project + " Studio"; }
+  if (CONFIG.subtitle) $("subtitle").textContent = CONFIG.subtitle;
+  for (const n of Object.keys(FONTS)) { for (const id of ["display", "body"]) { const o = document.createElement("option"); o.value = n; o.textContent = n; $(id).append(o); } }
+  const zoom = $("zoom"); zoom.addEventListener("click", () => zoom.close());
+  for (const d of dirs) {
+    const b = document.createElement("button"); b.type = "button"; b.className = "dir"; b.dataset.id = d.id; b.setAttribute("aria-pressed", "false");
+    if (d.image) { const img = document.createElement("img"); img.src = d.image; img.alt = d.id + " " + d.name + " mock"; img.loading = "lazy"; b.append(img); }
+    const s = document.createElement("strong"); s.textContent = d.id + " · " + d.name;
+    const l = document.createElement("span"); l.textContent = d.line + (d.refs && d.refs.length ? " (from " + d.refs.join(", ") + ")" : "");
+    b.append(s, l);
+    b.addEventListener("click", () => { current.direction = d.id; current.tokens = Object.assign({}, DEFAULT, d.tokens); current.locked = false; apply(); replay(); queue(); });
+    const wrap = document.createElement("div"); wrap.style.display = "grid"; wrap.style.gap = "4px"; wrap.append(b);
+    if (d.image) {
+      const big = document.createElement("button"); big.type = "button"; big.className = "linkish"; big.textContent = "View " + d.id + " large";
+      big.addEventListener("click", () => { const zi = document.createElement("img"); zi.src = d.image; zi.alt = d.id + " " + d.name + " mock, enlarged"; zoom.replaceChildren(zi); zoom.showModal(); });
+      wrap.append(big);
+    }
+    $("dirs").append(wrap);
+    const sw = document.createElement("button"); sw.type = "button"; sw.className = "sw"; sw.style.background = d.tokens.accent; sw.title = d.id + " accent"; sw.setAttribute("aria-label", "Use " + d.id + " accent " + d.tokens.accent);
+    sw.addEventListener("click", () => change((t) => { t.accent = d.tokens.accent; })); $("swatches").append(sw);
+  }
+  $("pv").innerHTML = previewHTML();
+  $("accent").addEventListener("input", (e) => change((t) => { t.accent = e.target.value; }));
+  for (const id of ["warmth", "tint", "radius", "density", "scale", "dweight"]) $(id).addEventListener("input", (e) => change((t) => { t[id] = Number(e.target.value); }));
+  for (const id of ["display", "body"]) $(id).addEventListener("change", (e) => change((t) => { t[id] = e.target.value; }));
+  for (const id of ["theme", "motion"]) $(id).querySelectorAll("button").forEach((b) => b.addEventListener("click", () => { change((t) => { t[id] = b.dataset.v; }); if (id === "motion") replay(); }));
+  $("notes").addEventListener("input", (e) => { current.notes = e.target.value; current.locked = false; apply(); queue(); });
+  $("replay").addEventListener("click", replay);
+  $("lock").addEventListener("click", () => { current.locked = !current.locked; apply(); queue(true); });
+  apply();
+}
+
+function snapshot() {
+  const t = current.tokens, P = LIB.palette(t), T = LIB.typeScale(t.scale, kind);
+  return { direction: current.direction, locked: current.locked, notes: current.notes, tokens: t, palette: P, type: T, spacing: LIB.spacing(t.density), contrast: LIB.checks(P), kind, updatedAt: new Date().toISOString() };
+}
+function queue(now) {
+  dirty = true;
+  if (!db) { if (now && current.locked) download(); $("save-status").textContent = current.locked ? "Downloaded choice.json" : "Saved when you lock (downloads choice.json)"; $("save-status").className = "status"; return; }
+  $("save-status").textContent = "Editing…"; $("save-status").className = "status";
+  clearTimeout(timer); timer = setTimeout(save, now ? 0 : 900);
+}
+// Outside a host that gives the page a database, the lock downloads the choice instead.
+function download() {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(snapshot(), null, 2)], { type: "application/json" }));
+  a.download = "choice.json"; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+async function save() {
+  if (writing) { again = true; return; }
+  writing = true; $("save-status").textContent = "Saving…";
+  try { await db.doc("choice/current").set(snapshot()); if (!again) { dirty = false; $("save-status").textContent = current.locked ? "Locked and saved" : "Saved"; $("save-status").className = "status ok"; } }
+  catch (e) { $("save-status").textContent = e && e.code === "invalid_argument" ? "Not saved: this view can't write" : "Not saved, will retry on your next change"; $("save-status").className = "status err"; }
+  finally { writing = false; if (again) { again = false; save(); } }
+}
+
+build();
+(async () => {
+  const st = $("db-status");
+  for (let i = 0; i < 20 && !(window.claude && window.claude.use); i++) await new Promise((r) => setTimeout(r, 100));
+  try { db = window.claude && window.claude.use ? await window.claude.use("db") : null; } catch { db = null; }
+  if (!db) { st.textContent = "Local mode: locking downloads choice.json"; st.className = "status"; return; }
+  let settled = false;
+  const tm = setTimeout(() => { if (!settled) { st.textContent = "Saved choice can't be reached yet; changes still save"; st.className = "status err"; } }, 10000);
+  db.doc("choice/current").onSnapshot((snap) => {
+    if (snap.exists && !dirty && !writing && !document.querySelector(".bench").contains(document.activeElement)) {
+      const d = snap.data(); current = { direction: d.direction, tokens: Object.assign({}, DEFAULT, d.tokens || {}), notes: d.notes || "", locked: !!d.locked }; apply();
+    }
+    if (!snap.metadata.fromCache) { settled = true; clearTimeout(tm); st.textContent = "Choices save automatically"; st.className = "status ok"; }
+  }, () => { settled = true; clearTimeout(tm); st.textContent = "Saved choice couldn't load"; st.className = "status err"; });
+})();
+</script>
