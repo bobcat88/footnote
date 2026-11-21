@@ -204,6 +204,7 @@ export async function check(browser, target, { grid = 4, minTarget = 44, input =
   await page.waitForTimeout(300);
   const moving = await page.evaluate(() => document.getAnimations().filter((a) => { const t = a.effect.getComputedTiming(); return a.playState === 'running' && (t.iterations === Infinity || t.duration > 500); }).length);
   if (moving) findings.push({ id: 'C2-reduced-motion', severity: 'FAIL', source: 'WCAG 2.3.3', msg: `${moving} animations still run (infinite or over 500 ms) with prefers-reduced-motion` });
+  await page.emulateMedia({ reducedMotion: 'no-preference' }); // control transitions are judged at default motion; reduced motion rightly removes them
 
   findings.push(...await controls(page));
   if (extra) findings.push(...await extra(page));

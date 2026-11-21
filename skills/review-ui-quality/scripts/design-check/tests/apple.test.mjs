@@ -16,3 +16,6 @@ test('glass without a reduced-transparency override fails AP1', async () => {
 test('glass with an override passes AP1', async () => {
   assert.ok(!(await run('glass-good.html')).findings.some((f) => f.id === 'AP1-glass-fallback'));
 });
+test('one override rule with a selector list covers each glass selector', async () => {
+  assert.ok(!(await run('glass-good-list.html')).findings.some((f) => f.id === 'AP1-glass-fallback'));
+});

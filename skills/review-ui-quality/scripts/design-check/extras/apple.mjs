@@ -5,12 +5,14 @@
 export async function glassFallback(page) {
   const msgs = await page.evaluate(() => {
     const glass = new Set(), fixed = new Set(), unreadable = [];
+    // shortcut: splits on every comma, so :is(a, b) lists get split too; enough for plain selector lists
+    const sels = (t) => t.split(',').map((x) => x.trim()).filter(Boolean);
     const walk = (rules, inReduced) => { for (const r of rules) {
       if (r.media) walk(r.cssRules, inReduced || /prefers-reduced-transparency:\s*reduce/.test(r.media.mediaText));
       else if (r.style && r.selectorText) { // style rules also carry cssRules (CSS nesting), so test style first
         const bf = r.style.getPropertyValue('backdrop-filter') || r.style.getPropertyValue('-webkit-backdrop-filter');
-        if (bf && bf !== 'none') glass.add(r.selectorText);
-        if (inReduced && (bf === 'none' || r.style.background || r.style.backgroundColor)) fixed.add(r.selectorText);
+        if (bf && bf !== 'none') sels(r.selectorText).forEach((x) => glass.add(x));
+        if (inReduced && (bf === 'none' || r.style.background || r.style.backgroundColor)) sels(r.selectorText).forEach((x) => fixed.add(x));
       } } };
     for (const s of document.styleSheets) { try { walk(s.cssRules, false); } catch { unreadable.push(s.href); } }
     const inline = [...document.querySelectorAll('[style*="backdrop-filter"]')].length;
