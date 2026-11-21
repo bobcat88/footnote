@@ -1,0 +1,26 @@
+[package]
+name = "candle-encoder-bench"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+# Kept out of the Footnote workspace: a bench for #358, never shipped.
+[workspace]
+
+[features]
+default = ["onnx", "candle"]
+# Each engine alone, to measure what it adds to a binary.
+onnx = ["dep:footnote-search"]
+candle = ["dep:candle-core", "dep:candle-nn", "dep:candle-transformers", "dep:tokenizers"]
+
+[dependencies]
+footnote-search = { path = "../../../crates/search", optional = true }
+candle-core = { version = "=0.11.1", optional = true }
+candle-nn = { version = "=0.11.1", optional = true }
+candle-transformers = { version = "=0.11.1", optional = true }
+tokenizers = { version = "=0.23.2", default-features = false, features = ["fancy-regex"], optional = true }
+anyhow = "1"
+serde_json = "1"
+
+[profile.release]
+strip = true
