@@ -436,11 +436,20 @@ fn a_long_session_is_asked_once_for_a_handoff_that_leads_the_next_pack() {
         )
         .assert()
         .success();
-    let start: Value =
-        serde_json::from_str(&hook(state, event_in("h2", "SessionStart", ""))).unwrap();
-    let pack = start["hookSpecificOutput"]["additionalContext"]
-        .as_str()
-        .unwrap();
+    let pack_of = |session: &str, source: &str| -> String {
+        let mut start = event_in(session, "SessionStart", "");
+        start["source"] = json!(source);
+        let out = hook(state, start);
+        serde_json::from_str::<Value>(&out).map_or(String::new(), |v| {
+            v["hookSpecificOutput"]["additionalContext"]
+                .as_str()
+                .unwrap_or("")
+                .to_string()
+        })
+    };
+    // A compaction replays the handoff without consuming it: the same session may have just written it.
+    assert!(pack_of("h1", "compact").contains("Handoff: session handoff built"));
+    let pack = pack_of("h2", "clear");
     assert!(
         pack.lines()
             .nth(1)
@@ -448,6 +457,8 @@ fn a_long_session_is_asked_once_for_a_handoff_that_leads_the_next_pack() {
             .contains("Handoff: session handoff built"),
         "{pack}"
     );
+    // Delivered once, then retired so it stops bloating later packs and recall.
+    assert!(!pack_of("h3", "startup").contains("Handoff: session handoff built"));
 }
 
 #[test]

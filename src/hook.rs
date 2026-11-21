@@ -223,6 +223,8 @@ struct Event {
     gemini_cli: bool,
     /// Antigravity `Stop` terminationReason (e.g. "NO_TOOL_CALL", "USER_CANCELED", "ERROR").
     termination_reason: String,
+    /// SessionStart cause from Claude Code (`startup`, `resume`, `clear`, `compact`); empty elsewhere.
+    source: String,
 }
 impl Event {
     fn normalize(v: &Value) -> Self {
@@ -264,6 +266,7 @@ impl Event {
             agy,
             gemini_cli,
             termination_reason: text(&["terminationReason"], ""),
+            source: text(&["source"], ""),
         }
     }
 }
@@ -667,6 +670,12 @@ fn handle(state: &Path, s: &Settings, event: &Value) -> Result<Option<Value>> {
                 {
                     list.retain(|m| m["id"] != h["id"]);
                     list.insert(0, h);
+                    // Delivered: retire it and older ones so they stop bloating recall. Not on a compaction, which may
+                    // replay the handoff this same session just wrote for the next one. Best effort.
+                    if e.source != "compact" {
+                        let _ = crate::app::open(&db, true)
+                            .and_then(|mut w| crate::memory::consume_handoffs(&mut w, &project));
+                    }
                 }
                 note(s, &dir, "pack", &project, &memories);
                 st.shown = ids(&memories).collect();

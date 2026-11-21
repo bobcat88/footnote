@@ -554,6 +554,21 @@ pub fn handoff(c: &Connection, project: &str, since: &str) -> Result<Option<Valu
     Ok(s.query_map([project, since], row)?.next().transpose()?)
 }
 
+/// Retire the project's handoffs once one has been delivered: a handoff serves one next session, and older ones are
+/// stale. Status `recalled`, so `restore` brings one back. Returns how many were retired.
+pub fn consume_handoffs(c: &mut Connection, project: &str) -> Result<usize> {
+    let tx = c.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+    let ids: Vec<i64> = tx
+        .prepare("SELECT s.id FROM memories m JOIN sources s ON s.id=m.source_id WHERE s.status='indexed' AND m.scope=?1 AND s.id IN (SELECT source_id FROM memory_tags WHERE tag='handoff')")?
+        .query_map([project], |r| r.get(0))?
+        .collect::<rusqlite::Result<_>>()?;
+    for &id in &ids {
+        retire(&tx, id, "recalled")?;
+    }
+    tx.commit()?;
+    Ok(ids.len())
+}
+
 /// Session-start pack: every global preference, then the project's newest decisions and fixes, then its last session
 /// summaries, then global facts, until `max_chars` of memory text is reached.
 pub fn pack(c: &Connection, project: Option<&str>, max_chars: usize) -> Result<Value> {
