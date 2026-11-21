@@ -18,14 +18,17 @@ fn footnote(state: &Path, args: &[&str]) -> Value {
     serde_json::from_slice(&out.stdout).unwrap()
 }
 
+fn has_rust_analyzer() -> bool {
+    std::process::Command::new("rust-analyzer")
+        .arg("--version")
+        .output()
+        .is_ok_and(|o| o.status.success())
+}
+
 /// A two-function project: the graph must say `helper` is called by `run` on line 2, and flag the file once it changes.
 #[test]
 fn callers_and_callees_come_from_the_compiler_index() {
-    if std::process::Command::new("rust-analyzer")
-        .arg("--version")
-        .output()
-        .is_err()
-    {
+    if !has_rust_analyzer() {
         eprintln!("rust-analyzer not installed: skipped");
         return;
     }
@@ -145,11 +148,7 @@ def step():
 /// counted in references, and `ext` as an outside package used by `b`.
 #[test]
 fn the_architecture_map_counts_blocks_links_and_outside_packages() {
-    if std::process::Command::new("rust-analyzer")
-        .arg("--version")
-        .output()
-        .is_err()
-    {
+    if !has_rust_analyzer() {
         eprintln!("rust-analyzer not installed: skipped");
         return;
     }
@@ -222,11 +221,7 @@ fn the_architecture_map_counts_blocks_links_and_outside_packages() {
 /// relative to the project's top folder.
 #[test]
 fn rust_in_a_subfolder_gets_the_compiler_index() {
-    if std::process::Command::new("rust-analyzer")
-        .arg("--version")
-        .output()
-        .is_err()
-    {
+    if !has_rust_analyzer() {
         eprintln!("rust-analyzer not installed: skipped");
         return;
     }
@@ -377,11 +372,7 @@ fn impact_walks_callers_level_by_level_and_lists_tests_apart() {
 /// own caller (#197), not have every call pinned to the first file.
 #[test]
 fn integration_test_helpers_with_one_name_keep_their_own_callers() {
-    if std::process::Command::new("rust-analyzer")
-        .arg("--version")
-        .output()
-        .is_err()
-    {
+    if !has_rust_analyzer() {
         eprintln!("rust-analyzer not installed: skipped");
         return;
     }
@@ -521,10 +512,7 @@ fn unresolved_calls_are_reported_and_guesses_stay_apart() {
 /// indexer on PATH; without the variable the same project falls back to the parser.
 #[test]
 fn an_existing_scip_index_is_the_compiler_graph_when_asked() {
-    let probe = std::process::Command::new("rust-analyzer")
-        .arg("--version")
-        .output();
-    if probe.is_err() {
+    if !has_rust_analyzer() {
         eprintln!("rust-analyzer not installed: skipped");
         return;
     }

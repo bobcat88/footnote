@@ -75,7 +75,7 @@ fn fixture() -> Fixture {
         let sh = bin.join("scip-typescript");
         fs::write(
             &sh,
-            "#!/bin/sh\n[ \"$1\" = --version ] && { echo 0.0.0; exit 0; }\ncp \"$FAKE_SCIP\" \"$4\"\n",
+            "#!/bin/sh\n[ \"$1\" = --version ] && { echo 0.0.0; exit 0; }\nPATH=\"/usr/bin:/bin:$PATH\" cp \"$FAKE_SCIP\" \"$4\"\n",
         )
         .unwrap();
         #[cfg(unix)]

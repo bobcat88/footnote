@@ -253,8 +253,18 @@ mod tests {
 
     #[test]
     fn an_existing_folder_with_inherited_access_is_made_private() {
-        let dir = std::env::temp_dir().join(format!("footnote-fix-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap(); // made outside Footnote: inherits the temp folder's access list
+        let parent =
+            std::env::temp_dir().join(format!("footnote-fix-parent-{}", std::process::id()));
+        let dir = parent.join("child");
+        std::fs::create_dir_all(&parent).unwrap();
+        // Guarantee an inheritable ACE on the parent regardless of the runner's %TEMP% ACL.
+        let grant = std::process::Command::new("icacls")
+            .arg(&parent)
+            .args(["/grant", "*S-1-1-0:(OI)(CI)R"])
+            .output()
+            .unwrap();
+        assert!(grant.status.success(), "{grant:?}");
+        std::fs::create_dir_all(&dir).unwrap(); // made outside Footnote: inherits the parent's access list
         let acl = |d: &Path| {
             let o = std::process::Command::new("icacls")
                 .arg(d)
@@ -262,10 +272,10 @@ mod tests {
                 .unwrap();
             String::from_utf8_lossy(&o.stdout).to_string()
         };
-        assert!(acl(&dir).contains("(I)"));
+        assert!(acl(&dir).contains("(I)"), "{}", acl(&dir));
         fix_private_dir(&dir).unwrap();
         assert!(!acl(&dir).contains("(I)"), "{}", acl(&dir));
-        std::fs::remove_dir_all(&dir).ok();
+        std::fs::remove_dir_all(&parent).ok();
     }
 
     #[test]
