@@ -125,6 +125,7 @@ bash scripts/docker-agents.sh
 | Antigravity | `~/.gemini/config` (`antigravity`, `antigravity-cli`), `~/.t3/userdata/providers/antigravity/<id>/config`, `$GEMINI_HOME/config` | `mcpServers` in `<config>/mcp_config.json` | `<config>/hooks.json`, entry `"footnote-memory"`: SessionStart 15, PreInvocation 10, Stop 5 |
 
 - **Safe to run again:** an existing `footnote-memory` entry is kept, and a Footnote memory hook already there (this script's or the native `footnote hook`) is not doubled. `-Force` / `--force` replaces them, `-Remove` / `--remove` deletes what the script added (to revoke a machine). `-Container` / `--container` targets another container name.
+- **No double hooks with a host install either:** `footnote install --memory` and `footnote uninstall --memory` on the host count these Docker hooks as Footnote's own (install replaces them with the native hook, uninstall removes them). To move back to a native install, run the script with `--remove` first, so the MCP entry moves too.
 - Each edited file is backed up once (`<file>.footnote-backup`) and replaced atomically. A file that its agent rewrote meanwhile is left alone. A JSON file with comments is left for you to edit.
 - When the container runs, the script checks it answers `tools/list` through the registered command, and says when Claude Code's session files are not mounted (no handoff at Stop). Restart each agent afterwards.
 
