@@ -10,7 +10,7 @@ Maintainer file, not synced to agents.
 |---|---|
 | Message titles, evidence visuals, detail in notes | [Penn State: assertion-evidence approach](https://www.assertion-evidence.com/) |
 | Purpose before structure; audience change | [Duarte: Resonate](https://www.duarte.com/resources/books/resonate/) |
-| Cognitive load in visual design | [Castro-Alonso et al., Instructional visualizations, cognitive load theory, and visuospatial processing (2021)](https://doi.org/10.1007/s10648-021-09625-8) |
+| Cognitive load in visual design | [Castro-Alonso, de Koning, Fiorella, Paas: Five strategies for optimizing instructional materials (2021)](https://europepmc.org/article/PMC/PMC7940870) |
 | Morph transitions and `!!` naming | [Microsoft: Morph transition tips](https://support.microsoft.com/en-us/office/morph-transition-tips-and-tricks-bc7f48ff-f152-4ee8-9081-d3121788024f) |
 | Office Open XML parts (slides, comments, notes, core properties) | [ECMA-376](https://ecma-international.org/publications-and-standards/standards/ecma-376/) |
 
