@@ -24,11 +24,18 @@ const REVIEW_AT: usize = 5;
 const REVIEW: &str = "Footnote: {n} global preferences that agents saved are waiting for the user's review, and no agent sees them until then. Tell the user in one line, and that `footnote memory-review` lists them (`footnote memory-restore <id>` approves one, `footnote forget <id>` rejects it).";
 const VISIBLE: &str = "Footnote memory: when one of these memories, or one recalled later in this session, shapes your answer, say so in a few words (for example \"from memory: ...\"). Do not mention memories that played no part.";
 const HANDOFF: &str = r#"Footnote: this session's context is {tokens} tokens, and every call re-reads all of it. Before you stop, save one handoff memory with the footnote_remember tool (MCP server footnote-memory): kind "session", scope "{project}", observed_at "{today}", tags ["handoff"], one self-contained paragraph with the task, the decisions made, what is done and left, the next step, and the files and issues involved. Then tell the user in one short line that you saved the handoff (its id); the next compaction or /clear picks it up, as Footnote brings it back first. Then stop."#;
+const IDLE_HANDOFF: &str = r#"Footnote: this session was idle for {idle_min} min (1h prompt cache expired) with {tokens} tokens in context; continuing pays repeated cold cache writes. Before you stop, save one handoff memory with the footnote_remember tool (MCP server footnote-memory): kind "session", scope "{project}", observed_at "{today}", tags ["handoff"], one self-contained paragraph with the task, the decisions made, what is done and left, the next step, and the files and issues involved. Then tell the user in one short line that you saved the handoff (its id) so they can /clear cleanly. Then stop."#;
 const MAX_EVENT: u64 = 2 * 1024 * 1024;
 
-/// The prompt size of the session's last model call (input plus cache read and written), from the last token count in
-/// Claude Code's session file. Only the tail is read, and only numbers are kept.
-fn context_tokens(transcript: &Path) -> Option<u64> {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct TranscriptTail {
+    tokens: u64,
+    last_ts_unix: Option<i64>,
+}
+
+/// The prompt size and last assistant timestamp from the tail of a Claude Code session file.
+/// Only the tail is read, and only numbers/timestamps are kept.
+fn transcript_tail(transcript: &Path) -> Option<TranscriptTail> {
     use std::io::{Seek, SeekFrom};
     let mut f = fs::File::open(transcript).ok()?;
     let len = f.metadata().ok()?.len();
@@ -43,10 +50,33 @@ fn context_tokens(transcript: &Path) -> Option<u64> {
         let v: Value = serde_json::from_slice(line).ok()?;
         let u = v["message"].get("usage")?;
         let n = |k: &str| u[k].as_u64().unwrap_or(0);
-        (v["type"] == "assistant").then(|| {
-            n("input_tokens") + n("cache_read_input_tokens") + n("cache_creation_input_tokens")
+        if v["type"] != "assistant" {
+            return None;
+        }
+        let tokens =
+            n("input_tokens") + n("cache_read_input_tokens") + n("cache_creation_input_tokens");
+        let last_ts_unix = v["timestamp"]
+            .as_str()
+            .and_then(|ts| {
+                time::OffsetDateTime::parse(ts, &time::format_description::well_known::Rfc3339).ok()
+            })
+            .map(|dt| dt.unix_timestamp());
+        Some(TranscriptTail {
+            tokens,
+            last_ts_unix,
         })
     })
+}
+
+/// Returns idle minutes when the session exceeded the idle-cache-expiry threshold and minimum context size (#379).
+fn idle_handoff_minutes_hit(s: &Settings, tail: TranscriptTail, now_unix: i64) -> Option<u64> {
+    if s.idle_handoff_minutes == 0 || tail.tokens < s.idle_handoff_min_tokens {
+        return None;
+    }
+    let last = tail.last_ts_unix?;
+    let idle_secs = now_unix.saturating_sub(last).max(0) as u64;
+    let idle_mins = idle_secs / 60;
+    (idle_mins >= s.idle_handoff_minutes).then_some(idle_mins)
 }
 
 /// `<state dir>/memory.json` (state dir: FOOTNOTE_STATE_DIR, else %LOCALAPPDATA%/footnote or ~/.local/state/footnote).
@@ -69,8 +99,12 @@ struct Settings {
     resident: bool,
     idle_seconds: u64,
     infer_tags: bool,
-    /// Context size, in tokens, past which Stop asks once for a handoff and a fresh session (#250); 0 never asks.
+    /// Context size, in tokens, past which Stop asks once for a handoff and a fresh session (#250, #379); 0 never asks.
     handoff_tokens: u64,
+    /// Idle minutes past which a resumed session with >= `idle_handoff_min_tokens` asks for a handoff (#379); 0 disables.
+    idle_handoff_minutes: u64,
+    /// Minimum context tokens before idle-expiry handoff triggers (#379).
+    idle_handoff_min_tokens: u64,
 }
 impl Default for Settings {
     fn default() -> Self {
@@ -85,7 +119,9 @@ impl Default for Settings {
             resident: true,
             idle_seconds: 1800,
             infer_tags: false,
-            handoff_tokens: 200_000,
+            handoff_tokens: 140_000,
+            idle_handoff_minutes: 55,
+            idle_handoff_min_tokens: 60_000,
         }
     }
 }
@@ -119,6 +155,9 @@ struct Session {
     shown: Vec<i64>,
     /// Whether this session was already asked for a handoff (#250).
     handoff_asked: bool,
+    /// Recorded at UserPromptSubmit when resuming after idle cache expiry: `(idle_minutes, tokens)` (#379).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    idle_handoff_due: Option<(u64, u64)>,
     /// Antigravity `PreInvocation` fires before every model step in a turn: keep a short SHA-256 prefix of the active
     /// turn's prompt so tool-loop steps only count and recall once; cleared when the turn finishes. Hash only, never text.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -574,6 +613,7 @@ fn handle(state: &Path, s: &Settings, event: &Value) -> Result<Option<Value>> {
                 crate::projects::seen(state, &project, if top.is_empty() { &e.cwd } else { &top });
             embed_in_background(s, &db)?;
             st.handoff_asked = false; // after a compaction the context is small again
+            st.idle_handoff_due = None;
             st.turn_prompt_hash = None;
             if db.exists() {
                 let conn = crate::app::open(&db, false)?;
@@ -626,6 +666,23 @@ fn handle(state: &Path, s: &Settings, event: &Value) -> Result<Option<Value>> {
             if !same_turn {
                 st.turns = st.turns.saturating_add(1);
                 st.embed |= e.prompt.trim().to_lowercase().starts_with("/remember");
+                let mut idle_note = String::new();
+                if !st.handoff_asked
+                    && !e.transcript.is_empty()
+                    && let Some(tail) = transcript_tail(Path::new(&e.transcript))
+                    && let Some(idle_min) = idle_handoff_minutes_hit(
+                        s,
+                        tail,
+                        time::OffsetDateTime::now_utc().unix_timestamp(),
+                    )
+                {
+                    st.idle_handoff_due = Some((idle_min, tail.tokens));
+                    idle_note = format!(
+                        "Footnote: prompt cache expired ({idle_min} min idle, {}k context). Finish concisely so Stop can save a handoff and let the user /clear.",
+                        tail.tokens / 1000
+                    );
+                }
+                let mut recalled = String::new();
                 if db.exists() && !e.prompt.trim().is_empty() && !e.prompt.starts_with('/') {
                     // Search accepts at most 512 bytes, not characters. Never cut a UTF-8 code point.
                     let query = &e.prompt[..e.prompt.floor_char_boundary(500.min(e.prompt.len()))];
@@ -639,36 +696,70 @@ fn handle(state: &Path, s: &Settings, event: &Value) -> Result<Option<Value>> {
                     }
                     st.shown.extend(ids(&hits));
                     note(s, &dir, "recall", &project, &hits);
-                    out = context(
-                        &e,
-                        render(
-                            &hits,
-                            "Possibly relevant memories (… marks a cut text: footnote_get <id> gives all of it)",
-                            true,
-                        ),
+                    recalled = render(
+                        &hits,
+                        "Possibly relevant memories (… marks a cut text: footnote_get <id> gives all of it)",
+                        true,
                     );
                 }
+                let combined = match (idle_note.is_empty(), recalled.is_empty()) {
+                    (true, true) => String::new(),
+                    (false, true) => idle_note,
+                    (true, false) => recalled,
+                    (false, false) => format!("{recalled}\n\n{idle_note}"),
+                };
+                out = context(&e, combined);
             }
         }
         "Stop" => {
             let agy_non_normal =
                 e.agy && !e.termination_reason.is_empty() && e.termination_reason != "NO_TOOL_CALL";
+            let tail = (!st.handoff_asked && !e.transcript.is_empty())
+                .then(|| transcript_tail(Path::new(&e.transcript)))
+                .flatten();
+            let size_handoff = (s.handoff_tokens > 0 && !st.handoff_asked)
+                .then(|| tail.map(|t| t.tokens))
+                .flatten()
+                .filter(|&n| n >= s.handoff_tokens);
+            let idle_handoff = if !st.handoff_asked {
+                st.idle_handoff_due.or_else(|| {
+                    let t = tail?;
+                    let mins = idle_handoff_minutes_hit(
+                        s,
+                        t,
+                        time::OffsetDateTime::now_utc().unix_timestamp(),
+                    )?;
+                    Some((mins, t.tokens))
+                })
+            } else {
+                None
+            };
             if e.stop_active || st.embed {
                 st.embed = false;
                 st.turn_prompt_hash = None;
                 embed_in_background(s, &db)?;
             } else if agy_non_normal {
                 st.turn_prompt_hash = None;
-            } else if let Some(tokens) = (s.handoff_tokens > 0 && !st.handoff_asked)
-                .then(|| context_tokens(Path::new(&e.transcript)))
-                .flatten()
-                .filter(|&n| n >= s.handoff_tokens)
-            {
+            } else if let Some(tokens) = size_handoff {
                 // A long session: every call re-reads all of it (83% of a week's cost was on calls past 200k, #238).
                 st.handoff_asked = true;
+                st.idle_handoff_due = None;
                 st.asked_at = st.turns; // the handoff stands in for the periodic save
                 let today = time::OffsetDateTime::now_local()?.date().to_string();
                 let reason = HANDOFF
+                    .replace("{tokens}", &format!("{}k", tokens / 1000))
+                    .replace("{today}", &today)
+                    .replace("{project}", &project)
+                    + &changed_hint(&git(&e.cwd, &["status", "--porcelain"]));
+                out = Some(stop_ask(&e, reason));
+            } else if let Some((idle_min, tokens)) = idle_handoff {
+                // Resumed after 1h cache expiry with a large context (#379): hand off before paying repeated cold cache writes.
+                st.handoff_asked = true;
+                st.idle_handoff_due = None;
+                st.asked_at = st.turns;
+                let today = time::OffsetDateTime::now_local()?.date().to_string();
+                let reason = IDLE_HANDOFF
+                    .replace("{idle_min}", &idle_min.to_string())
                     .replace("{tokens}", &format!("{}k", tokens / 1000))
                     .replace("{today}", &today)
                     .replace("{project}", &project)
@@ -822,6 +913,111 @@ mod tests {
             (rows[1]["span"].as_str(), rows[1]["ok"].as_bool()),
             (Some("hook.test"), Some(false))
         );
+    }
+
+    #[test]
+    fn idle_cache_expiry_triggers_handoff_and_respects_thresholds() {
+        let t = tempfile::tempdir().unwrap();
+        let transcript = t.path().join("session.jsonl");
+        let now = time::OffsetDateTime::now_utc();
+        let stale_ts = (now - time::Duration::minutes(75))
+            .format(&time::format_description::well_known::Rfc3339)
+            .unwrap();
+        fs::write(
+            &transcript,
+            format!(
+                "{}\n",
+                json!({
+                    "type": "assistant",
+                    "timestamp": stale_ts,
+                    "message": {
+                        "usage": {
+                            "input_tokens": 500,
+                            "cache_read_input_tokens": 80_000,
+                            "cache_creation_input_tokens": 1_500
+                        }
+                    }
+                })
+            ),
+        )
+        .unwrap();
+
+        let tail = transcript_tail(&transcript).expect("parsed tail");
+        assert_eq!(tail.tokens, 82_000);
+        let s = Settings::default();
+        assert_eq!(s.handoff_tokens, 140_000);
+        assert_eq!(s.idle_handoff_minutes, 55);
+        assert_eq!(s.idle_handoff_min_tokens, 60_000);
+        assert!(idle_handoff_minutes_hit(&s, tail, now.unix_timestamp()).is_some_and(|m| m >= 74));
+
+        // Disabled when idle_handoff_minutes == 0
+        let disabled = Settings {
+            idle_handoff_minutes: 0,
+            ..Settings::default()
+        };
+        assert!(idle_handoff_minutes_hit(&disabled, tail, now.unix_timestamp()).is_none());
+
+        // Skipped when context is below idle_handoff_min_tokens
+        let small = TranscriptTail {
+            tokens: 40_000,
+            last_ts_unix: tail.last_ts_unix,
+        };
+        assert!(idle_handoff_minutes_hit(&s, small, now.unix_timestamp()).is_none());
+
+        // End-to-end UserPromptSubmit -> Stop lifecycle: UserPromptSubmit flags idle expiry even if
+        // the assistant writes a fresh timestamp before Stop runs.
+        let state = t.path().join("state");
+        fs::create_dir_all(&state).unwrap();
+        let prompt_event = json!({
+            "hook_event_name": "UserPromptSubmit",
+            "session_id": "idle-s1",
+            "cwd": t.path().to_string_lossy(),
+            "prompt": "continue work",
+            "transcript_path": transcript.to_string_lossy()
+        });
+        let p_out = handle(&state, &s, &prompt_event)
+            .unwrap()
+            .expect("advisory");
+        let p_text = p_out.to_string();
+        assert!(p_text.contains("prompt cache expired"), "{p_text}");
+
+        // Overwrite transcript with a fresh timestamp (simulating the assistant's reply).
+        let fresh_ts = now
+            .format(&time::format_description::well_known::Rfc3339)
+            .unwrap();
+        fs::write(
+            &transcript,
+            format!(
+                "{}\n",
+                json!({
+                    "type": "assistant",
+                    "timestamp": fresh_ts,
+                    "message": {
+                        "usage": {
+                            "input_tokens": 500,
+                            "cache_read_input_tokens": 83_000,
+                            "cache_creation_input_tokens": 500
+                        }
+                    }
+                })
+            ),
+        )
+        .unwrap();
+
+        let stop_event = json!({
+            "hook_event_name": "Stop",
+            "session_id": "idle-s1",
+            "cwd": t.path().to_string_lossy(),
+            "transcript_path": transcript.to_string_lossy()
+        });
+        let s_out = handle(&state, &s, &stop_event)
+            .unwrap()
+            .expect("idle handoff on stop");
+        let s_text = s_out.to_string();
+        assert!(s_text.contains("1h prompt cache expired"), "{s_text}");
+
+        // Second Stop in same session must NOT ask again.
+        assert!(handle(&state, &s, &stop_event).unwrap().is_none());
     }
 
     #[cfg(windows)]

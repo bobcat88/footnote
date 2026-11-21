@@ -78,10 +78,24 @@ pub fn catalogue() -> Vec<OptionSpec> {
         },
         OptionSpec {
             key: "memory.handoff_tokens",
-            default: json!(200_000),
+            default: json!(140_000),
             range: Some((0, 2_000_000)),
             gain: "Lower: shorter sessions; every call re-reads the whole context, so a long one costs most (0: never ask)",
             cost: "Lower: more often asked to save a handoff and clear the session",
+        },
+        OptionSpec {
+            key: "memory.idle_handoff_minutes",
+            default: json!(55),
+            range: Some((0, 1_440)),
+            gain: "Catches 1-hour prompt-cache expiry before paying repeated cold cache writes on a resumed session (0: never ask)",
+            cost: "Asks for a handoff when resuming a large session after a long break",
+        },
+        OptionSpec {
+            key: "memory.idle_handoff_min_tokens",
+            default: json!(60_000),
+            range: Some((0, 2_000_000)),
+            gain: "Skips idle-expiry handoff on small sessions where a cold cache write is cheap",
+            cost: "Higher: larger resumed sessions pay a cold cache write before handing off",
         },
         OptionSpec {
             key: "memory.activity",
