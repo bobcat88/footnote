@@ -84,8 +84,8 @@ export function inPage(arg) {
             }
             if (sr) continue;
             const rg = document.createRange(); rg.selectNodeContents(n);
-            // text outside the viewport belongs to a horizontal scroller, not to the container
-            for (const q of rg.getClientRects()) { if (q.width > 0 && q.left >= -1 && q.right <= W + 1) { l = Math.min(l, q.left); r = Math.max(r, q.right); } }
+            // text outside the viewport belongs to a horizontal scroller, not to the container; text above the page top is a parked skip link
+            for (const q of rg.getClientRects()) { if (q.width > 0 && q.left >= -1 && q.right <= W + 1 && q.bottom + scrollY > 0) { l = Math.min(l, q.left); r = Math.max(r, q.right); } }
           }
           if (l !== Infinity && Math.min(l, W - r) < 120) out.sl32.push({ el: P(blk), detail: `text gutters ${Math.round(l)}px left, ${Math.round(W - r)}px right at ${W}px wide (need 120px or more)` });
         }

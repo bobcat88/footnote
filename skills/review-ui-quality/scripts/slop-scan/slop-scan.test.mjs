@@ -54,7 +54,7 @@ test('SL-04 js carousel: FAIL if it keeps moving, WARN if it pauses but has no c
 });
 test('SL-05 placeholder names', async () => { await bad('sl05-bad.html', 'SL-05'); await clean('sl05-clean.html'); });
 test('SL-31 content hidden when scripts are off', async () => { await bad('sl31-bad.html', 'SL-31'); await clean('sl31-clean.html'); });
-test('SL-32 container gutters at 1920', async () => { await bad('sl32-bad.html', 'SL-32'); await clean('sl32-clean.html'); });
+test('SL-32 container gutters at 1920', async () => { await bad('sl32-bad.html', 'SL-32'); await clean('sl32-clean.html'); await clean('sl32-skiplink.html'); });
 test('SL-33 traffic-light window bar, and grey pagination dots stay clean', async () => { await bad('sl33-bad.html', 'SL-33'); await clean('sl33-clean.html'); });
 test('scope app skips the web-only checks', async () => {
   const r = await run('sl32-bad.html', { scope: 'app' });
