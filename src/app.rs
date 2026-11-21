@@ -332,6 +332,13 @@ enum Action {
         #[command(subcommand)]
         action: DocsAction,
     },
+    /// Skill suggestions on each prompt (`memory.skills`): one keyword index per theme of skill names and descriptions.
+    /// Indexing a theme switches it on, removing it switches it off; the skills themselves are never touched.
+    #[cfg(feature = "library")]
+    Skills {
+        #[command(subcommand)]
+        action: SkillsAction,
+    },
     /// What is installed, on, registered and running, and what memory did this week.
     Status,
     /// Running and recent long steps (downloads, indexing) with their progress, whoever started them.
@@ -694,6 +701,21 @@ enum DocsAction {
         #[arg(long)]
         trust_key: Vec<String>,
     },
+}
+
+#[cfg(feature = "library")]
+#[derive(Subcommand)]
+enum SkillsAction {
+    /// Index every SKILL.md under the folders as one theme (at most 100 skills), replacing that theme's index.
+    Index {
+        theme: String,
+        #[arg(required = true)]
+        folders: Vec<PathBuf>,
+    },
+    /// The themes switched on.
+    List,
+    /// Switch a theme off: delete its index.
+    Remove { theme: String },
 }
 
 #[derive(Subcommand)]
@@ -1123,6 +1145,17 @@ fn execute(cli: Cli) -> Result<Value> {
                 }
             };
         }
+        #[cfg(feature = "library")]
+        Action::Skills { action } => {
+            let state = crate::state::state_dir()?;
+            return match action {
+                SkillsAction::Index { theme, folders } => {
+                    crate::skills::index(&state, theme, folders)
+                }
+                SkillsAction::List => crate::skills::list(&state),
+                SkillsAction::Remove { theme } => crate::skills::remove(&state, theme),
+            };
+        }
         Action::Find { query, limit } => return crate::find::find(query, usize::from(*limit)),
         Action::Corpora { action } => {
             return crate::find::corpora_command(match action {
@@ -1335,7 +1368,9 @@ fn execute(cli: Cli) -> Result<Value> {
         #[cfg(feature = "library")]
         Action::Crawl { .. } => unreachable!("dispatched before the database is opened"),
         #[cfg(feature = "library")]
-        Action::Docs { .. } => unreachable!("dispatched before the database is opened"),
+        Action::Docs { .. } | Action::Skills { .. } => {
+            unreachable!("dispatched before the database is opened")
+        }
         #[cfg(feature = "code")]
         Action::CodeIndex { .. }
         | Action::Code { .. }
@@ -1544,6 +1579,8 @@ fn action_name(a: &Action) -> &'static str {
         Action::Corpora { .. } => "corpora",
         #[cfg(feature = "library")]
         Action::Docs { .. } => "docs",
+        #[cfg(feature = "library")]
+        Action::Skills { .. } => "skills",
         #[cfg(feature = "memory")]
         Action::MemoryList { .. } => "memory-list",
         Action::Models { .. } => "models",

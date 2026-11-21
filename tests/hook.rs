@@ -648,3 +648,59 @@ fn gemini_cli_hooks_handle_before_agent_and_after_agent_with_deny_and_empty_json
         json!({})
     );
 }
+
+/// #280: off by default; on, a theme's skill is suggested once per session when it holds 40% of the prompt's topic words,
+/// and a plain prompt gets nothing.
+#[test]
+fn skills_are_suggested_only_when_on_and_matching() {
+    let t = tempfile::tempdir().unwrap();
+    let state = t.path();
+    let skills = state.join("my-skills");
+    for (name, desc) in [
+        (
+            "css-transitions",
+            "Add CSS transitions to dropdowns, modals and toasts.",
+        ),
+        ("sql-queries", "Write and tune SQL queries for Postgres."),
+    ] {
+        fs::create_dir_all(skills.join(name)).unwrap();
+        fs::write(
+            skills.join(name).join("SKILL.md"),
+            format!("---\nname: {name}\ndescription: >-\n  {desc}\n---\n# Body\nLong body text.\n"),
+        )
+        .unwrap();
+    }
+    let out = command(state)
+        .args(["skills", "index", "web"])
+        .arg(&skills)
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    assert_eq!(serde_json::from_slice::<Value>(&out).unwrap()["skills"], 2);
+    let prompt = "add a transition to the dropdown";
+    assert!(!hook(state, event("UserPromptSubmit", prompt)).contains("css-transitions"));
+    fs::write(state.join("memory.json"), r#"{"skills":true}"#).unwrap();
+    let out = hook(state, event("UserPromptSubmit", prompt));
+    assert!(
+        out.contains("css-transitions") && out.contains("SKILL.md"),
+        "{out}"
+    );
+    assert!(!out.contains("sql-queries"), "{out}");
+    // Already in this context: not repeated. A plain prompt gets nothing.
+    assert!(!hook(state, event("UserPromptSubmit", prompt)).contains("css-transitions"));
+    assert!(
+        hook(
+            state,
+            event("UserPromptSubmit", "fix the failing login test")
+        )
+        .trim()
+        .is_empty()
+    );
+    command(state)
+        .args(["skills", "remove", "web"])
+        .assert()
+        .success();
+    assert!(!hook(state, event_in("s2", "UserPromptSubmit", prompt)).contains("css-transitions"));
+}
