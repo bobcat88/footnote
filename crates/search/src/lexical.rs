@@ -97,9 +97,41 @@ fn sequence(c: &Connection) -> Result<i64> {
         |r| r.get(0),
     )?)
 }
-fn read_built(dir: &Path) -> Option<i64> {
-    let v: serde_json::Value = serde_json::from_slice(&fs::read(dir.join(META)).ok()?).ok()?;
-    v["built_seq"].as_i64()
+/// State of the derived Tantivy directory on disk.
+enum MetaState {
+    /// Derived directory does not exist yet (first run): safe to build from SQLite.
+    Absent,
+    /// Derived directory and `footnote.json` are present and valid up to `built_seq`.
+    Ready(i64),
+}
+
+fn read_built(dir: &Path) -> Result<MetaState> {
+    if !dir.exists() {
+        return Ok(MetaState::Absent);
+    }
+    let meta = dir.join(META);
+    let bytes = fs::read(&meta).with_context(|| {
+        format!(
+            "corrupt derived lexical index metadata at {} (remove {} and re-index)",
+            meta.display(),
+            dir.display()
+        )
+    })?;
+    let v: serde_json::Value = serde_json::from_slice(&bytes).with_context(|| {
+        format!(
+            "corrupt derived lexical index metadata JSON at {} (remove {} and re-index)",
+            meta.display(),
+            dir.display()
+        )
+    })?;
+    let seq = v["built_seq"].as_i64().with_context(|| {
+        format!(
+            "corrupt derived lexical index metadata at {}: missing integer built_seq (remove {} and re-index)",
+            meta.display(),
+            dir.display()
+        )
+    })?;
+    Ok(MetaState::Ready(seq))
 }
 fn write_built(dir: &Path, seq: i64) -> Result<()> {
     fs::write(
@@ -137,18 +169,23 @@ fn open(c: &Connection) -> Result<Option<Open>> {
     let built = if cipher_salt.is_some() {
         None
     } else {
-        read_built(&dir)
+        match read_built(&dir)? {
+            MetaState::Absent => None,
+            MetaState::Ready(seq) => Some(seq),
+        }
     };
     let index = if cipher_salt.is_some() {
         Index::create_in_ram(schema)
     } else {
         match built {
-            Some(_) => Index::open_in_dir(&dir).context("open lexical index")?,
+            Some(_) => Index::open_in_dir(&dir).with_context(|| {
+                format!(
+                    "corrupt derived lexical index at {} (remove {} and re-index)",
+                    dir.display(),
+                    dir.display()
+                )
+            })?,
             None => {
-                // Missing or half-written: start over from SQLite.
-                if dir.exists() {
-                    fs::remove_dir_all(&dir).context("reset lexical index")?;
-                }
                 crate::state::ensure_private_dir(&dir)?;
                 Index::create_in_dir(&dir, schema).context("create lexical index")?
             }
@@ -299,5 +336,73 @@ mod tests {
         )
         .unwrap();
         assert!(top_ids(&c, "x", 5).unwrap().is_none());
+    }
+    #[test]
+    fn corrupt_metadata_fails_closed_with_diagnostic() {
+        let t = tempfile::tempdir().unwrap();
+        let db_path = t.path().join("corrupt_meta.db");
+        let c = crate::store::open(&db_path, true).unwrap();
+        c.execute(
+            "INSERT INTO sources(root,path,sha256,revision,status,extractor) VALUES('','a.md','h',1,'indexed','md')",
+            [],
+        )
+        .unwrap();
+        c.execute(
+            "INSERT INTO chunks(source_id,heading,line,text) VALUES(1,'H','1','alpha beta')",
+            [],
+        )
+        .unwrap();
+        // Absent derived dir builds cleanly on first sync.
+        assert!(sync(&c).unwrap().is_some());
+        let dir = dir_of(&c).unwrap();
+        assert!(dir.join(META).is_file());
+
+        // Malformed footnote.json must fail closed, never silently wipe or fall back.
+        fs::write(dir.join(META), b"{not valid json").unwrap();
+        let err = top_hits(&c, "alpha", 5).unwrap_err().to_string();
+        assert!(err.contains("corrupt derived lexical index"), "{err}");
+        let search_err = crate::store::search(&c, "alpha", 5, &crate::records::Filters::default())
+            .unwrap_err()
+            .to_string();
+        assert!(
+            search_err.contains("corrupt derived lexical index"),
+            "{search_err}"
+        );
+        // Directory was NOT silently deleted.
+        assert!(dir.join(META).is_file());
+
+        // Valid JSON missing integer built_seq must also fail closed.
+        fs::write(dir.join(META), b"{}").unwrap();
+        let err = top_hits(&c, "alpha", 5).unwrap_err().to_string();
+        assert!(err.contains("missing integer built_seq"), "{err}");
+    }
+    #[test]
+    fn corrupt_tantivy_segment_fails_closed_with_diagnostic() {
+        let t = tempfile::tempdir().unwrap();
+        let db_path = t.path().join("corrupt_seg.db");
+        let c = crate::store::open(&db_path, true).unwrap();
+        c.execute(
+            "INSERT INTO sources(root,path,sha256,revision,status,extractor) VALUES('','a.md','h',1,'indexed','md')",
+            [],
+        )
+        .unwrap();
+        c.execute(
+            "INSERT INTO chunks(source_id,heading,line,text) VALUES(1,'H','1','gamma delta')",
+            [],
+        )
+        .unwrap();
+        sync(&c).unwrap();
+        let dir = dir_of(&c).unwrap();
+        // Keep footnote.json intact, corrupt Tantivy's own meta.json.
+        fs::write(dir.join("meta.json"), b"corrupt tantivy metadata").unwrap();
+        let err = top_hits(&c, "gamma", 5).unwrap_err().to_string();
+        assert!(err.contains("corrupt derived lexical index"), "{err}");
+        let search_err = crate::store::search(&c, "gamma", 5, &crate::records::Filters::default())
+            .unwrap_err()
+            .to_string();
+        assert!(
+            search_err.contains("corrupt derived lexical index"),
+            "{search_err}"
+        );
     }
 }

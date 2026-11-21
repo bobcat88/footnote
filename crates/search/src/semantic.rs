@@ -1059,4 +1059,204 @@ mod tests {
     fn zscore_of_a_constant_is_zero_not_nan() {
         assert_eq!(zscore(&[2.0, 2.0, 2.0]), vec![0.0, 0.0, 0.0]);
     }
+
+    /// Named fast-path equivalence test (#354): `Dense::scan` (used <= `SCAN_LIMIT`) and
+    /// `Dense::shortlist` (used > `SCAN_LIMIT`) must produce identical blended z-scores,
+    /// identical mismatch exclusions, and identical fused rankings + tie-breaks on the same candidate set.
+    #[test]
+    fn fast_path_equivalence_scan_and_shortlist_match_on_shared_candidates() {
+        let t = tempfile::tempdir().unwrap();
+        let c = Connection::open(t.path().join("equiv.db")).unwrap();
+        c.execute_batch(MIGRATION).unwrap();
+        for m in ["m1", "m2"] {
+            c.execute("INSERT INTO embedding_models VALUES(?1,'{}','h',384)", [m])
+                .unwrap();
+        }
+        let unit = |a: f64, b: f64| -> Vec<f64> {
+            let mut v = vec![0.0; DIM];
+            v[0] = a;
+            v[1] = b;
+            let norm = (a * a + b * b).sqrt();
+            v[0] /= norm;
+            v[1] /= norm;
+            v
+        };
+        struct Entry {
+            kind: u8,
+            id: i64,
+            s1: &'static str,
+            s2: &'static str,
+            v1: (f64, f64),
+            v2: (f64, f64),
+        }
+        let entries = [
+            Entry {
+                kind: 0,
+                id: 1,
+                s1: "sig1",
+                s2: "sig1",
+                v1: (1.0, 0.0),
+                v2: (0.9, 0.1),
+            },
+            Entry {
+                kind: 0,
+                id: 2,
+                s1: "sig2",
+                s2: "sig2",
+                v1: (0.6, 0.8),
+                v2: (0.5, 0.85),
+            },
+            // Exact dense tie with chunk 4 to verify deterministic id tie-breaking
+            Entry {
+                kind: 0,
+                id: 3,
+                s1: "sig3",
+                s2: "sig3",
+                v1: (0.8, 0.6),
+                v2: (0.7, 0.7),
+            },
+            Entry {
+                kind: 0,
+                id: 4,
+                s1: "sig4",
+                s2: "sig4",
+                v1: (0.8, 0.6),
+                v2: (0.7, 0.7),
+            },
+            // Cross-model signature mismatch: both paths must exclude this candidate
+            Entry {
+                kind: 0,
+                id: 5,
+                s1: "sig5-a",
+                s2: "sig5-b",
+                v1: (1.0, 0.0),
+                v2: (1.0, 0.0),
+            },
+            // Record entry to cover both kind=0 and kind=1
+            Entry {
+                kind: 1,
+                id: 10,
+                s1: "rsig",
+                s2: "rsig",
+                v1: (0.2, 0.98),
+                v2: (0.3, 0.95),
+            },
+        ];
+        let mut lex: HashMap<(u8, i64), f64> = HashMap::new();
+        for e in &entries {
+            let kname = if e.kind == 1 { "record" } else { "chunk" };
+            c.execute(
+                "INSERT INTO embeddings VALUES('m1',?1,?2,?3,?4)",
+                params![kname, e.id, e.s1, quantize(&unit(e.v1.0, e.v1.1))],
+            )
+            .unwrap();
+            c.execute(
+                "INSERT INTO embeddings VALUES('m2',?1,?2,?3,?4)",
+                params![kname, e.id, e.s2, quantize(&unit(e.v2.0, e.v2.1))],
+            )
+            .unwrap();
+            lex.insert((e.kind, e.id), (e.id as f64) * 1.5);
+        }
+        let qvecs = vec![unit(1.0, 0.0), unit(0.95, 0.05)];
+        let mats = vec![matrix(&c, "m1").unwrap(), matrix(&c, "m2").unwrap()];
+        let recipes = vec![
+            (PathBuf::from("m1"), "m1".to_string(), "{}".to_string()),
+            (PathBuf::from("m2"), "m2".to_string(), "{}".to_string()),
+        ];
+
+        let scan_dense = Dense::scan(&mats, &qvecs, |_, _| true);
+        let short_dense = Dense::shortlist(&c, &recipes, &qvecs, &lex).unwrap();
+
+        // Both paths must exclude the mismatched signature entry (0, 5) identically.
+        assert!(scan_dense.get(&(0, 5)).is_none());
+        assert!(short_dense.get(&(0, 5)).is_none());
+
+        // Exact blended z-score parity on every valid candidate.
+        for e in &entries {
+            if (e.kind, e.id) == (0, 5) {
+                continue;
+            }
+            let (zs, sig_s) = scan_dense.get(&(e.kind, e.id)).expect("scan hit");
+            let (zh, sig_h) = short_dense.get(&(e.kind, e.id)).expect("shortlist hit");
+            assert_eq!(sig_s, sig_h);
+            assert!(
+                (zs - zh).abs() < 1e-5,
+                "z-score drift on ({},{}): scan={zs} shortlist={zh}",
+                e.kind,
+                e.id
+            );
+        }
+
+        // Identical top-k ordering and tie-breaking.
+        assert_eq!(scan_dense.top(10), short_dense.top(10));
+
+        // Identical fused rankings when passed through the single canonical `fuse`.
+        let build_cands = |d: &Dense| -> Vec<Cand> {
+            entries
+                .iter()
+                .map(|e| Cand {
+                    kind: e.kind,
+                    id: e.id,
+                    lex: lex.get(&(e.kind, e.id)).copied(),
+                    dense: d.get(&(e.kind, e.id)).map(|(z, _)| z),
+                })
+                .collect()
+        };
+        let c_scan = build_cands(&scan_dense);
+        let c_short = build_cands(&short_dense);
+        let f_scan: Vec<(u8, i64)> = fuse(&c_scan, POOL, ALPHA)
+            .into_iter()
+            .map(|(i, _)| (c_scan[i].kind, c_scan[i].id))
+            .collect();
+        let f_short: Vec<(u8, i64)> = fuse(&c_short, POOL, ALPHA)
+            .into_iter()
+            .map(|(i, _)| (c_short[i].kind, c_short[i].id))
+            .collect();
+        assert_eq!(f_scan, f_short);
+    }
+
+    /// Named boundary test (#354): when the lexical shortlist omits a pure-dense candidate
+    /// (as happens above `SCAN_LIMIT`), `Dense::shortlist` scores only the lexical subset
+    /// deterministically without NaNs and preserves the exact relative order of shared hits.
+    #[test]
+    fn fast_path_shortlist_degrades_deterministically_when_pure_dense_hit_excluded() {
+        let t = tempfile::tempdir().unwrap();
+        let c = Connection::open(t.path().join("boundary.db")).unwrap();
+        c.execute_batch(MIGRATION).unwrap();
+        c.execute("INSERT INTO embedding_models VALUES('m1','{}','h',384)", [])
+            .unwrap();
+        let unit = |a: f64, b: f64| -> Vec<f64> {
+            let mut v = vec![0.0; DIM];
+            v[0] = a;
+            v[1] = b;
+            let norm = (a * a + b * b).sqrt();
+            v[0] /= norm;
+            v[1] /= norm;
+            v
+        };
+        // Chunk 1 is a pure-dense paraphrase (absent from lex); chunks 2 and 3 are in lex.
+        for (id, a, b) in [(1, 1.0, 0.0), (2, 0.8, 0.6), (3, 0.2, 0.98)] {
+            c.execute(
+                "INSERT INTO embeddings VALUES('m1','chunk',?1,'sig',?2)",
+                params![id, quantize(&unit(a, b))],
+            )
+            .unwrap();
+        }
+        let mut lex: HashMap<(u8, i64), f64> = HashMap::new();
+        lex.insert((0, 2), 2.0);
+        lex.insert((0, 3), 1.0);
+
+        let qvecs = vec![unit(1.0, 0.0)];
+        let mats = vec![matrix(&c, "m1").unwrap()];
+        let recipes = vec![(PathBuf::from("m1"), "m1".to_string(), "{}".to_string())];
+
+        let scan_dense = Dense::scan(&mats, &qvecs, |_, _| true);
+        let short_dense = Dense::shortlist(&c, &recipes, &qvecs, &lex).unwrap();
+
+        assert_eq!(scan_dense.top(3), vec![(0, 1), (0, 2), (0, 3)]);
+        assert_eq!(short_dense.top(3), vec![(0, 2), (0, 3)]);
+        assert!(short_dense.get(&(0, 1)).is_none());
+        assert!(short_dense.get(&(0, 2)).unwrap().0.is_finite());
+        assert!(short_dense.get(&(0, 3)).unwrap().0.is_finite());
+    }
 }

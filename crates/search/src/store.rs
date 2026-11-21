@@ -450,8 +450,9 @@ impl PerSource {
     }
 }
 /// Chunk ids with BM25 scores (higher is better) for any-word matching: Tantivy when its derived index is available, else FTS5.
+/// Fails closed if an existing derived Tantivy index is corrupt or unreadable (#354).
 pub fn lexical_chunks(c: &Connection, q: &str, n: usize) -> Result<Vec<(i64, f64)>> {
-    if let Some(hits) = crate::lexical::top_hits(c, q, n).ok().flatten() {
+    if let Some(hits) = crate::lexical::top_hits(c, q, n)? {
         return Ok(hits.into_iter().map(|(id, s)| (id, s as f64)).collect());
     }
     let mut s = c.prepare("SELECT rowid,-bm25(search_fts) FROM search_fts WHERE search_fts MATCH ?1 ORDER BY bm25(search_fts),rowid LIMIT ?2")?;
@@ -488,14 +489,12 @@ pub fn search(
         return Ok(json!({"mode":"lexical_fts5","results":[],"records":records}));
     }
     let text_limit = limit - records.len();
-    // Chunk ranking comes from the derived Tantivy index when there is one (BM25, stemming); FTS5 is the fallback.
+    // Chunk ranking comes from the derived Tantivy index when there is one (BM25, stemming); FTS5 is used for in-memory DBs.
+    // Fails closed if an existing derived Tantivy index is corrupt or unreadable (#354).
     if let Some(ids) = crate::metrics::timed!(
         "search.keywords",
         crate::lexical::top_ids(c, q, (limit * 30).max(100))
-    )
-    .ok()
-    .flatten()
-    {
+    )? {
         let mut s = c.prepare(&format!(
             "{HIT} WHERE c.id=?1 AND s.status='indexed' AND c.id=(SELECT min(c2.id) FROM chunks c2 JOIN sources s2 ON s2.id=c2.source_id WHERE s2.sha256=s.sha256 AND s2.status='indexed' AND c2.heading=c.heading AND c2.page IS c.page AND c2.line=c.line AND c2.text=c.text)"
         ))?;
