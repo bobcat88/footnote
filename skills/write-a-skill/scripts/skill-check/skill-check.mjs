@@ -15,7 +15,7 @@ const SPEC_MAX_DESC = 1024;
 
 const walk = (dir) => readdirSync(dir).flatMap((n) => {
   const p = join(dir, n);
-  if (n === 'node_modules' || n.startsWith('.')) return [];
+  if (n === 'node_modules' || n === '__pycache__' || n.startsWith('.')) return []; // build caches, gitignored
   return statSync(p).isDirectory() ? walk(p) : [p];
 });
 const agentFiles = (dir) => walk(dir).filter((p) => !relative(dir, p).split(/[\\/]/).some((s) => s.startsWith('_'))).sort();

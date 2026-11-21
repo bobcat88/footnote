@@ -1,5 +1,5 @@
 ---
-skill_hash: ff532c3e364692b0
+skill_hash: db5dd09d7f5b4758
 reviewed: 2026-11-21
 ---
 # write-a-skill: sources
