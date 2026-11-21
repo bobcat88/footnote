@@ -1,5 +1,5 @@
 ---
-skill_hash: 2ebe628eea37b272
+skill_hash: 60d090e117e2cc63
 reviewed: 2026-11-21
 ---
 # review-ui-quality: sources
