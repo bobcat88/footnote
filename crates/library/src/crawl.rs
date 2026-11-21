@@ -415,39 +415,43 @@ fn robots(agent: &ureq::Agent, site: &Url, allow_loopback: bool) -> Option<texti
         .and_then(|(txt, _, _)| texting_robots::Robot::new("FootnoteDocs", txt.as_bytes()).ok())
 }
 
-/// Main content as Markdown: Readability first; the page's main landmark (`main`, `role=main`) when Readability finds
-/// nothing or picks text outside it (it prefers a long footer to a short page: Python's index and removed-module pages);
-/// the whole body when there is no landmark. Not `article`: on Tailwind's pages the first one is a demo card.
-fn markdown(html: &str, url: &Url) -> String {
-    // Inside = at least half of Readability's words occur in the landmark; exact text differs (permalinks, spacing).
-    let words = |s: &str| -> std::collections::HashSet<String> {
-        s.split(|c: char| !c.is_alphanumeric())
-            .filter(|w| w.chars().count() >= 3)
-            .map(str::to_lowercase)
-            .collect()
-    };
+/// Main content as Markdown: isolate the page's main landmark (`main`, `role=main`) when present so site-wide
+/// navigation, sidebars, and `<div class="footer">` copyright blocks never displace or pollute short pages, then
+/// convert with `html-to-markdown-rs` (preserving `# H1` titles, Sphinx `<pre>` code fences, and compact GFM tables).
+/// Not `article`: on Tailwind's pages the first one is a demo card.
+fn markdown(html: &str, _url: &Url) -> String {
     let doc = dom_query::Document::from(html);
     let land = doc.select("main, [role=main]").first();
-    let landmark = land
-        .exists()
-        .then(|| (land.html().to_string(), words(&land.text())));
-    let main = dom_smoothie::Readability::with_document(doc, Some(url.as_str()), None)
+    let source = if land.exists() {
+        let h = land.html().to_string();
+        if h.len() > 100 { h } else { html.to_string() }
+    } else {
+        html.to_string()
+    };
+    let opts = html_to_markdown_rs::options::ConversionOptions {
+        heading_style: html_to_markdown_rs::options::HeadingStyle::Atx,
+        code_block_style: html_to_markdown_rs::options::CodeBlockStyle::Backticks,
+        compact_tables: true,
+        extract_metadata: false,
+        strip_tags: vec![
+            "script".into(),
+            "style".into(),
+            "nav".into(),
+            "footer".into(),
+            "noscript".into(),
+            "svg".into(),
+        ],
+        preprocessing: html_to_markdown_rs::options::PreprocessingOptions {
+            enabled: true,
+            preset: html_to_markdown_rs::options::PreprocessingPreset::Aggressive,
+            remove_navigation: true,
+            remove_forms: true,
+        },
+        ..Default::default()
+    };
+    html_to_markdown_rs::convert(&source, opts)
         .ok()
-        .and_then(|mut r| r.parse().ok())
-        .filter(|a| a.content.len() > 200)
-        .filter(|a| {
-            let mine = words(&a.text_content);
-            landmark.as_ref().is_none_or(|(_, w)| {
-                2 * mine.iter().filter(|x| w.contains(*x)).count() >= mine.len()
-            })
-        })
-        .map(|a| a.content.to_string())
-        .or_else(|| landmark.map(|(h, _)| h))
-        .unwrap_or_else(|| html.to_string());
-    htmd::HtmlToMarkdown::builder()
-        .skip_tags(vec!["script", "style", "nav", "footer", "noscript", "svg"])
-        .build()
-        .convert(&main)
+        .and_then(|r| r.content)
         .unwrap_or_default()
 }
 
@@ -976,6 +980,28 @@ mod tests {
             md.contains("removed in Python 3.13") && !md.contains("Copyright"),
             "{md}"
         );
+    }
+
+    #[test]
+    fn sphinx_code_blocks_and_h1_survive_conversion() {
+        let html = r#"<html><body><div class="body" role="main">
+            <h1>Application Factories</h1>
+            <p>Set up the application in a function:</p>
+            <div class="highlight-python"><div class="highlight"><pre><span></span><span class="k">def</span> <span class="nf">create_app</span>():
+    # build app
+    return Flask(__name__)</pre></div></div>
+        </div><div class="footer">Copyright 2026</div></body></html>"#;
+        let md = markdown(
+            html,
+            &Url::parse("https://flask.palletsprojects.com/en/stable/patterns/appfactories/")
+                .unwrap(),
+        );
+        assert!(md.contains("# Application Factories"), "missing H1:\n{md}");
+        assert!(
+            md.contains("```") && md.contains("def create_app():"),
+            "missing fenced code block:\n{md}"
+        );
+        assert!(!md.contains("Copyright 2026"), "footer leaked:\n{md}");
     }
 
     #[test]

@@ -38,7 +38,7 @@ def allowed(expr):
 def cargo(manifest):
     meta = json.loads(subprocess.run(
         ["cargo", "metadata", "--format-version", "1", "--locked", "--all-features", "--manifest-path", str(manifest)],
-        check=True, capture_output=True, text=True).stdout)
+        check=True, capture_output=True, text=True, encoding="utf-8").stdout)
     pkgs = {p["id"]: p for p in meta["packages"]}
     ours = set(meta["workspace_members"])
     deps = {n["id"]: n["deps"] for n in meta["resolve"]["nodes"]}

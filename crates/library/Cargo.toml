@@ -24,8 +24,7 @@ walkdir.workspace = true
 ureq.workspace = true
 url.workspace = true
 regex.workspace = true
-dom_smoothie.workspace = true
-dom_query = "0.29"
-htmd.workspace = true
+dom_query.workspace = true
+html-to-markdown-rs.workspace = true
 texting_robots.workspace = true
 flate2 = { version = "1", default-features = false, features = ["rust_backend"] }

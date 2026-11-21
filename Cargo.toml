@@ -7,7 +7,7 @@ version = "0.1.0-alpha.1"
 edition = "2024"
 license = "Apache-2.0"
 repository = "https://github.com/bobcat88/footnote"
-rust-version = "1.92"
+rust-version = "1.100"
 
 # One version of each dependency for the whole family (ADR 0001).
 [workspace.dependencies]
@@ -45,11 +45,11 @@ ureq = { version = "3.5", default-features = false, features = ["native-tls", "r
 # Bundle signatures (src/bundle.rs): ed25519 verify and sign; already in the tree through rustls, same locked version.
 ring = "0.17"
 assert_cmd = "2"
-# Documentation crawler (crates/library/src/crawl.rs; licences checked 15 Nov 2026, docs/research/DOCS-INGESTION-STUDY.md).
+# Documentation crawler (crates/library/src/crawl.rs; licences checked: html-to-markdown-rs is MIT).
 url = "2"
 regex = "1"
-dom_smoothie = "0.19"
-htmd = "0.5"
+dom_query = "0.29"
+html-to-markdown-rs = { version = "3.22.2", default-features = false }
 texting_robots = "0.2"
 
 [package]
