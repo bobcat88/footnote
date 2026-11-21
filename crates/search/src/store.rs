@@ -4,7 +4,12 @@ use footnote_core::{bounded_read, hash, no_links};
 use rusqlite::{Connection, OpenFlags, OptionalExtension, params};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
-use std::{fs, path::Path, time::Duration};
+use std::{
+    collections::HashMap,
+    fs,
+    path::{Path, PathBuf},
+    time::Duration,
+};
 
 pub const SCHEMA: i64 = 5;
 pub const MEMORY_MIGRATION: &str = "CREATE TABLE memories(source_id INTEGER PRIMARY KEY REFERENCES sources(id),kind TEXT NOT NULL CHECK(kind IN ('preference','fact','fix','session')),scope TEXT NOT NULL,observed_at TEXT NOT NULL,session TEXT,supersedes INTEGER REFERENCES sources(id));
@@ -370,9 +375,26 @@ pub fn hit(r: &rusqlite::Row<'_>, full: bool) -> rusqlite::Result<Value> {
     let sha: String = r.get(2)?;
     let status: String = r.get(4)?;
     let text: String = r.get(9)?;
-    Ok(
-        json!({"id":r.get::<_,i64>(0)?,"path":path,"sha256":sha,"revision":r.get::<_,i64>(3)?,"status":status,"extractor":r.get::<_,String>(5)?,"heading":r.get::<_,String>(6)?,"page":r.get::<_,Option<i64>>(7)?,"line":r.get::<_,i64>(8)?,"text":text.chars().take(if full {2000} else {500}).collect::<String>(),"freshness":freshness(&path,&sha,&status),"trust":"untrusted_source_data"}),
-    )
+    let mut v = json!({"id":r.get::<_,i64>(0)?,"path":path,"sha256":sha,"revision":r.get::<_,i64>(3)?,"status":status,"extractor":r.get::<_,String>(5)?,"heading":r.get::<_,String>(6)?,"page":r.get::<_,Option<i64>>(7)?,"line":r.get::<_,i64>(8)?,"text":text.chars().take(if full {2000} else {500}).collect::<String>(),"freshness":freshness(&path,&sha,&status),"trust":"untrusted_source_data"});
+    // Search hits get their URL in `lean`, which reads each folder's urls.json once per result list.
+    if full && let Some(u) = source_url(&path, &mut Urls::new()) {
+        v["url"] = u.into();
+    }
+    Ok(v)
+}
+type Urls = HashMap<PathBuf, Option<serde_json::Map<String, Value>>>;
+/// The page a crawled file came from, so an agent can cite it: `footnote crawl` writes `urls.json` beside its `<n>.md` (#277).
+fn source_url(path: &str, cache: &mut Urls) -> Option<String> {
+    let p = Path::new(path);
+    let (dir, name) = (p.parent()?, p.file_name()?.to_str()?);
+    if path.starts_with(MEMORY_PREFIX) || dir.as_os_str().is_empty() {
+        return None;
+    }
+    let urls = cache.entry(dir.to_path_buf()).or_insert_with(|| {
+        serde_json::from_slice(&bounded_read(&dir.join("urls.json")).ok()?).ok()
+    });
+    let u = urls.as_ref()?.get(name)?.as_str()?;
+    (u.starts_with("https://") || u.starts_with("http://")).then(|| u.to_string())
 }
 /// What a search returns per hit: where it is and what it says. Hashes, revision, status and extractor stay in `get <id>`;
 /// the untrusted-data label is stated once per response (`TRUST`). About a third fewer characters per result list.
@@ -394,8 +416,16 @@ pub fn take_lean_bytes() -> (u64, u64) {
 pub fn lean(mut hits: Vec<Value>) -> Vec<Value> {
     let size = |h: &Vec<Value>| serde_json::to_vec(h).map_or(0, |b| b.len() as u64);
     let before = size(&hits);
+    let mut urls = Urls::new();
     for v in &mut hits {
         if let Some(o) = v.as_object_mut() {
+            if let Some(u) = o
+                .get("path")
+                .and_then(Value::as_str)
+                .and_then(|p| source_url(p, &mut urls))
+            {
+                o.insert("url".into(), u.into());
+            }
             for k in ["sha256", "revision", "status", "extractor", "trust"] {
                 o.remove(k);
             }
@@ -599,6 +629,25 @@ mod chunk_tests {
             json!({"path": r"\\?\D:\a.md", "sha256": "x", "page": null}),
         ]);
         assert_eq!(out[0], json!({"path": r"D:\a.md"}));
+    }
+
+    #[test]
+    fn crawled_hits_carry_their_page_url() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(
+            dir.path().join("urls.json"),
+            r#"{"1.md":"https://docs.example.com/a","2.md":"file:///etc/passwd"}"#,
+        )
+        .unwrap();
+        let at = |f: &str| dir.path().join(f).to_string_lossy().into_owned();
+        let out = lean(vec![
+            json!({"path": at("1.md")}),
+            json!({"path": at("2.md")}),
+            json!({"path": at("3.md")}),
+            json!({"path": "memory:7"}),
+        ]);
+        assert_eq!(out[0]["url"], "https://docs.example.com/a");
+        assert!(out[1..].iter().all(|h| h.get("url").is_none()));
     }
 
     #[test]
