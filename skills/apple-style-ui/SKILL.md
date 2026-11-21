@@ -6,48 +6,42 @@ license: MIT
 
 # Apple-style UI
 
-Work from Apple's public HIG and developer documentation, re-checked live for each substantive project ([references/hig-sources.md](references/hig-sources.md)). This is an evidence-based method: no claim of Apple endorsement or internal rules, and no Apple branding, artwork or SF Symbols in a product's identity.
+Re-read the live HIG pages for the surface each project: [Materials](https://developer.apple.com/design/human-interface-guidelines/materials) / [Layout](https://developer.apple.com/design/human-interface-guidelines/layout) / [Typography](https://developer.apple.com/design/human-interface-guidelines/typography) / [Color](https://developer.apple.com/design/human-interface-guidelines/color) / [Motion](https://developer.apple.com/design/human-interface-guidelines/motion) / [Accessibility](https://developer.apple.com/design/human-interface-guidelines/accessibility) / [Widgets](https://developer.apple.com/design/human-interface-guidelines/widgets) / [SF Symbols](https://developer.apple.com/design/human-interface-guidelines/sf-symbols). No Apple branding, artwork or SF Symbols in a product's identity; no claim of endorsement.
 
-## Keep these apart
-- **Documented guidance**, **observed product behaviour**, **design judgement** and **project decisions**. Cite each fact; label hypotheses.
-- "Apple-like" isn't blur, rounded cards and springs. The craft is hierarchy, restraint, adaptive system behaviour, coherent transitions, clear states and legible content.
-- **Liquid Glass is a system material**, not a CSS recipe. On Apple platforms use the native components. A web `backdrop-filter` is an approximation: say so, keep an opaque readable default, and never call it Liquid Glass.
-- Don't invent Apple spacing scales, easing curves or "secret" thresholds. Use the HIG's platform-specific values and measure the project's own tokens.
+## Keep apart
+- Documented guidance / observed behaviour / judgement / project decision: cite facts, label hypotheses
+- "Apple-like" ≠ blur + rounded cards + springs. It's hierarchy / restraint / adaptive behaviour / coherent transitions / clear states / legible content
+- Liquid Glass = system material. Native → system components. Web `backdrop-filter` = an approximation: opaque readable default, never called Liquid Glass
+- No invented spacing scales, easings or "secret" thresholds: HIG values per platform + the project's own tokens
 
 ## Before designing
-1. Inventory the project: instructions, tokens, real screens and flows, supported platforms and versions, prior decisions. Look at the actual target surface, not a marketing image.
-2. Read the HIG pages for the surface (Materials, Liquid Glass adoption, Layout, Typography, Color, Motion, Accessibility, Widgets, SF Symbols) and the API docs for native work.
-3. Keep a small evidence table: source and date → principle → how this project adapts it → acceptance test.
-4. Define the states before building: empty, loading, error, selected, disabled, hover and pressed, keyboard focus, reduced motion, long content.
+- Inventory: instructions / tokens / real screens + flows / platforms + versions / prior decisions (look at the real surface, not marketing)
+- Evidence table: source + date → principle → project adaptation → acceptance test
+- States: empty / loading / error / selected / disabled / hover + pressed / focus / reduced motion / long content
 
 ## Principles
-- **Hierarchy.** The primary task and next action are obvious at first view. Content leads; chrome is quiet but clearly interactive. Accent, tint, blur, shadow and motion are reserved for priority and state.
-- **Materials.** Glass belongs to the floating navigation and control layer, not to content cards. Dense text gets a regular or solid surface. Check contrast after compositing over light, dark, bright and busy backgrounds; blur is not a contrast strategy. Every glass rule has a `prefers-reduced-transparency` fallback.
-- **Layout.** Design from the available window or container, not device names. Respect safe areas, resizing, text scaling, localisation and RTL. Prefer intrinsic sizing to fixed heights that clip.
-- **Type and icons.** System text styles and Dynamic Type on Apple platforms. SF fonts are licensed for Apple platforms and mockups only: never bundle them; elsewhere use `system-ui` stacks or a licensed face. Platform minimums differ (the HIG currently lists macOS 13 pt default and 10 pt minimum, iOS 17 pt and 11 pt); check the live table. Icons match the adjacent text's weight; icon-only controls have accessible names.
-- **Motion.** It explains continuity, state and cause; it never makes people wait and is always interruptible. Prefer system transitions and springs natively; in CSS animate opacity and transform. Honour Reduce Motion with a non-motion cue for the state.
-- **Accessibility.** WCAG 2.2 AA: contrast 4.5:1 (1.4.3) and 3:1 non-text (1.4.11), focus visible (2.4.7) and not obscured (2.4.11), target size (2.5.8). Apple's target sizes are separate and in points (iOS 44×44 default, 28×28 minimum; macOS 28×28 default, 20×20 minimum); don't mix units. Test with the platform's accessibility inspector and a screen reader; a DOM scan is a filter, not sign-off.
-- **Privacy.** Map where sensitive data can show: notifications, app switcher, Lock Screen widgets and Live Activities, screenshots, shared screens. Translucency doesn't hide data.
-- **Widgets.** A glanceable extension of the app with one hierarchy and few focused interactions. Test each supported family, appearance and rendering mode (HIG appearances and WidgetKit rendering modes are different things), stale and placeholder states, and tap destinations, on real devices.
+- **Hierarchy:** primary task + next action obvious / content leads, chrome quiet but clearly interactive / accent, blur, shadow, motion reserved for priority + state
+- **Materials:** glass on floating nav + controls, not content cards / dense text on solid / check contrast over light, dark, bright, busy / every glass rule has a `prefers-reduced-transparency` fallback
+- **Layout:** from the window or container, not device names / safe areas / resizing / text scaling / RTL / intrinsic sizing over fixed heights
+- **Type + icons:** system text styles + Dynamic Type natively / SF fonts never bundled off Apple platforms (`system-ui` or a licensed face) / check the live size table (macOS 13 pt default, 10 pt min; iOS 17 pt, 11 pt) / icons match text weight / icon-only controls named
+- **Motion:** explains continuity + cause / never makes people wait / interruptible / CSS: opacity + transform / Reduce Motion gets a non-motion cue
+- **Accessibility:** WCAG 2.2 AA (1.4.3 text 4.5:1 / 1.4.11 non-text 3:1 / 2.4.7 + 2.4.11 focus / 2.5.8 targets) / Apple targets in points: iOS 44×44 (min 28), macOS 28×28 (min 20); don't mix units / test with the platform inspector + a screen reader
+- **Privacy:** where sensitive data shows: notifications / app switcher / Lock Screen widgets + Live Activities / screenshots / screen sharing. Translucency hides nothing
+- **Widgets:** glanceable, one hierarchy, few interactions / test every family, appearance, rendering mode, stale + placeholder states, tap targets on real devices
 
-## Check
-```
-node <skills>/review-ui-quality/scripts/design-check/design-check.mjs <url|file> --profile apple [--input pointer]
-```
-The craft rules with Apple target sizes (`--input pointer` for macOS-style UI), plus **AP1**: every `backdrop-filter` rule has a `prefers-reduced-transparency: reduce` override (FAIL). Apple publishes no universal spacing scale, so `--grid` is the project's own step. Glass fidelity, largest text sizes, screen readers and dark mode stay manual; run `review-ui-quality` for the full loop.
+## Run
+`node <skills>/review-ui-quality/scripts/design-check/design-check.mjs <url|file> --profile apple [--input pointer]` → craft rules with Apple targets + **AP1**: every `backdrop-filter` has a `prefers-reduced-transparency: reduce` override (FAIL). `--grid` = the project's own step. Glass fidelity / largest text / screen readers / dark mode stay manual → `review-ui-quality`.
 
 ## Report
-Functional, accessibility and visual results separately, with what wasn't tested. Never claim Liquid Glass parity from CSS, widget readiness from a static mock, or Apple quality from a dark palette and rounded corners.
+Functional / accessibility / visual results separately + what wasn't tested. Never claim Liquid Glass parity from CSS, widget readiness from a mock, or Apple quality from dark + rounded.
 
-## Web starter (an approximation, not native material)
+## Web starter (approximation)
 ```css
 :root { color-scheme: light dark; --surface: Canvas; --text: CanvasText;
   --separator: color-mix(in srgb, CanvasText 16%, transparent); --focus: Highlight; }
 .surface { color: var(--text); background: var(--surface); border: 1px solid var(--separator); }
 @supports (backdrop-filter: blur(1px)) {
-  .floating-controls { background: color-mix(in srgb, var(--surface) 78%, transparent); backdrop-filter: blur(18px) saturate(1.25); }
-}
+  .floating-controls { background: color-mix(in srgb, var(--surface) 78%, transparent); backdrop-filter: blur(18px) saturate(1.25); } }
 @media (prefers-reduced-transparency: reduce) { .floating-controls { background: var(--surface); backdrop-filter: none; } }
 :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 ```
-Starter values, not Apple specifications: measure contrast over real backgrounds.

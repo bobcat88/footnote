@@ -104,6 +104,3 @@ const swap = (update) => document.startViewTransition ? document.startViewTransi
 - Exits are shorter than entries: the user already decided.
 - A celebration (confetti, a bouncing check) belongs only where the outcome isn't already visible.
 - Check support in [design-trends.md](design-trends.md) (Table B) before relying on a newer feature.
-
-## Sources
-[@starting-style](https://developer.mozilla.org/en-US/docs/Web/CSS/@starting-style) · [transition-behavior](https://developer.mozilla.org/en-US/docs/Web/CSS/transition-behavior) · [Popover API](https://developer.mozilla.org/en-US/docs/Web/API/Popover_API) · [&lt;dialog&gt;](https://developer.mozilla.org/en-US/docs/Web/HTML/Element/dialog) · [View Transition API](https://developer.mozilla.org/en-US/docs/Web/API/View_Transition_API) · [prefers-reduced-motion](https://developer.mozilla.org/en-US/docs/Web/CSS/@media/prefers-reduced-motion) · [Entry and exit animations (developer.chrome.com)](https://developer.chrome.com/blog/entry-exit-animations) · [WCAG 2.3.3](https://www.w3.org/WAI/WCAG22/Understanding/animation-from-interactions.html)

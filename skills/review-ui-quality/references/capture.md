@@ -57,6 +57,3 @@ for (const screen of screens) for (const state of states) for (const theme of th
 ```
 
 G5: tab through every focusable element and record order and focus visibility (`design-check` does the visibility part). G7: rerun a screen with `reducedMotion: 'reduce'` and check nothing moves longer than the limit. G8: compare computed styles of a sample of elements with the `DESIGN.md` tokens.
-
-## Sources
-[Playwright screenshots](https://playwright.dev/docs/screenshots) · [Playwright accessibility testing](https://playwright.dev/docs/accessibility-testing) · [emulateMedia](https://playwright.dev/docs/api/class-page#page-emulate-media) · [Tauri mocking](https://v2.tauri.app/develop/tests/mocking/) · [prefers-reduced-motion (MDN)](https://developer.mozilla.org/en-US/docs/Web/CSS/@media/prefers-reduced-motion)

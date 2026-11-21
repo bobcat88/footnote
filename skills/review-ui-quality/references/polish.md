@@ -37,6 +37,3 @@ Run after the gates are green and no category is under 8. Each line is a check; 
 - Set `color-scheme`, a `theme-color`, styled scrollbars and `::selection` so browser-drawn parts match the theme.
 - Form controls get the brand through `accent-color` before custom widgets.
 - Favicon, page title and social preview exist and match the product (sites).
-
-## Sources
-[Material motion: easing and duration](https://m3.material.io/styles/motion/easing-and-duration/tokens-specs) · [CSS text-wrap (MDN)](https://developer.mozilla.org/en-US/docs/Web/CSS/text-wrap) · [font-variant-numeric (MDN)](https://developer.mozilla.org/en-US/docs/Web/CSS/font-variant-numeric) · [oklch() (MDN)](https://developer.mozilla.org/en-US/docs/Web/CSS/color_value/oklch) · [accent-color (MDN)](https://developer.mozilla.org/en-US/docs/Web/CSS/accent-color) · [Rendering performance (web.dev)](https://web.dev/articles/rendering-performance)

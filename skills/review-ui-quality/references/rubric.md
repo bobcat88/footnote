@@ -55,7 +55,3 @@ Pick the closest band and quote the evidence for it. Between two bands = ±1. A 
 - 8: one or two small deviations.
 - 6: visible variation between screens.
 - ≤ 4: screens look like different products.
-
-## Sources
-- WCAG 2.2: [1.4.3 Contrast](https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html), [1.4.11 Non-text contrast](https://www.w3.org/WAI/WCAG22/Understanding/non-text-contrast.html), [1.4.10 Reflow](https://www.w3.org/WAI/WCAG22/Understanding/reflow.html), [2.3.3 Animation from interactions](https://www.w3.org/WAI/WCAG22/Understanding/animation-from-interactions.html), [2.4.7 Focus visible](https://www.w3.org/WAI/WCAG22/Understanding/focus-visible.html), [2.4.11 Focus not obscured](https://www.w3.org/WAI/WCAG22/Understanding/focus-not-obscured-minimum.html), [2.5.8 Target size](https://www.w3.org/WAI/WCAG22/Understanding/target-size-minimum.html).
-- Line length: [WCAG 1.4.8 Visual presentation](https://www.w3.org/WAI/WCAG22/Understanding/visual-presentation.html) (80 characters at most); 45–75 is the usual typographic range.

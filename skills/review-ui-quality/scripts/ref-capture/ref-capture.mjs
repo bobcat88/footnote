@@ -204,11 +204,10 @@ export async function capture(browser, url, outDir, { shots = 6, waitMs = 6000, 
   return result;
 }
 
-const SKILLS = { css: 'transitions-dev', scripted: 'gsap-animation, transitions-dev, react-bits', webgl: 'gsap-animation for the DOM layer; **no skill for WebGL / Three.js / shaders (gap)**' };
+const SKILLS = { css: 'write-modern-css (motion recipes)', scripted: 'write-modern-css (timeline library rule)', webgl: 'write-modern-css (K7: WebGL fit and fallbacks)' };
 export function indexNote(results, date) {
-  const L = ['---', 'type: reference', 'status: active', 'tags:', '  - domain/design', '  - domain/dev/ui', '  - type/reference', `date_maj: ${date}`, '---', '# Design references: captured sites',
-    'Up: [[UI-Design-Ruleset]] · Related: [[WebUI Preferred Style Guide - Dataiku Dobre Ponder]] · [[ui-slop-patterns]] · [[qloop-ui-protocol]]', '',
-    `Captured ${date} at 1920×1080 with \`ref-capture\` (\`AI-Agents/skills/ui-ux-qloop/scripts/ref-capture/\`). Tokens are read from computed styles; library names are signatures found in scripts, evidence not proof. Cross-origin CSS cannot be read (count shown).`, '',
+  const L = ['# Design references: captured sites', '',
+    `Captured ${date} at 1920×1080 with \`ref-capture\`. Tokens are read from computed styles; library names are signatures found in scripts, evidence not proof. Cross-origin CSS cannot be read (count shown).`, '',
     '| Tier | Meaning | Skills in the stack |', '|---|---|---|', ...Object.entries(SKILLS).map(([k, v]) => `| ${k} | ${{ css: 'CSS transitions and keyframes only', scripted: 'GSAP, Lenis, rAF loops or WAAPI drive the motion', webgl: 'a real WebGL canvas or shaders' }[k]} | ${v} |`), '',
     '| Site | Tier | Page transitions | Idle motion | Libraries |', '|---|---|---|---|---|',
     ...results.map((r) => `| [${r.slug}](#${r.slug}) | ${r.tier || 'error'} | ${(r.pageTransitions || []).join(', ') || '-'} | ${r.idleMotion ? 'yes' : 'no'} | ${Object.keys(r.libs || {}).join(', ') || '-'} |`), ''];

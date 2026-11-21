@@ -13,5 +13,3 @@ Run the generic profile first, then `--profile material` (values in `review-ui-q
 - The Material web components have been in maintenance mode since June 2024 and don't include the Expressive update (shape morphing, spring motion), which is Compose-first. On the web, carry the tokens into native CSS.
 - Not scripted: colour roles and tonal palettes, layout margins and gutters, canonical layouts, spring motion.
 - One design language per product: never mix Material and Apple conventions on one screen.
-
-Sources: [M3 shape](https://m3.material.io/styles/shape/corner-radius-scale) · [M3 type scale](https://m3.material.io/styles/typography/type-scale-tokens) · [M3 motion tokens](https://m3.material.io/styles/motion/easing-and-duration/tokens-specs) · [M3 states](https://m3.material.io/foundations/interaction/states/state-layers) · [material-web status](https://github.com/material-components/material-web#readme)

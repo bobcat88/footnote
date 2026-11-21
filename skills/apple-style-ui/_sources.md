@@ -1,3 +1,7 @@
+---
+skill_hash: 5b2605442aebcf19
+reviewed: 2026-11-21
+---
 # Apple UI/UX research sources
 
 Initial research: 2026-10-31; WCAG criterion levels, target-size guidance, Apple SF font licensing, notification/Live Activity privacy guidance, and WidgetKit rendering-mode scope re-verified online: 2026-11-02. Primary-source document and WWDC transcript review; this is not a complete visual teardown of every Apple product, and it does not claim access to Apple’s internal design process. Refresh sources and platform-specific API details before each implementation.
