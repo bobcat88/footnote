@@ -97,25 +97,50 @@ def step():
         serde_json::from_slice::<Value>(&out.stdout).unwrap()
     };
     let mcp = |root: &str| mcp_with(serde_json::json!({"name": "helper", "root": root}));
-    let refused = mcp(root);
+    // An unindexed, unregistered folder is still refused (#211).
+    let stranger = dir.path().join("stranger");
+    fs::create_dir_all(&stranger).unwrap();
+    let refused = mcp(stranger.to_str().unwrap());
     assert!(
         refused.to_string().contains("not a project Footnote knows"),
         "{refused}"
     );
-    fs::create_dir_all(state.join("projects")).unwrap();
-    fs::write(
-        state.join("projects/demo.json"),
-        serde_json::json!({"name": "demo", "path": root}).to_string(),
-    )
-    .unwrap();
+    // A project indexed by `footnote code-index` works over MCP directly without requiring the Memory hook (#345).
     let reply = mcp(root);
     let text: Value =
         serde_json::from_str(reply["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
     assert_eq!(text["symbols"][0]["callers"][0]["name"], "run", "{reply}");
-    // Reading less (#240): one symbol's own lines, and a file's outline instead of the whole file.
+    // Reading less (#240): one symbol's own lines, a file's outline, and the architecture map (#345).
     let text_of = |r: Value| -> Value {
         serde_json::from_str(r["result"]["content"][0]["text"].as_str().unwrap()).unwrap()
     };
+    let map = text_of(mcp_with(
+        serde_json::json!({"map": true, "depth": 1, "root": root}),
+    ));
+    assert!(map["blocks"].is_array(), "{map}");
+    // Qualified symbol lookup (`lib::helper`) works in `footnote find` (#345).
+    let qfind = footnote(&state, &["find", "lib::helper"]);
+    let qcode = qfind["products"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|p| p["product"] == "code")
+        .unwrap();
+    assert_eq!(qcode["state"], "ok", "{qfind}");
+    // `footnote status` reports all three precise indexers (#345).
+    let st = footnote(&state, &["status"]);
+    assert!(
+        st["products"]["code"]["indexers"]["rust_analyzer"].is_boolean(),
+        "{st}"
+    );
+    assert!(
+        st["products"]["code"]["indexers"]["scip_typescript"].is_boolean(),
+        "{st}"
+    );
+    assert!(
+        st["products"]["code"]["indexers"]["scip_python"].is_boolean(),
+        "{st}"
+    );
     let body = text_of(mcp_with(
         serde_json::json!({"name": "helper", "root": root, "body": true}),
     ));

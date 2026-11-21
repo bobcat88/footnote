@@ -390,10 +390,15 @@ fn code(state: &Path, query: &str, limit: usize) -> Value {
         return v;
     }
     answer("code", || {
-        // Code looks symbols up by exact name, so a phrase cannot match one.
-        if !query.chars().all(|c| c.is_alphanumeric() || c == '_') {
+        // Code looks symbols up by exact or qualified name (`Foo::bar`, `Session.mount`), so a prose phrase cannot match one (#345).
+        let segments: Vec<&str> = query.split("::").flat_map(|s| s.split('.')).collect();
+        let valid_ident =
+            |s: &str| !s.is_empty() && s.chars().all(|c| c.is_alphanumeric() || c == '_');
+        if segments.is_empty() || !segments.iter().all(|s| valid_ident(s)) {
             return Ok(json!({"state": "not_a_symbol", "results": []}));
         }
+        let symbol = *segments.last().unwrap_or(&query);
+        let qualifier = (segments.len() > 1).then(|| segments[..segments.len() - 1].join("::"));
         let graphs: Vec<PathBuf> = std::fs::read_dir(state.join("code"))
             .into_iter()
             .flatten()
@@ -407,10 +412,23 @@ fn code(state: &Path, query: &str, limit: usize) -> Value {
         let mut results = Vec::new();
         for g in &graphs {
             // A graph that cannot be read is skipped: one stale project must not hide the others.
-            let Ok(v) = footnote_code::lookup(g, query, limit) else {
+            let Ok(v) = footnote_code::lookup(g, symbol, limit) else {
                 continue;
             };
             for s in v["symbols"].as_array().into_iter().flatten() {
+                if let Some(ref q) = qualifier {
+                    let ql = q.to_ascii_lowercase();
+                    let hay = format!(
+                        "{} {} {}",
+                        text(&s["path"], 400),
+                        text(&s["signature"], 300),
+                        text(&s["name"], 200)
+                    )
+                    .to_ascii_lowercase();
+                    if !hay.contains(&ql) && !ql.split("::").any(|part| hay.contains(part)) {
+                        continue;
+                    }
+                }
                 results.push(json!({
                     "title": format!("{} {}", text(&s["kind"], 20), text(&s["name"], 200)),
                     "detail": format!("{}:{}", text(&s["path"], 400), s["lines"][0].as_i64().unwrap_or(0)),

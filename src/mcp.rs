@@ -603,12 +603,23 @@ fn dispatch(db: &Path, name: &str, args: &Value) -> Result<Value> {
                 Some(r) => std::path::PathBuf::from(r),
                 None => std::env::current_dir()?,
             };
-            // Only projects Footnote has recorded, never any folder on the machine (#211).
+            // Only projects Footnote knows (hook-recorded or code-indexed), never any folder on the machine (#211, #345).
             if !known_project(&crate::state::state_dir()?, &root) {
                 bail!(
-                    "{} is not a project Footnote knows: start an agent session there (the memory hook records it) and try again",
+                    "{} is not a project Footnote knows: run `footnote code-index` or start an agent session there and try again",
                     root.display()
                 );
+            }
+            // `map`: architecture map (blocks, inter-block links, outside packages) (#345).
+            if args["map"] == true {
+                let depth = match args.get("depth") {
+                    None | Some(Value::Null) => 2,
+                    Some(v) => v
+                        .as_u64()
+                        .filter(|n| (1..=5).contains(n))
+                        .context("`depth` must be 1 to 5")? as usize,
+                };
+                return footnote_code::map(&app::code_db(&root)?, depth);
             }
             // `stack`: the libraries the project uses, from manifests, else imports; reports the difference from the recorded
             // stack but records nothing (recording is `footnote stack` on the command line).
@@ -654,20 +665,29 @@ fn dispatch(db: &Path, name: &str, args: &Value) -> Result<Value> {
     }
 }
 
-/// Whether `root` is a project the hook recorded (`<state>/projects/*.json`) or a folder inside one (#211).
+/// Whether `root` is a project recorded by the memory hook (`<state>/projects/*.json`), has an indexed code graph
+/// (`<state>/code/*.db`), or is a folder inside one (#211, #345).
 #[cfg(feature = "code")]
 fn known_project(state: &std::path::Path, root: &std::path::Path) -> bool {
     let canon = |p: &std::path::Path| std::fs::canonicalize(p).ok();
     let Some(want) = canon(root) else {
         return false;
     };
-    std::fs::read_dir(state.join("projects"))
+    let in_projects = std::fs::read_dir(state.join("projects"))
         .into_iter()
         .flatten()
         .flatten()
         .filter_map(|e| serde_json::from_slice::<Value>(&std::fs::read(e.path()).ok()?).ok())
         .filter_map(|v| canon(std::path::Path::new(v["path"].as_str()?)))
-        .any(|p| want.starts_with(p))
+        .any(|p| want.starts_with(p));
+    if in_projects {
+        return true;
+    }
+    // `app::code_db` keys on `std::path::absolute` (no Windows `\\?\` prefix), so check ancestors of the absolute path.
+    std::path::absolute(root).is_ok_and(|abs| {
+        abs.ancestors()
+            .any(|dir| app::code_db(dir).is_ok_and(|db| db.is_file()))
+    })
 }
 
 /// Read-only connection. Read tools never create a database.
@@ -1178,7 +1198,7 @@ fn tool_definitions() -> Value {
     if let Some(list) = tools.as_array_mut() {
         list.push(json!({
             "name": "footnote_code",
-            "description": "Read-only code graph: symbol defs/callers/callees, impact radius, file outline, unresolved calls, stack, or frame readiness.",
+            "description": "Read-only code graph: symbol defs/callers/callees, impact, outline, unresolved, map, stack, or frame.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -1186,6 +1206,8 @@ fn tool_definitions() -> Value {
                     "body": {"type": "boolean", "description": "Include def source (<=150 lines)."},
                     "outline": {"type": "string", "description": "File path -> definitions & line ranges."},
                     "unresolved": {"type": "string", "description": "File/fn -> unlinked calls & candidates."},
+                    "map": {"type": "boolean", "description": "Architecture map (blocks, links, outside)."},
+                    "depth": {"type": "integer", "minimum": 1, "maximum": 5, "default": 2},
                     "stack": {"type": "boolean", "description": "Detect project libraries (read-only)."},
                     "frame": {"type": "boolean", "description": "Project readiness score 0-100 (read-only)."},
                     "root": {"type": "string", "description": "Project folder (default cwd)."},

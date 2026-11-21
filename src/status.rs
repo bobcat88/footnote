@@ -21,7 +21,7 @@ pub fn status() -> Result<Value> {
     }))
 }
 
-/// Footnote Code: built in or not, how many project graphs exist, and whether the Rust indexer it needs is on the PATH.
+/// Footnote Code: built in or not, how many project graphs exist, and which precise indexers are on PATH (#345).
 fn code(state: &Path) -> Value {
     if !cfg!(feature = "code") {
         return json!({"built": false});
@@ -32,13 +32,28 @@ fn code(state: &Path) -> Value {
             .filter(|e| e.path().extension().is_some_and(|x| x == "db"))
             .count()
     });
-    let indexer = std::process::Command::new("rust-analyzer")
-        .arg("--version")
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .status()
-        .is_ok_and(|s| s.success());
-    json!({"built": true, "enabled": enabled, "graphs": graphs, "rust_indexer": indexer})
+    let probe = |bin: &str| {
+        std::process::Command::new(bin)
+            .arg("--version")
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .is_ok_and(|s| s.success())
+    };
+    let rust = probe("rust-analyzer");
+    let ts = probe("scip-typescript");
+    let py = probe("scip-python");
+    json!({
+        "built": true,
+        "enabled": enabled,
+        "graphs": graphs,
+        "rust_indexer": rust,
+        "indexers": {
+            "rust_analyzer": rust,
+            "scip_typescript": ts,
+            "scip_python": py,
+        }
+    })
 }
 
 /// A product's on/off switch as the user or company policy set it (on by default).
