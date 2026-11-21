@@ -1927,12 +1927,11 @@ fn rebinds(t: &str, name: &str) -> bool {
 
 /// The project's files, relative with `/`: what git tracks or would track (so `.gitignore` is honoured), or, outside a git
 /// repository or without git, ripgrep's parallel `ignore` walker honoring `.gitignore`, dot-folder / `SKIP` pruning,
-/// symlink rejection, and deterministic sorted output (#355).
+/// symlink rejection, and deterministic sorted output (#355). Git runs hardened (`footnote_core::git_command`): the
+/// repository's own `core.fsmonitor` never starts a program.
 pub(crate) fn candidates(root: &Path) -> Vec<String> {
-    let git = std::process::Command::new("git")
+    let git = footnote_core::git_command(root)
         .args(["ls-files", "-co", "--exclude-standard", "-z"])
-        .current_dir(root)
-        .stdin(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .output();
     if let Some(out) = git

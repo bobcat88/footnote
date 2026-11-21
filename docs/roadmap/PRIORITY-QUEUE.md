@@ -74,6 +74,7 @@ Value-ordered implementation queue for open Footnote GitHub issues.
 | 28 | #133 | #88 | encryption | 3 | M | #129 | Encryption: macOS and Linux key stores |
 | 29 | #134 | #88 | encryption | 4 | M | #130 | Encryption: independent security review |
 | 30 | #125 | #87 | installer | 4 | M | — | Windows installer (NSIS or cargo-dist) |
+| 30b | #392 | #87 | installer | 4 | S | — | Official Docker support (local-first PoC, one-shot + long-lived daemon, `FOOTNOTE_PATH_MAP`, Windows `os error 4551` workaround) |
 | 31 | #123 | #86 | launcher | 3 | M | — | Linux and macOS builds of the launcher |
 | 32 | #121 | #86 | launcher | 3 | S | — | Icon family: one icon per product |
 | 33 | #120 | #86 | launcher | 3 | M | #343 | Independent QLoop critic over every launcher screen |

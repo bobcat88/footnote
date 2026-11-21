@@ -108,6 +108,7 @@ footnote docs add https://flask.palletsprojects.com/en/stable/ --site flask
 - **Update & rollback:** `footnote update --from <new-binary>` atomically swaps binaries even while agents run; `footnote rollback` restores the previous one.
 - **Uninstall:** `footnote uninstall --memory --lean` cleanly removes hooks and MCP entries while keeping your databases and backups.
 - **Full OS & harness walkthrough:** see **[HOW-TO.md](HOW-TO.md)**.
+- **Docker (Windows App Control, shared hub):** a hardened image (`Dockerfile`) and a long-lived daemon for several agents (`compose.yaml`). See [HOW-TO.md → Docker](HOW-TO.md#docker-when-windows-blocks-local-builds).
 
 ### Connect your agent
 
@@ -163,6 +164,7 @@ Footnote assumes retrieved text is **untrusted data** that may contain prompt in
   1. Explicit commands you run: `footnote models install`, `footnote docs add`, `footnote docs refresh`, `footnote docs install <url>`, and `footnote crawl`.
   2. Optional live fetch-on-miss in `footnote find` (and the MCP `footnote_recall` with `all=true`): when cached docs have no strong match, it fetches up to 3 in-scope pages (honoring `robots.txt`, never sending your query text). Set `FOOTNOTE_NO_LIVE_FETCH=1` to disable completely.
 - **Private local state:** User-only permissions/ACLs for state, HMAC daemon handshake, and tamper-evident audit log (`footnote audit verify`). Details in [SECURITY.md](SECURITY.md).
+- **Hardened container:** the `Dockerfile` and `compose.yaml` run as non-root (`10001`) with `--network none`, a read-only rootfs, no capabilities, read-only workspace mounts, a private state volume and digest-pinned base images; a mounted repository's `.git/config` cannot start a program. Docker access is memory access: see [SECURITY.md](SECURITY.md#who-can-reach-the-hub-access-control).
 
 ---
 
@@ -176,7 +178,7 @@ Footnote assumes retrieved text is **untrusted data** that may contain prompt in
 **Work in progress / known limits:**
 - **Desktop Launcher (`apps/launcher`, Tauri 2):** builds and runs on Windows from source ([apps/launcher/README.md](apps/launcher/README.md)); no Windows installer yet (`#125`).
 - **macOS prebuilt releases:** not in CI yet (build from source with Cargo).
-- **Managed Windows / App Control:** unsigned local `.exe` builds can be blocked by corporate policies; Docker support is tracked in `#392`.
+- **Managed Windows / App Control:** unsigned local `.exe` builds can be blocked by corporate policies; use the hardened Docker image ([HOW-TO.md](HOW-TO.md#docker-when-windows-blocks-local-builds)). In Docker, memory hooks and `footnote personal` (DPAPI) are not available.
 - **Encrypted memory store (`--features encryption`, Windows):** experimental SQLCipher store; agent transcripts on disk remain plain text.
 - **English stemmer default:** beats per-language stemming on mixed EN/FR corpora, though a pure French corpus may prefer a French stemmer.
 

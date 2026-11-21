@@ -479,3 +479,373 @@ fn serve_without_the_mcp_flag_fails_with_a_clear_error() {
     let stderr = String::from_utf8(out).unwrap();
     assert!(stderr.contains("--mcp"), "stderr: {stderr}");
 }
+
+#[cfg(all(feature = "code", feature = "memory", unix))]
+#[test]
+fn path_map_translates_windows_host_paths_for_hook_and_mcp_code() {
+    let t = tmp();
+    let state = t.path().join("state");
+    fs::create_dir(&state).unwrap();
+    let repo = t.path().join("demo");
+    fs::create_dir(&repo).unwrap();
+    fs::write(repo.join("app.py"), "def greet():\n    return 42\n").unwrap();
+
+    let map_spec = format!(r"C:\work\repos={}", t.path().display());
+
+    // 1. Register project via SessionStart hook carrying a Windows host cwd.
+    let hook_event = json!({
+        "hook_event_name": "SessionStart",
+        "session_id": "docker-map-test",
+        "cwd": r"C:\work\repos\demo",
+    });
+    Command::new(assert_cmd::cargo::cargo_bin!("footnote"))
+        .env("FOOTNOTE_STATE_DIR", &state)
+        .env("FOOTNOTE_PATH_MAP", &map_spec)
+        .arg("hook")
+        .write_stdin(format!("{hook_event}\n"))
+        .assert()
+        .success();
+
+    // 2. Build the tree-sitter code graph inside the container path.
+    Command::new(assert_cmd::cargo::cargo_bin!("footnote"))
+        .env("FOOTNOTE_STATE_DIR", &state)
+        .args(["code-index"])
+        .arg(&repo)
+        .assert()
+        .success();
+
+    // 3. Query footnote_code over MCP using the Windows host path and verify traversal is refused.
+    let db = state.join("memory.db");
+    let req_ok = json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "tools/call",
+        "params": {
+            "name": "footnote_code",
+            "arguments": {"root": r"C:\work\repos\demo", "name": "greet"}
+        }
+    });
+    let req_traversal = json!({
+        "jsonrpc": "2.0",
+        "id": 2,
+        "method": "tools/call",
+        "params": {
+            "name": "footnote_code",
+            "arguments": {"root": r"C:\work\repos\demo\..\demo", "name": "greet"}
+        }
+    });
+    let out = cmd(&db)
+        .env("FOOTNOTE_STATE_DIR", &state)
+        .env("FOOTNOTE_PATH_MAP", &map_spec)
+        .args(["serve", "--mcp"])
+        .write_stdin(format!("{req_ok}\n{req_traversal}\n"))
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let replies: Vec<Value> = String::from_utf8(out)
+        .unwrap()
+        .lines()
+        .map(|l| serde_json::from_str(l).unwrap())
+        .collect();
+    assert_eq!(replies.len(), 2);
+    assert_ne!(
+        replies[0]["result"]["isError"],
+        json!(true),
+        "mapped host root failed: {}",
+        replies[0]
+    );
+    let body = replies[0]["result"]["content"][0]["text"]
+        .as_str()
+        .unwrap_or_default();
+    assert!(body.contains("greet"), "expected symbol greet in: {body}");
+    assert_eq!(
+        replies[1]["result"]["isError"],
+        json!(true),
+        "traversal root must be refused: {}",
+        replies[1]
+    );
+}
+
+#[cfg(feature = "memory")]
+#[test]
+fn memory_db_cold_start_read_tools_return_empty_without_creating_db() {
+    let t = tmp();
+    let state = t.path().join("state");
+    fs::create_dir(&state).unwrap();
+    let db = state.join("memory.db");
+
+    let reqs = [
+        json!({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"footnote_info","arguments":{"op":"health"}}}),
+        json!({"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"footnote_info","arguments":{"op":"stats"}}}),
+        json!({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"footnote_info","arguments":{"op":"export"}}}),
+        json!({"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"footnote_wake_up","arguments":{"project":"demo"}}}),
+        json!({"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"footnote_recall","arguments":{"query":"anything","project":"demo"}}}),
+    ];
+    let input: String = reqs.iter().map(|r| format!("{r}\n")).collect();
+    let out = cmd(&db)
+        .env("FOOTNOTE_STATE_DIR", &state)
+        .args(["serve", "--mcp"])
+        .write_stdin(input)
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let replies: Vec<Value> = String::from_utf8(out)
+        .unwrap()
+        .lines()
+        .map(|l| serde_json::from_str(l).unwrap())
+        .collect();
+    assert_eq!(replies.len(), 5);
+    for (i, r) in replies.iter().enumerate() {
+        assert_eq!(
+            r["result"]["isError"],
+            json!(false),
+            "cold-start call {} returned error: {r}",
+            i + 1
+        );
+    }
+    let health: Value =
+        serde_json::from_str(replies[0]["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+    assert_eq!(health["chunks"], 0);
+    assert_eq!(health["semantic_state"], "empty");
+    assert_eq!(health["database_exists"], false);
+
+    let wake: Value =
+        serde_json::from_str(replies[3]["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+    assert_eq!(wake["kind"], "memory_pack");
+    assert_eq!(wake["memories"], json!([]));
+
+    let recall: Value =
+        serde_json::from_str(replies[4]["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+    assert_eq!(recall["results"], json!([]));
+
+    assert!(
+        !db.exists(),
+        "cold-start read tools must never create memory.db"
+    );
+}
+
+#[cfg(feature = "memory")]
+#[test]
+fn memory_recall_project_filter_wake_up_pack_activity_and_chunk_hint() {
+    let t = tmp();
+    let state = t.path().join("state");
+    fs::create_dir(&state).unwrap();
+    let db = state.join("memory.db");
+
+    let reqs = [
+        json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "footnote_remember",
+                "arguments": {
+                    "memories": [
+                        {
+                            "kind": "fact",
+                            "scope": "alpha-app",
+                            "text": "Connection pool size 64 increased tail latency",
+                            "observed_at": "2026-11-21",
+                            "tags": ["perf"]
+                        },
+                        {
+                            "kind": "fact",
+                            "scope": "beta-app",
+                            "text": "Connection pool note for another project",
+                            "observed_at": "2026-11-21"
+                        },
+                        {
+                            "kind": "preference",
+                            "scope": "alpha-app",
+                            "text": "Always run integration checks before merging",
+                            "observed_at": "2026-11-21"
+                        }
+                    ]
+                }
+            }
+        }),
+        json!({
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/call",
+            "params": {
+                "name": "footnote_recall",
+                "arguments": {"query": "Connection pool", "project": "alpha-app", "mode": "lexical"}
+            }
+        }),
+        json!({
+            "jsonrpc": "2.0",
+            "id": 3,
+            "method": "tools/call",
+            "params": {
+                "name": "footnote_recall",
+                "arguments": {"query": "Connection pool", "project": "alpha-app", "tags": ["perf"], "mode": "lexical"}
+            }
+        }),
+        json!({
+            "jsonrpc": "2.0",
+            "id": 4,
+            "method": "tools/call",
+            "params": {
+                "name": "footnote_wake_up",
+                "arguments": {"project": "alpha-app"}
+            }
+        }),
+        json!({
+            "jsonrpc": "2.0",
+            "id": 5,
+            "method": "tools/call",
+            "params": {
+                "name": "footnote_get",
+                "arguments": {"id": 1, "kind": "record"}
+            }
+        }),
+        json!({
+            "jsonrpc": "2.0",
+            "id": 6,
+            "method": "tools/call",
+            "params": {
+                "name": "footnote_info",
+                "arguments": {"op": "export"}
+            }
+        }),
+    ];
+    let input: String = reqs.iter().map(|r| format!("{r}\n")).collect();
+    let out = cmd(&db)
+        .env("FOOTNOTE_STATE_DIR", &state)
+        .args(["serve", "--mcp"])
+        .write_stdin(input)
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let replies: Vec<Value> = String::from_utf8(out)
+        .unwrap()
+        .lines()
+        .map(|l| serde_json::from_str(l).unwrap())
+        .collect();
+    assert_eq!(replies.len(), 6);
+
+    // 1. Project-scoped recall returns only alpha-app memory (not beta-app).
+    assert_eq!(replies[1]["result"]["isError"], json!(false));
+    let r_proj: Value =
+        serde_json::from_str(replies[1]["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+    let hits = r_proj["results"].as_array().unwrap();
+    assert_eq!(hits.len(), 1, "expected 1 alpha-app hit, got: {r_proj}");
+    assert!(hits[0]["text"].as_str().unwrap().contains("tail latency"));
+
+    // 2. Combined project + tags recall works.
+    assert_eq!(replies[2]["result"]["isError"], json!(false));
+    let r_tags: Value =
+        serde_json::from_str(replies[2]["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+    assert_eq!(r_tags["results"].as_array().unwrap().len(), 1);
+
+    // 3. wake_up uses memory_pack ordering (preferences pinned before facts, scoped to project).
+    assert_eq!(replies[3]["result"]["isError"], json!(false));
+    let wake: Value =
+        serde_json::from_str(replies[3]["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+    assert_eq!(wake["kind"], "memory_pack");
+    assert_eq!(wake["retrieval"], "memory_pack");
+    let mems = wake["memories"].as_array().unwrap();
+    assert_eq!(mems.len(), 2, "expected 2 alpha-app memories, got: {wake}");
+    assert_eq!(mems[0]["kind"], "preference");
+    assert_eq!(mems[1]["kind"], "fact");
+
+    // 4. record lookup on memory DB hints at kind="chunk".
+    assert_eq!(replies[4]["result"]["isError"], json!(true));
+    let err_msg = replies[4]["result"]["content"][0]["text"].as_str().unwrap();
+    assert!(err_msg.contains("chunk"), "expected chunk hint: {err_msg}");
+
+    // 5. export on memory DB reports memory count and chunk note.
+    assert_eq!(replies[5]["result"]["isError"], json!(false));
+    let exp: Value =
+        serde_json::from_str(replies[5]["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+    assert_eq!(exp["memories"], 3);
+    assert!(exp["note"].as_str().unwrap().contains("chunks"));
+
+    // 6. footnote status reports recalls_last_7_days >= 2 from MCP recalls.
+    let status_out = Command::new(assert_cmd::cargo::cargo_bin!("footnote"))
+        .env("FOOTNOTE_STATE_DIR", &state)
+        .arg("status")
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let status: Value = serde_json::from_slice(&status_out).unwrap();
+    assert!(
+        status["products"]["memory"]["recalls_last_7_days"]
+            .as_u64()
+            .unwrap_or(0)
+            >= 2,
+        "expected recalls_last_7_days >= 2 in status: {status}"
+    );
+}
+
+#[cfg(feature = "memory")]
+#[test]
+fn footnote_remember_uses_configured_memory_models_when_model_omitted() {
+    let t = tmp();
+    let state = t.path().join("state");
+    let fake_model = state.join("models/test-configured-model");
+    fs::create_dir_all(&fake_model).unwrap();
+    fs::write(
+        fake_model.join("manifest.json"),
+        json!({
+            "runtime": "unsupported-test-runtime",
+            "files": {},
+            "pooling": "attention-mask-mean-l2",
+            "query_prefix": "",
+            "passage_prefix": "",
+            "max_length": 512,
+            "dimension": 384
+        })
+        .to_string(),
+    )
+    .unwrap();
+    fs::write(
+        state.join("memory.json"),
+        json!({"models": [fake_model]}).to_string(),
+    )
+    .unwrap();
+    let db = state.join("memory.db");
+    let req = json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "tools/call",
+        "params": {
+            "name": "footnote_remember",
+            "arguments": {
+                "memories": [{
+                    "kind": "fact",
+                    "scope": "demo",
+                    "text": "Configured models must be picked up automatically",
+                    "observed_at": "2026-11-21"
+                }]
+            }
+        }
+    });
+    let out = cmd(&db)
+        .env("FOOTNOTE_STATE_DIR", &state)
+        .args(["serve", "--mcp"])
+        .write_stdin(format!("{req}\n"))
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let reply: Value = serde_json::from_str(String::from_utf8(out).unwrap().trim()).unwrap();
+    // Attempting to load the configured dummy runtime proves footnote_remember picked up
+    // `memory.json` models automatically when `model` was omitted.
+    assert_eq!(reply["result"]["isError"], json!(true));
+    let msg = reply["result"]["content"][0]["text"].as_str().unwrap();
+    assert!(
+        msg.contains("unsupported embedding runtime: unsupported-test-runtime"),
+        "expected configured model load attempt, got: {msg}"
+    );
+}

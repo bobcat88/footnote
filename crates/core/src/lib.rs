@@ -7,6 +7,7 @@ pub mod audit;
 pub mod config;
 pub mod jobs;
 pub mod metrics;
+pub mod path_map;
 pub mod state;
 
 pub const MAX_FILE: u64 = 16 * 1024 * 1024;
@@ -42,6 +43,35 @@ pub fn helper_env(cmd: &mut std::process::Command) {
             cmd.env(key, value);
         }
     }
+}
+/// A read-only `git` query that a repository's own config cannot use to start a program.
+///
+/// Footnote only asks git questions (`ls-files`, `rev-parse`, `remote get-url`, `status`). A repository's
+/// `.git/config` can still name a program git runs while answering them: `core.fsmonitor` runs on every index
+/// read. The container image trusts every mounted repository for ownership (`safe.directory`), and there the
+/// state volume holds every project's memories and the audit key. So the query turns fsmonitor off on the
+/// command line, which outranks the repository's config. `--no-optional-locks` keeps `status` from rewriting
+/// the index (a read-only mount, or the user's own git running at the same moment). Filter drivers (`git status`)
+/// are handled by the memory hook, which skips `status` for a repository that defines its own.
+///
+/// Stat checks compare only mtime, size and mode (`core.checkStat=minimal`, `core.trustctime=false`). A
+/// repository mounted into a container keeps the host's index, whose inode, device and ctime never match. A full
+/// check made `status` re-hash every file, and with a Windows checkout's CRLF it listed every file as changed.
+#[must_use]
+pub fn git_command(cwd: &Path) -> std::process::Command {
+    let mut cmd = std::process::Command::new("git");
+    cmd.args([
+        "--no-optional-locks",
+        "-c",
+        "core.fsmonitor=false",
+        "-c",
+        "core.checkStat=minimal",
+        "-c",
+        "core.trustctime=false",
+    ])
+    .current_dir(cwd)
+    .stdin(std::process::Stdio::null());
+    cmd
 }
 #[must_use]
 pub fn is_link(p: &Path) -> bool {

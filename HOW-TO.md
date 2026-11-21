@@ -93,28 +93,35 @@ Windows **Smart App Control** or a managed **WDAC / AppLocker** policy stops `ca
 docker build -t footnote:local .
 ```
 
-Everything Footnote keeps (memory DB, indexes, models) lives in `/state`; mount a named volume there so it survives `--rm`. Mount the project you work on at `/workspace`:
+Everything Footnote keeps (memory DB, indexes, models) lives in `/state`; mount a named volume there so it survives `--rm`. Mount the project you work on at `/workspace`, read-only. The image runs as a non-root user (`10001`); run it offline with a read-only root filesystem and no capabilities (PowerShell: replace each trailing `\` with a backtick):
 
 ```bash
-docker run --rm -i -v footnote-state:/state -v "${PWD}:/workspace" footnote:local status
-docker run --rm -i -v footnote-state:/state footnote:local models install bekko-a8m gte-small
-docker run --rm -i -v footnote-state:/state -v "${PWD}:/workspace" footnote:local code-index .
+H="--network none --read-only --tmpfs /tmp:rw,noexec,nosuid,size=64m --cap-drop=ALL --security-opt=no-new-privileges:true"
+docker run --rm -i $H -v footnote-state:/state -v "${PWD}:/workspace:ro" footnote:local status
+docker run --rm -i $H -v footnote-state:/state -v "${PWD}:/workspace:ro" footnote:local code-index .
+# The only commands that need the network (bridged, never --network host):
+docker run --rm -i --read-only --tmpfs /tmp:rw,noexec,nosuid,size=64m --cap-drop=ALL \
+  --security-opt=no-new-privileges:true -v footnote-state:/state footnote:local models install bekko-a8m gte-small
 ```
 
-MCP entry for an agent on the host (stdio through `docker run -i`):
+MCP entry for an agent on the host (stdio through `docker run -i`; use the absolute path of `docker` for GUI hosts):
 
 ```json
 {
   "mcpServers": {
     "footnote-memory": {
       "command": "docker",
-      "args": ["run", "--rm", "-i", "-v", "footnote-state:/state", "footnote:local", "--db", "/state/memory.db", "mcp"]
+      "args": ["run", "--rm", "-i", "--network", "none", "--read-only", "--tmpfs", "/tmp:rw,noexec,nosuid,size=64m",
+               "--cap-drop=ALL", "--security-opt=no-new-privileges:true",
+               "-v", "footnote-state:/state", "footnote:local", "--db", "/state/memory.db", "mcp"]
     }
   }
 }
 ```
 
-Limits: the container gives you the CLI and the MCP server. `footnote install` hooks (Memory recall, Lean shell compaction) call a `footnote` binary on the host, so they do not work from the container. To reach a service on the host (for example Ollama on port 11434), add `--add-host=host.docker.internal:host-gateway` and use `http://host.docker.internal:11434`; Footnote's embeddings still run in-process and do not use Ollama yet.
+Each such session starts a container and loads the models again. For several agents, keep one daemon running with `compose.yaml` instead: see [Section 8](#8-docker-shared-hub-compose-path-mapping-and-limits). A `footnote-state` volume written by an earlier image that ran as root needs its owner changed once: `docker run --rm -u 0 -v footnote-state:/state --entrypoint chown footnote:local -R 10001:10001 /state`.
+
+Limits: the container gives you the CLI and the MCP server. `footnote install` hooks (Memory recall, Lean shell compaction) call a `footnote` binary on the host, so they do not work from the container. To reach a service on the host (for example Ollama on port 11434), drop `--network none`, add `--add-host=host.docker.internal:host-gateway` and use `http://host.docker.internal:11434`; Footnote's embeddings still run in-process and do not use Ollama yet.
 
 ---
 
@@ -368,9 +375,9 @@ To also remove all local data, indexes, and downloaded models, delete the state 
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| `cargo build` fails with `An Application Control policy has blocked this file (os error 4551)` | Windows Smart App Control / WDAC blocks unsigned build scripts | Use Docker (Section 2, *Docker*); do not weaken the policy |
+| `cargo build` fails with `An Application Control policy has blocked this file (os error 4551)` | Windows Smart App Control / WDAC blocks unsigned build scripts (and an unsigned `footnote.exe`); self-signing does not get past it | Use Docker (Section 2, *Docker*); do not weaken the policy (turning Smart App Control off cannot be undone without reinstalling Windows) |
 | `install` says config file changed while updating | Agent (e.g. Claude Code) rewrote its settings file mid-write | Close the agent session and re-run `footnote install ...` |
-| MCP host fails to spawn `footnote` | Non-interactive GUI host does not inherit shell `PATH` | Use the absolute path to `footnote` / `footnote.exe` in MCP config |
+| MCP host fails to spawn `footnote` | Non-interactive GUI host does not inherit shell `PATH` | Use the absolute path to `footnote` / `footnote.exe` (or `docker.exe` in Docker mode) in MCP config |
 | `sccache` fails with `os error 206` on Windows | Long worktree paths exceed Windows `MAX_PATH` under `sccache` | Run `$env:RUSTC_WRAPPER = ''` before `cargo` commands |
 | Linux state dir permission warning | Private state folder expects owner-only mode (`0700`) | `chmod 700 ~/.local/state/footnote` |
 | `footnote code-index` slow on first Rust run | `rust-analyzer scip` builds the workspace on first index | Expected for compiler-grade Rust graphs; tree-sitter runs in milliseconds on non-Rust projects |
@@ -379,7 +386,113 @@ To also remove all local data, indexes, and downloaded models, delete the state 
 
 ---
 
-## 8. Reporting Test Findings
+## 8. Docker: Shared Hub (Compose), Path Mapping and Limits
+
+Section 2 (*Docker*) builds the image and runs it one command at a time. This section keeps **one hardened daemon** running for every agent on the machine (or on a hub), with warm embedding models.
+
+**Security defaults** (image and `compose.yaml`):
+- Non-root user `footnote` (`10001:10001`), `ENTRYPOINT ["footnote"]`, no `curl`/`wget` in the runtime image, base images pinned by `@sha256` digest (Dependabot refreshes them).
+- Offline (`--network none`), `--read-only` rootfs with a `noexec` `/tmp` tmpfs, `--cap-drop=ALL`, `--security-opt=no-new-privileges:true`.
+- **Always use a named Docker volume** on `/state`, never a Windows host bind-mount, so `0700`/`0600` permissions, atomic `hard_link` secrets, and Unix daemon sockets work reliably on ext4 inside WSL 2.
+- Mount repositories **read-only** (`:ro`) at `/workspace` or under `/workspaces`: git trusts mounted repositories there only, and Footnote's git queries never run a repository's `core.fsmonitor` or filter drivers.
+- The Compose network profile (`footnote-net`) mounts no workspace. The daemon is bounded (`pids_limit`, `mem_limit`, rotated logs), and live fetch-on-miss is off (`FOOTNOTE_NO_LIVE_FETCH=1`).
+- **Access = Docker access.** Anyone who can use the Docker engine (`docker-users` on Windows, `docker` on Linux) can read every memory in the volume. Run one stack per team or tenant. For agents on other machines, use SSH with a forced command, never the Docker TCP socket. See [SECURITY.md → Who can reach the hub](SECURITY.md#who-can-reach-the-hub-access-control).
+
+### Start the Daemon (`compose.yaml`)
+
+`FOOTNOTE_WORKSPACES`, the host folder that holds your repositories (mounted read-only at `/workspaces`), is **required** by every Compose command, including the `net` profile. Put it once in a `.env` file next to `compose.yaml` (git ignores it). `compose.yaml` derives `FOOTNOTE_PATH_MAP` from it unless you set that yourself. Other settings (`FOOTNOTE_CONTAINER_NAME`, `FOOTNOTE_STATE_VOLUME` (default `footnote-state`, the volume of the one-shot commands too), `FOOTNOTE_DB`, `FOOTNOTE_PIDS_LIMIT`, `FOOTNOTE_MEM_LIMIT`, `FOOTNOTE_UID`/`FOOTNOTE_GID`) are listed at the top of `compose.yaml`.
+
+```text
+# .env (Windows example; Linux: FOOTNOTE_WORKSPACES=/home/<user>/repos)
+FOOTNOTE_WORKSPACES=C:\Users\<user>\repos
+```
+
+```bash
+docker compose up -d
+docker compose ps
+
+# One-time model download, through the explicit-network profile:
+docker compose --profile net run --rm footnote-net models install bekko-a8m gte-small
+docker compose --profile net run --rm footnote-net models use bekko-a8m gte-small
+
+# Make each repository known to footnote_code (and refresh it after changes):
+docker exec footnote footnote code-index /workspaces/<repo>
+
+# Full isolated smoke suite (temporary volume and containers, cleaned up on exit):
+bash scripts/docker-smoke.sh footnote:local
+```
+
+### Host MCP Configuration via Docker
+
+Use the **absolute path to your `docker` executable** so GUI MCP hosts (Cursor, Windsurf, Zed, Antigravity, VS Code, Cline, Claude Code, Codex) can spawn it without shell `PATH` inheritance:
+
+- **Windows (`pwsh`):** `(Get-Command docker).Source -replace '\\', '/'`
+- **Linux (`bash`):** `command -v docker`
+
+```json
+{
+  "mcpServers": {
+    "footnote-memory": {
+      "command": "/ABSOLUTE/PATH/TO/docker",
+      "args": ["exec", "-i", "footnote", "footnote", "--db", "/state/memory.db", "mcp"]
+    }
+  }
+}
+```
+
+### Host-to-Container Path Mapping (`FOOTNOTE_PATH_MAP`)
+
+An agent on a Windows host sends Windows paths (`footnote_code` `root`, hook `cwd`), such as `C:\Users\<user>\repos\my-app`. `FOOTNOTE_PATH_MAP` translates them with semicolon-separated `HOST_PREFIX=CONTAINER_PREFIX` pairs (`compose.yaml` derives it from `FOOTNOTE_WORKSPACES`):
+
+```text
+FOOTNOTE_PATH_MAP=C:\Users\<user>\repos=/workspaces;C:\Users\<user>\.claude=/host-claude
+```
+
+- Matches full path-segment boundaries only (`C:\work\app` never matches `C:\work\app2`); drive paths compare case-insensitively, `\` and `/` alike.
+- Longest matching prefix wins; any `..` traversal segment in the relative tail fails closed.
+- Mounting a parent folder (`FOOTNOTE_WORKSPACES` → `/workspaces:ro`) keeps each repository's code graph separate.
+
+### Backup of the Named Volume
+
+```powershell
+# Windows (pwsh): a consistent, SHA-256-verified SQLite backup in a host folder
+docker run --rm --network none --read-only --tmpfs /tmp:rw,noexec,nosuid,size=64m `
+  --cap-drop=ALL --security-opt=no-new-privileges:true `
+  -v footnote-state:/state -v "${PWD}:/backups" `
+  footnote:local --db /state/memory.db backup --output /backups/memory-backup.db
+```
+
+The backup holds every memory in clear text: keep it where only you (or the hub's operators) can read it. On Linux, the target folder must be writable by UID `10001` (for example `sudo install -d -m 0700 -o 10001 -g 10001 ./backups`, then mount `./backups`).
+
+### Docker Feature Compatibility Matrix
+
+| Product / Command | Docker status | Notes |
+|---|---|---|
+| **Footnote Memory** (`mcp`, `serve --mcp`, `remember`, `forget`, `recall`, `memory-review`) | **Supported** | Named volume on `/state`; the Compose daemon keeps models warm. |
+| **Footnote Library** (`index`, `search`, `find`, `docs add/list/refresh/prune`, `models install/use`) | **Supported** (Markdown/text/web docs) | Network only through the `net` profile (`models install`, `docs add`). Live fetch-on-miss is off in the daemon. PDF/OCR needs the Python helpers, not bundled. |
+| **Footnote Code** (`code-index`, `code`, `code-map`, `code-impact`, `grep`, `stack`, `frame`, `footnote_code`) | **Supported (tree-sitter)** | Mount repositories `:ro` under `/workspaces`. Compiler indexers (`--deep`: `rust-analyzer`, `scip-typescript`, `scip-python`) are not in the image. |
+| **Memory Hooks** (`footnote hook`) | **Partial** | Not installed automatically; runs through `docker exec -i` + `FOOTNOTE_PATH_MAP`. 140k / idle-expiry handoffs also need host transcripts mounted `:ro`. |
+| **Usage / Gain** (`usage`, `gain --missed`) | **Partial** | Requires mounting host `~/.claude` / `~/.codex` `:ro` and setting `CLAUDE_CONFIG_DIR` / `CODEX_HOME`. |
+| **Footnote Lean** (`run`, `hook lean`, `audit-prefix --probe-mcp`) | **Not supported from a Windows host** | `footnote run` executes inside the Linux container, without the host's toolchains. |
+| **`footnote install` / `update` / `rollback`** | **Not applicable** | Configure the host MCP entries (above). Rebuild the image to upgrade, keeping `footnote-state`. |
+| **`footnote personal` (DPAPI encryption) / `apps/launcher`** | **Not supported** | Windows-native DPAPI / Tauri GUI only. |
+| **`footnote models recommend`** | **Approximate** | Reads the WSL 2 / container VM RAM (`/proc/meminfo`) and cannot see Windows host GPUs. |
+
+### Several Projects on One Hub: Measured Limits
+
+Measured on Windows 11 + Docker Desktop with three repositories under one `FOOTNOTE_WORKSPACES` folder and three agent sessions at once: path translation, per-project code graphs, per-project memory scopes and concurrent sessions work (a cold `docker exec` MCP session answers `tools/list` in about 0.3 s). The limits:
+
+- **One parent folder.** Repositories outside `FOOTNOTE_WORKSPACES` are not mounted; `footnote_code` refuses them. Keep every repository under one dedicated folder.
+- **The whole folder is visible** to the container (read-only), including files that are not repositories: do not point it at a Desktop or a home folder.
+- **No automatic code graph.** A repository is known to `footnote_code` once a hook session started there or once `code-index` ran on it; refresh with `code-index` after changes (seconds per repository, tree-sitter only).
+- **Pass the project root.** `footnote_code` looks up the code graph of the folder it is given; a subfolder of an indexed repository has none of its own.
+- **One memory database.** A project `scope` labels memories; it does not isolate them. Every agent of the stack can read every project's memories (one stack per trust boundary).
+- **Git state of Windows checkouts.** Git for Windows converts line endings (`core.autocrlf`); git in the container does not, so a CRLF file whose stat data changed shows as modified in the changed-files hint and in `footnote projects`. `footnote projects` runs `git status` per repository over the Docker Desktop mount (about 1 s each; a repository slower than 5 s shows `null`).
+- **A hook `cwd` outside the mapped folder** is recorded as a project that does not exist (named after its full Windows path) in `footnote projects`.
+
+---
+
+## 9. Reporting Test Findings
 
 When opening an issue or PR fix after testing on Linux or Windows, include:
 
