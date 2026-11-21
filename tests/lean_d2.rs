@@ -238,6 +238,10 @@ fn install_lean_remove_rtk_and_uninstall_lean_preserves_memory_hooks() {
     fs::create_dir_all(home.path().join(".claude")).unwrap();
     fs::create_dir_all(home.path().join(".codex")).unwrap();
     fs::create_dir_all(home.path().join(".gemini/config")).unwrap();
+    let t3_cfg = home
+        .path()
+        .join(".t3/userdata/providers/antigravity/abc123/config");
+    fs::create_dir_all(&t3_cfg).unwrap();
 
     // Seed Claude settings with an existing Footnote Memory hook AND an RTK hook.
     let claude_settings = home.path().join(".claude/settings.json");
@@ -295,22 +299,29 @@ fn install_lean_remove_rtk_and_uninstall_lean_preserves_memory_hooks() {
         after_ins.contains("footnote hook"),
         "memory hook should stay intact: {after_ins}"
     );
-    // Antigravity PreToolUse must use the grouped `{matcher: "run_command", hooks: [...]}` schema.
-    let agy_hooks: Value = serde_json::from_str(
-        &fs::read_to_string(home.path().join(".gemini/config/hooks.json")).unwrap(),
-    )
-    .unwrap();
-    assert_eq!(
-        agy_hooks["footnote-lean"]["PreToolUse"][0]["matcher"], "run_command",
-        "{agy_hooks}"
-    );
-    assert!(
-        agy_hooks["footnote-lean"]["PreToolUse"][0]["hooks"][0]["command"]
-            .as_str()
-            .unwrap()
-            .contains("hook lean"),
-        "{agy_hooks}"
-    );
+    // Antigravity PreToolUse must use the grouped `{matcher: "run_command", hooks: [...]}` schema
+    // in both `~/.gemini/config/hooks.json` and T3 Code's isolated provider dir.
+    for hooks_path in [
+        home.path().join(".gemini/config/hooks.json"),
+        t3_cfg.join("hooks.json"),
+    ] {
+        let agy_hooks: Value =
+            serde_json::from_str(&fs::read_to_string(&hooks_path).unwrap()).unwrap();
+        assert_eq!(
+            agy_hooks["footnote-lean"]["PreToolUse"][0]["matcher"],
+            "run_command",
+            "{}: {agy_hooks}",
+            hooks_path.display()
+        );
+        assert!(
+            agy_hooks["footnote-lean"]["PreToolUse"][0]["hooks"][0]["command"]
+                .as_str()
+                .unwrap()
+                .contains("hook lean"),
+            "{}: {agy_hooks}",
+            hooks_path.display()
+        );
+    }
     // Gemini CLI must use `BeforeTool` with `matcher: "run_shell_command"` and ms timeout (5000).
     let gemini_settings: Value = serde_json::from_str(
         &fs::read_to_string(home.path().join(".gemini/settings.json")).unwrap(),
@@ -361,6 +372,12 @@ fn install_lean_remove_rtk_and_uninstall_lean_preserves_memory_hooks() {
     assert!(
         after_un.contains("footnote hook"),
         "memory hook was accidentally removed: {after_un}"
+    );
+    let t3_after: Value =
+        serde_json::from_str(&fs::read_to_string(t3_cfg.join("hooks.json")).unwrap()).unwrap();
+    assert!(
+        t3_after.get("footnote-lean").is_none(),
+        "t3-code lean hook remained: {t3_after}"
     );
 }
 

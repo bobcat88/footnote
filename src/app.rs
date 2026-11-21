@@ -252,14 +252,14 @@ enum Action {
     /// serve in-process. Audit logging, MAC key and token are automatic.
     Mcp,
     /// Register this corpus as an MCP server in every detected agent.
+    /// Register Footnote across all detected agents (Memory + Lean by default; pass `--db <DB>` for a corpus, or `--memory` / `--lean` to narrow).
     Install {
         #[arg(long)]
         dry_run: bool,
-        /// Set up agent memory instead of a corpus: the memory database, its MCP server, the memory hook and
-        /// /remember in Claude Code, Codex, Grok and DeepSeek Harness (no --db needed).
+        /// Install Footnote Memory only (memory database, MCP server, memory hooks, and /remember).
         #[arg(long)]
         memory: bool,
-        /// Install Footnote Lean PreToolUse hooks (`footnote hook lean`) across detected agents (#351).
+        /// Install Footnote Lean PreToolUse/BeforeTool shell-rewriter hooks only (#351).
         #[arg(long)]
         lean: bool,
         /// Disconnect external RTK hooks and MCP entries from detected agent configs (#351).
@@ -834,7 +834,8 @@ fn execute(cli: Cli) -> Result<Value> {
             if *add_to_path && !*memory && !*lean && !*remove_rtk && cli.db.is_none() {
                 return crate::install::add_to_path(*dry_run);
             }
-            let mut out = if *memory && *lean {
+            let install_all = !*memory && !*lean && !*remove_rtk && cli.db.is_none();
+            let mut out = if (*memory && *lean) || install_all {
                 #[cfg(feature = "memory")]
                 {
                     let mut m = crate::install::memory(*dry_run)?;
@@ -842,7 +843,12 @@ fn execute(cli: Cli) -> Result<Value> {
                     m
                 }
                 #[cfg(not(feature = "memory"))]
-                bail!("this build has no Footnote Memory")
+                {
+                    if *memory {
+                        bail!("this build has no Footnote Memory");
+                    }
+                    crate::install::lean(*dry_run, *remove_rtk)?
+                }
             } else if *lean {
                 crate::install::lean(*dry_run, *remove_rtk)?
             } else if *remove_rtk && !*memory {

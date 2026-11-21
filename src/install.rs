@@ -253,20 +253,37 @@ pub fn run(db: &Option<PathBuf>, dry_run: bool) -> Result<Value> {
     let claude = home.join(".claude.json");
     let codex = home.join(".codex/config.toml");
     let gemini = home.join(".gemini/settings.json");
-    let agy = home.join(".gemini/config/mcp_config.json");
 
-    let targets: Vec<(&str, PathBuf)> = vec![
-        ("claude-code", claude),
-        ("codex", codex),
-        ("gemini-cli", gemini),
-        ("antigravity", agy),
+    let mut targets: Vec<(String, PathBuf, bool)> = vec![
+        (
+            "claude-code".into(),
+            claude.clone(),
+            claude.exists() || home.join(".claude").exists(),
+        ),
+        (
+            "codex".into(),
+            codex.clone(),
+            codex.parent().is_some_and(Path::exists),
+        ),
+        (
+            "gemini-cli".into(),
+            gemini.clone(),
+            gemini.parent().is_some_and(Path::exists),
+        ),
     ];
-    for (agent, path) in targets {
-        let detected = match agent {
-            "claude-code" => path.exists() || home.join(".claude").exists(),
-            "antigravity" => has_antigravity(&home),
-            _ => path.parent().map(|p| p.exists()).unwrap_or(false),
-        };
+    let agy_dirs = antigravity_config_dirs(&home);
+    if agy_dirs.is_empty() {
+        targets.push((
+            "antigravity".into(),
+            home.join(".gemini/config/mcp_config.json"),
+            false,
+        ));
+    } else {
+        for (agent, cfg) in agy_dirs {
+            targets.push((agent, cfg.join("mcp_config.json"), true));
+        }
+    }
+    for (agent, path, detected) in targets {
         if !detected {
             report.push(json!({"agent": agent, "status": "not detected", "path": portable(&path)}));
             continue;
@@ -294,6 +311,48 @@ fn has_antigravity(home: &Path) -> bool {
     g.join("config").exists()
         || g.join("antigravity").exists()
         || g.join("antigravity-cli").exists()
+}
+
+/// All detected Antigravity config directories (`<cfg>` holding `mcp_config.json`, `hooks.json`, `skills/`):
+/// 1. Standard `~/.gemini/config` when Antigravity is present.
+/// 2. T3 Code isolated provider dirs `~/.t3/userdata/providers/antigravity/<hash>/config`.
+/// 3. Active `$GEMINI_HOME/config` when `GEMINI_HOME` points inside `home` (keeps isolated test homes clean).
+fn antigravity_config_dirs(home: &Path) -> Vec<(String, PathBuf)> {
+    let mut out: Vec<(String, PathBuf)> = Vec::new();
+    let mut push_unique = |label: &str, cfg: PathBuf| {
+        let key = portable(&cfg).to_ascii_lowercase();
+        if !out
+            .iter()
+            .any(|(_, p)| portable(p).to_ascii_lowercase() == key)
+        {
+            out.push((label.to_string(), cfg));
+        }
+    };
+    if has_antigravity(home) {
+        push_unique("antigravity", home.join(".gemini/config"));
+    }
+    let t3_root = home.join(".t3/userdata/providers/antigravity");
+    if let Ok(entries) = std::fs::read_dir(&t3_root) {
+        let mut dirs: Vec<PathBuf> = entries
+            .filter_map(std::result::Result::ok)
+            .map(|e| e.path())
+            .filter(|p| p.is_dir())
+            .collect();
+        dirs.sort();
+        for dir in dirs {
+            let cfg = dir.join("config");
+            if cfg.is_dir() || dir.join("antigravity-acp").is_dir() {
+                push_unique("antigravity (t3-code)", cfg);
+            }
+        }
+    }
+    if let Some(gh) = std::env::var_os("GEMINI_HOME").filter(|v| !v.is_empty()) {
+        let gh = PathBuf::from(gh);
+        if gh.starts_with(home) && gh.is_dir() {
+            push_unique("antigravity (GEMINI_HOME)", gh.join("config"));
+        }
+    }
+    out
 }
 
 #[cfg(feature = "memory")]
@@ -623,39 +682,45 @@ fn remove_rtk_entries(home: &Path, dry_run: bool) -> Result<Vec<Value>> {
         &gemini_settings,
         remove_mcp_entry(&gemini_settings, "rtk", dry_run),
     )?;
-    let agy_hooks = home.join(".gemini/config/hooks.json");
-    if agy_hooks.exists() {
-        let st = merge_json(&agy_hooks, dry_run, |root| {
-            let mut changed = root.remove("rtk").is_some();
-            for val in root.values_mut() {
-                if let Some(obj) = val.as_object_mut() {
-                    for list in obj.values_mut().filter_map(Value::as_array_mut) {
-                        let before = list.len();
-                        list.retain(|h| !h["command"].as_str().is_some_and(is_rtk_hook));
-                        changed |= list.len() != before;
+    let mut agy_dirs = antigravity_config_dirs(home);
+    if agy_dirs.is_empty() {
+        agy_dirs.push(("antigravity".into(), home.join(".gemini/config")));
+    }
+    for (agent, cfg) in agy_dirs {
+        let agy_hooks = cfg.join("hooks.json");
+        if agy_hooks.exists() {
+            let st = merge_json(&agy_hooks, dry_run, |root| {
+                let mut changed = root.remove("rtk").is_some();
+                for val in root.values_mut() {
+                    if let Some(obj) = val.as_object_mut() {
+                        for list in obj.values_mut().filter_map(Value::as_array_mut) {
+                            let before = list.len();
+                            list.retain(|h| !h["command"].as_str().is_some_and(is_rtk_hook));
+                            changed |= list.len() != before;
+                        }
                     }
                 }
-            }
-            Ok(changed)
-        })?;
+                Ok(changed)
+            })?;
+            push(
+                &agent,
+                "rtk hook",
+                &agy_hooks,
+                Ok(if st == "registered" {
+                    "removed"
+                } else {
+                    "not present"
+                }),
+            )?;
+        }
+        let agy_mcp = cfg.join("mcp_config.json");
         push(
-            "antigravity",
-            "rtk hook",
-            &agy_hooks,
-            Ok(if st == "registered" {
-                "removed"
-            } else {
-                "not present"
-            }),
+            &agent,
+            "rtk mcp server",
+            &agy_mcp,
+            remove_mcp_entry(&agy_mcp, "rtk", dry_run),
         )?;
     }
-    let agy_mcp = home.join(".gemini/config/mcp_config.json");
-    push(
-        "antigravity",
-        "rtk mcp server",
-        &agy_mcp,
-        remove_mcp_entry(&agy_mcp, "rtk", dry_run),
-    )?;
     Ok(removed)
 }
 
@@ -748,8 +813,8 @@ pub fn lean(dry_run: bool, remove_rtk: bool) -> Result<Value> {
             ),
         )?;
     }
-    if has_antigravity(&home) {
-        let hooks = home.join(".gemini/config/hooks.json");
+    for (agent, cfg) in antigravity_config_dirs(&home) {
+        let hooks = cfg.join("hooks.json");
         // Antigravity tool hooks (`PreToolUse`, `PostToolUse`) require grouped `{matcher, hooks}` entries.
         let desired = json!({
             "PreToolUse": [{
@@ -764,7 +829,7 @@ pub fn lean(dry_run: bool, remove_rtk: bool) -> Result<Value> {
             root.insert(LEAN_SERVER.to_string(), desired);
             Ok(true)
         });
-        add("antigravity", "lean PreToolUse hook", &hooks, st)?;
+        add(&agent, "lean PreToolUse hook", &hooks, st)?;
     }
 
     let rtk_removed = if remove_rtk {
@@ -923,20 +988,26 @@ pub fn uninstall_lean(dry_run: bool) -> Result<Value> {
         &gemini,
         remove_matching_hooks(&gemini, is_lean_hook, dry_run),
     )?;
-    let agy_hooks = home.join(".gemini/config/hooks.json");
-    let agy_st = if !agy_hooks.exists() {
-        Ok("not present")
-    } else {
-        let s = merge_json(&agy_hooks, dry_run, |root| {
-            Ok(root.remove(LEAN_SERVER).is_some())
-        })?;
-        Ok(if s == "registered" {
-            "removed"
+    let mut agy_dirs = antigravity_config_dirs(&home);
+    if agy_dirs.is_empty() {
+        agy_dirs.push(("antigravity".into(), home.join(".gemini/config")));
+    }
+    for (agent, cfg) in agy_dirs {
+        let agy_hooks = cfg.join("hooks.json");
+        let agy_st = if !agy_hooks.exists() {
+            Ok("not present")
         } else {
-            "not present"
-        })
-    };
-    add("antigravity", "lean PreToolUse hook", &agy_hooks, agy_st)?;
+            let s = merge_json(&agy_hooks, dry_run, |root| {
+                Ok(root.remove(LEAN_SERVER).is_some())
+            })?;
+            Ok(if s == "registered" {
+                "removed"
+            } else {
+                "not present"
+            })
+        };
+        add(&agent, "lean PreToolUse hook", &agy_hooks, agy_st)?;
+    }
     Ok(json!({
         "dry_run": dry_run,
         "targets": report,
@@ -1106,18 +1177,17 @@ pub fn memory(dry_run: bool) -> Result<Value> {
             add_gemini_memory_hooks(&gemini, &gemini_events, &command, dry_run),
         )?;
     }
-    if has_antigravity(&home) {
-        let cfg = home.join(".gemini/config");
+    for (agent, cfg) in antigravity_config_dirs(&home) {
         let mcp = cfg.join("mcp_config.json");
         add(
-            "antigravity",
+            &agent,
             "mcp server",
             &mcp,
             add_server(&mcp, MEMORY_SERVER, &entry, dry_run),
         )?;
         let hooks = cfg.join("hooks.json");
         add(
-            "antigravity",
+            &agent,
             "hooks",
             &hooks,
             add_agy_hooks(&hooks, &command, dry_run),
@@ -1127,7 +1197,7 @@ pub fn memory(dry_run: bool) -> Result<Value> {
             "---\nname: remember\ndescription: >-\n  Save important preferences, project decisions, fixes and session summaries\n  from this conversation into Footnote Memory using footnote_remember.\n---\n\n{remember}"
         );
         add(
-            "antigravity",
+            &agent,
             "/remember",
             &skill,
             append_once(&skill, "Footnote", &agy_skill, dry_run),
@@ -1298,29 +1368,29 @@ pub fn uninstall_memory(dry_run: bool) -> Result<Value> {
     let gemini = home.join(".gemini/settings.json");
     add("gemini-cli", "mcp server", &gemini, remove_server(&gemini))?;
     add("gemini-cli", "hooks", &gemini, remove_hooks(&gemini))?;
-    let agy_cfg = home.join(".gemini/config");
-    let agy_mcp = agy_cfg.join("mcp_config.json");
-    add(
-        "antigravity",
-        "mcp server",
-        &agy_mcp,
-        remove_server(&agy_mcp),
-    )?;
-    let agy_hooks = agy_cfg.join("hooks.json");
-    let agy_hooks_status = if !agy_hooks.exists() {
-        Ok("not present")
-    } else {
-        merge_json(&agy_hooks, dry_run, |root| {
-            Ok(root.remove(MEMORY_SERVER).is_some())
-        })
-    };
-    add("antigravity", "hooks", &agy_hooks, agy_hooks_status)?;
-    let agy_skill = agy_cfg.join("skills/remember/SKILL.md");
-    let agy_skill_status = edit_text(&agy_skill, dry_run, |text| {
-        text.contains("Footnote memory: save what is worth remembering")
-            .then(String::new)
-    });
-    add("antigravity", "/remember", &agy_skill, agy_skill_status)?;
+    let mut agy_dirs = antigravity_config_dirs(&home);
+    if agy_dirs.is_empty() {
+        agy_dirs.push(("antigravity".into(), home.join(".gemini/config")));
+    }
+    for (agent, agy_cfg) in agy_dirs {
+        let agy_mcp = agy_cfg.join("mcp_config.json");
+        add(&agent, "mcp server", &agy_mcp, remove_server(&agy_mcp))?;
+        let agy_hooks = agy_cfg.join("hooks.json");
+        let agy_hooks_status = if !agy_hooks.exists() {
+            Ok("not present")
+        } else {
+            merge_json(&agy_hooks, dry_run, |root| {
+                Ok(root.remove(MEMORY_SERVER).is_some())
+            })
+        };
+        add(&agent, "hooks", &agy_hooks, agy_hooks_status)?;
+        let agy_skill = agy_cfg.join("skills/remember/SKILL.md");
+        let agy_skill_status = edit_text(&agy_skill, dry_run, |text| {
+            text.contains("Footnote memory: save what is worth remembering")
+                .then(String::new)
+        });
+        add(&agent, "/remember", &agy_skill, agy_skill_status)?;
+    }
     Ok(json!({
         "dry_run": dry_run,
         "targets": report,
@@ -1389,8 +1459,7 @@ pub fn memory_registrations() -> Result<Value> {
             json!({"agent": "gemini-cli", "mcp_server": has_server(&g), "hooks": has_hooks(&g)}),
         );
     }
-    if has_antigravity(&home) {
-        let cfg = home.join(".gemini/config");
+    for (agent, cfg) in antigravity_config_dirs(&home) {
         let agy_hooks = json_file(&cfg.join("hooks.json"));
         let hooks = agy_hooks.get(MEMORY_SERVER).is_some_and(|spec| {
             spec.get("enabled").and_then(Value::as_bool) != Some(false)
@@ -1402,7 +1471,7 @@ pub fn memory_registrations() -> Result<Value> {
                 })
         });
         out.push(json!({
-            "agent": "antigravity",
+            "agent": agent,
             "mcp_server": has_server(&cfg.join("mcp_config.json")),
             "hooks": hooks,
         }));

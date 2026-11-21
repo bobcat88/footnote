@@ -434,3 +434,106 @@ fn antigravity_memory_install_status_and_uninstall_preserve_existing_config() {
         "{gem_after}"
     );
 }
+
+#[test]
+fn t3_code_antigravity_provider_dir_is_installed_reported_and_uninstalled() {
+    let t = tempfile::tempdir().unwrap();
+    let (home, state) = (t.path().join("home"), t.path().join("state"));
+    let python = t.path().join("python.exe");
+    let t3_cfg = home.join(".t3/userdata/providers/antigravity/abc123/config");
+    fs::create_dir_all(&t3_cfg).unwrap();
+    let existing_mcp =
+        json!({"mcpServers": {"cloudflare": {"url": "https://mcp.cloudflare.com/mcp"}}});
+    fs::write(t3_cfg.join("mcp_config.json"), existing_mcp.to_string()).unwrap();
+
+    let first = install(&home, &state, &python, false);
+    assert!(
+        first["targets"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|t| t["agent"] == "antigravity (t3-code)")
+            .all(|t| t["status"] == "registered"),
+        "{first}"
+    );
+
+    let mcp = read(&t3_cfg.join("mcp_config.json"));
+    assert_eq!(
+        mcp["mcpServers"]["cloudflare"],
+        existing_mcp["mcpServers"]["cloudflare"]
+    );
+    assert_eq!(mcp["mcpServers"]["footnote-memory"]["args"][2], "mcp");
+
+    let hooks = read(&t3_cfg.join("hooks.json"));
+    for ev in ["SessionStart", "PreInvocation", "Stop"] {
+        assert!(
+            hooks["footnote-memory"][ev][0]["command"]
+                .as_str()
+                .unwrap()
+                .ends_with(" hook"),
+            "{ev}: {hooks}"
+        );
+    }
+
+    let status_out = Command::new(assert_cmd::cargo::cargo_bin!("footnote"))
+        .arg("status")
+        .env("USERPROFILE", &home)
+        .env("HOME", &home)
+        .env("FOOTNOTE_STATE_DIR", &state)
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let status: Value = serde_json::from_slice(&status_out).unwrap();
+    let agy = status["products"]["memory"]["agents"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|a| a["agent"] == "antigravity (t3-code)")
+        .unwrap();
+    assert_eq!(
+        (agy["mcp_server"].as_bool(), agy["hooks"].as_bool()),
+        (Some(true), Some(true))
+    );
+
+    // Uninstall removes only Footnote's entries, keeping cloudflare intact.
+    Command::new(assert_cmd::cargo::cargo_bin!("footnote"))
+        .args(["uninstall", "--memory"])
+        .env("USERPROFILE", &home)
+        .env("HOME", &home)
+        .env("FOOTNOTE_STATE_DIR", &state)
+        .assert()
+        .success();
+    assert_eq!(read(&t3_cfg.join("mcp_config.json")), existing_mcp);
+    assert_eq!(read(&t3_cfg.join("hooks.json")), json!({}));
+}
+
+#[test]
+fn bare_install_wires_both_memory_and_lean_by_default() {
+    let t = tempfile::tempdir().unwrap();
+    let (home, state) = (t.path().join("home"), t.path().join("state"));
+    let t3_cfg = home.join(".t3/userdata/providers/antigravity/abc123/config");
+    fs::create_dir_all(&t3_cfg).unwrap();
+    fs::create_dir_all(home.join(".claude")).unwrap();
+
+    let out = Command::new(assert_cmd::cargo::cargo_bin!("footnote"))
+        .arg("install")
+        .env("USERPROFILE", &home)
+        .env("HOME", &home)
+        .env("FOOTNOTE_STATE_DIR", &state)
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let v: Value = serde_json::from_slice(&out).unwrap();
+    assert!(v.get("memory_db").is_some(), "{v}");
+    assert!(v.get("lean").is_some(), "{v}");
+
+    let t3_hooks = read(&t3_cfg.join("hooks.json"));
+    assert!(t3_hooks.get("footnote-memory").is_some(), "{t3_hooks}");
+    assert!(t3_hooks.get("footnote-lean").is_some(), "{t3_hooks}");
+    let t3_mcp = read(&t3_cfg.join("mcp_config.json"));
+    assert_eq!(t3_mcp["mcpServers"]["footnote-memory"]["args"][2], "mcp");
+}
