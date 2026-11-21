@@ -77,17 +77,19 @@ pub fn list(state: &Path) -> Result<Value> {
     Ok(json!({"projects": projects}))
 }
 
-/// Files changed but not committed, and commits not pushed (null without an upstream branch); null outside a repository.
+/// Files changed but not committed (null when `status` is skipped: the repository defines its own filter driver), and commits
+/// not pushed (null without an upstream branch); null outside a repository.
 fn git_state(root: &str) -> Value {
-    let status = crate::hook::git(root, &["status", "--porcelain"]);
     let top = crate::hook::git(root, &["rev-parse", "--show-toplevel"]);
     if top.is_empty() {
         return Value::Null;
     }
+    let uncommitted =
+        crate::hook::git_status(root).map(|s| s.lines().filter(|l| !l.trim().is_empty()).count());
     let unpushed = crate::hook::git(root, &["rev-list", "--count", "@{u}..HEAD"])
         .parse::<u64>()
         .ok();
-    json!({"uncommitted": status.lines().filter(|l| !l.trim().is_empty()).count(), "unpushed": unpushed})
+    json!({"uncommitted": uncommitted, "unpushed": unpushed})
 }
 
 fn memories_by_project(state: &Path) -> Result<std::collections::HashMap<String, i64>> {

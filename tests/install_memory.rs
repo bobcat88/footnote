@@ -170,6 +170,62 @@ fn memory_install_migrates_python_hooks_without_replacing_other_hooks_or_metadat
     assert_eq!(fs::read(&path).unwrap(), before);
 }
 
+/// A memory hook registered for the Docker daemon (scripts/docker-agents.*) is Footnote's own: install replaces it
+/// instead of adding a second memory hook, and uninstall removes it. Other `docker exec` hooks are left alone.
+#[test]
+fn memory_install_replaces_docker_daemon_hooks_and_uninstall_removes_them() {
+    let t = tempfile::tempdir().unwrap();
+    let (home, state) = (t.path().join("home"), t.path().join("state"));
+    fs::create_dir_all(home.join(".claude")).unwrap();
+    let path = home.join(".claude/settings.json");
+    let docker_hook = |cmd: &str, timeout: u64| json!({"hooks": [{"type": "command", "command": cmd, "timeout": timeout}]});
+    let other =
+        json!({"type": "command", "command": "/usr/bin/docker exec -i db footnote-lint hook"});
+    fs::write(
+        &path,
+        json!({"hooks": {
+            "SessionStart": [docker_hook("\"C:/Program Files/Docker/Docker/resources/bin/docker.exe\" exec -i footnote footnote hook", 15)],
+            "UserPromptSubmit": [docker_hook("/usr/bin/docker exec -i footnote-me footnote hook", 10)],
+            "Stop": [docker_hook("C:/Users/me/AppData/Local/Programs/DockerDesktop/resources/bin/docker.exe exec -i footnote footnote hook", 5), {"hooks": [other.clone()]}]
+        }})
+        .to_string(),
+    )
+    .unwrap();
+    let python = t.path().join("python.exe");
+    let report = install(&home, &state, &python, false);
+    let settings = read(&path);
+    for event in ["SessionStart", "UserPromptSubmit", "Stop"] {
+        let commands: Vec<&str> = settings["hooks"][event]
+            .as_array()
+            .unwrap()
+            .iter()
+            .flat_map(|g| g["hooks"].as_array().unwrap())
+            .filter_map(|h| h["command"].as_str())
+            .filter(|c| !c.contains("footnote-lint"))
+            .collect();
+        assert_eq!(
+            commands,
+            [report["hook"].as_str().unwrap()],
+            "{event}: {settings}"
+        );
+    }
+    assert!(settings.to_string().contains("footnote-lint"), "{settings}");
+
+    let mut c = Command::new(assert_cmd::cargo::cargo_bin!("footnote"));
+    c.args(["uninstall", "--memory"])
+        .env("USERPROFILE", &home)
+        .env("HOME", &home)
+        .env("FOOTNOTE_STATE_DIR", &state)
+        .assert()
+        .success();
+    let settings = read(&path);
+    assert_eq!(
+        settings["hooks"],
+        json!({"Stop": [{"hooks": [other]}]}),
+        "{settings}"
+    );
+}
+
 #[test]
 fn memory_uninstall_removes_only_what_install_added_and_keeps_memories() {
     let t = tempfile::tempdir().unwrap();

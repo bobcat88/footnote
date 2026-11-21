@@ -479,3 +479,91 @@ fn serve_without_the_mcp_flag_fails_with_a_clear_error() {
     let stderr = String::from_utf8(out).unwrap();
     assert!(stderr.contains("--mcp"), "stderr: {stderr}");
 }
+
+#[cfg(all(feature = "code", feature = "memory", unix))]
+#[test]
+fn path_map_translates_windows_host_paths_for_hook_and_mcp_code() {
+    let t = tmp();
+    let state = t.path().join("state");
+    fs::create_dir(&state).unwrap();
+    let repo = t.path().join("demo");
+    fs::create_dir(&repo).unwrap();
+    fs::write(repo.join("app.py"), "def greet():\n    return 42\n").unwrap();
+
+    let map_spec = format!(r"C:\work\repos={}", t.path().display());
+
+    // 1. Register project via SessionStart hook carrying a Windows host cwd.
+    let hook_event = json!({
+        "hook_event_name": "SessionStart",
+        "session_id": "docker-map-test",
+        "cwd": r"C:\work\repos\demo",
+    });
+    Command::new(assert_cmd::cargo::cargo_bin!("footnote"))
+        .env("FOOTNOTE_STATE_DIR", &state)
+        .env("FOOTNOTE_PATH_MAP", &map_spec)
+        .arg("hook")
+        .write_stdin(format!("{hook_event}\n"))
+        .assert()
+        .success();
+
+    // 2. Build the tree-sitter code graph inside the container path.
+    Command::new(assert_cmd::cargo::cargo_bin!("footnote"))
+        .env("FOOTNOTE_STATE_DIR", &state)
+        .args(["code-index"])
+        .arg(&repo)
+        .assert()
+        .success();
+
+    // 3. Query footnote_code over MCP using the Windows host path and verify traversal is refused.
+    let db = state.join("memory.db");
+    let req_ok = json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "tools/call",
+        "params": {
+            "name": "footnote_code",
+            "arguments": {"root": r"C:\work\repos\demo", "name": "greet"}
+        }
+    });
+    let req_traversal = json!({
+        "jsonrpc": "2.0",
+        "id": 2,
+        "method": "tools/call",
+        "params": {
+            "name": "footnote_code",
+            "arguments": {"root": r"C:\work\repos\demo\..\demo", "name": "greet"}
+        }
+    });
+    let out = cmd(&db)
+        .env("FOOTNOTE_STATE_DIR", &state)
+        .env("FOOTNOTE_PATH_MAP", &map_spec)
+        .args(["serve", "--mcp"])
+        .write_stdin(format!("{req_ok}\n{req_traversal}\n"))
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let replies: Vec<Value> = String::from_utf8(out)
+        .unwrap()
+        .lines()
+        .map(|l| serde_json::from_str(l).unwrap())
+        .collect();
+    assert_eq!(replies.len(), 2);
+    assert_ne!(
+        replies[0]["result"]["isError"],
+        json!(true),
+        "mapped host root failed: {}",
+        replies[0]
+    );
+    let body = replies[0]["result"]["content"][0]["text"]
+        .as_str()
+        .unwrap_or_default();
+    assert!(body.contains("greet"), "expected symbol greet in: {body}");
+    assert_eq!(
+        replies[1]["result"]["isError"],
+        json!(true),
+        "traversal root must be refused: {}",
+        replies[1]
+    );
+}

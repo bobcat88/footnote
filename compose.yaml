@@ -1,0 +1,102 @@
+# Footnote: one long-lived hardened daemon for one person's agents, plus a helper profile for network commands (#392).
+#
+# Daily use: warm ONNX models shared by every agent of this user (Claude Code, Codex, Gemini CLI, Antigravity, parallel
+# sessions), the way one memory.db already serves them on a host.
+#   docker compose up -d
+#   MCP command for each agent: docker exec -i footnote footnote --db /state/memory.db mcp
+#   Memory hook for each agent: docker exec -i footnote footnote hook
+#   Register both with every detected agent in one go:
+#     Windows: powershell -NoProfile -ExecutionPolicy Bypass -File scripts\docker-agents.ps1
+#     Linux / macOS: bash scripts/docker-agents.sh
+#
+# Network commands only (models install, docs add, crawl). This service mounts no workspace:
+#   docker compose --profile net run --rm footnote-net models install bekko-a8m gte-small
+#   docker compose --profile net run --rm footnote-net models use bekko-a8m gte-small
+#
+# Required: FOOTNOTE_WORKSPACES, the host folder of repositories to mount read-only, as an environment variable or in a
+# `.env` file next to this one. FOOTNOTE_PATH_MAP is derived from it unless you set it yourself, so host paths
+# translate to container paths (for example a Windows host):
+#     FOOTNOTE_WORKSPACES=C:\Users\<user>\repos
+#
+# One person per stack: anyone who can use this Docker engine (`docker exec`) can read, change and delete every memory
+# in the state volume. Do not share a stack between people (SECURITY.md, "Container security boundary").
+#
+# Optional settings:
+# - FOOTNOTE_CLAUDE_PROJECTS: the host folder of Claude Code's session files (C:\Users\<user>\.claude\projects), mounted
+#   read-only so the hook can size a long session and ask for its handoff at Stop.
+# - FOOTNOTE_IMAGE, FOOTNOTE_CONTAINER_NAME, FOOTNOTE_STATE_VOLUME (default footnote-state), FOOTNOTE_DB, FOOTNOTE_PATH_MAP.
+# - FOOTNOTE_WORKSPACES_MOUNT: keep it at or under /workspaces, the only place where git trusts mounted repositories.
+# - FOOTNOTE_PIDS_LIMIT (default 512), FOOTNOTE_MEM_LIMIT (default 4g).
+# - FOOTNOTE_UID / FOOTNOTE_GID (default 10001). They are build arguments too. Set them before the first `up`: the
+#   state volume keeps the owner it was created with.
+
+x-hardened: &hardened
+  build:
+    context: .
+    dockerfile: Dockerfile
+    args:
+      FOOTNOTE_UID: ${FOOTNOTE_UID:-10001}
+      FOOTNOTE_GID: ${FOOTNOTE_GID:-10001}
+  image: ${FOOTNOTE_IMAGE:-footnote:local}
+  init: true
+  user: "${FOOTNOTE_UID:-10001}:${FOOTNOTE_GID:-10001}"
+  read_only: true
+  cap_drop:
+    - ALL
+  security_opt:
+    - no-new-privileges:true
+  tmpfs:
+    - /tmp:rw,noexec,nosuid,size=64m
+  # One runaway agent must not exhaust the host: bounded processes, memory and logs.
+  pids_limit: ${FOOTNOTE_PIDS_LIMIT:-512}
+  mem_limit: ${FOOTNOTE_MEM_LIMIT:-4g}
+  logging:
+    driver: json-file
+    options:
+      max-size: 10m
+      max-file: "3"
+
+services:
+  footnote:
+    <<: *hardened
+    container_name: ${FOOTNOTE_CONTAINER_NAME:-footnote}
+    restart: unless-stopped
+    network_mode: none
+    environment:
+      # Offline daemon: no live fetch-on-miss attempt (footnote find, footnote_recall all=true).
+      FOOTNOTE_NO_LIVE_FETCH: "1"
+      FOOTNOTE_PATH_MAP: ${FOOTNOTE_PATH_MAP:-${FOOTNOTE_WORKSPACES:+${FOOTNOTE_WORKSPACES}=${FOOTNOTE_WORKSPACES_MOUNT:-/workspaces}}${FOOTNOTE_CLAUDE_PROJECTS:+;${FOOTNOTE_CLAUDE_PROJECTS}=/host/claude-projects}}
+    command:
+      - --db
+      - ${FOOTNOTE_DB:-/state/memory.db}
+      - serve
+      - --mcp
+      - --daemon
+    volumes:
+      - footnote-state:/state
+      - ${FOOTNOTE_WORKSPACES:?set FOOTNOTE_WORKSPACES to the host folder of repositories to mount read-only}:${FOOTNOTE_WORKSPACES_MOUNT:-/workspaces}:ro
+      # Claude Code's session files, read-only, when FOOTNOTE_CLAUDE_PROJECTS is set; otherwise an empty volume.
+      - ${FOOTNOTE_CLAUDE_PROJECTS:-footnote-no-transcripts}:/host/claude-projects:ro
+    healthcheck:
+      test: ["CMD-SHELL", "for s in \"$$FOOTNOTE_STATE_DIR\"/footnote-*.sock; do [ -S \"$$s\" ] && exit 0; done; exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 3
+      start_period: 2s
+
+  # Default bridge network: outbound only, no published port, never `host`. No workspace mount: the one container that
+  # can reach the network sees no repository.
+  footnote-net:
+    <<: *hardened
+    profiles:
+      - net
+    volumes:
+      - footnote-state:/state
+
+volumes:
+  footnote-state:
+    # One name for the Compose daemon and the one-shot `docker run -v footnote-state:/state` commands of DOCKER.md.
+    name: ${FOOTNOTE_STATE_VOLUME:-footnote-state}
+  # Stands in for Claude Code's session folder when FOOTNOTE_CLAUDE_PROJECTS is unset; stays empty.
+  footnote-no-transcripts:
+    name: footnote-no-transcripts

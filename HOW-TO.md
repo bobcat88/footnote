@@ -87,34 +87,11 @@ footnote update --from .\target\release\footnote.exe
 
 ### Docker (when Windows blocks local builds)
 
-Windows **Smart App Control** or a managed **WDAC / AppLocker** policy stops `cargo build` at the first build script (`os error 4551`). Run Footnote in a Linux container instead (Docker Desktop, WSL 2 backend). Build it from the repo root:
+Windows **Smart App Control** or a managed **WDAC / AppLocker** policy stops `cargo build` at the first build script (`os error 4551`). Run Footnote in a hardened Linux container instead (Docker Desktop, WSL 2 backend); one daemon serves all your agents, MCP server and memory hooks. Everything is in **[DOCKER.md](DOCKER.md)**: build, one-shot commands, the Compose daemon, agent registration (`scripts/docker-agents.ps1` / `.sh`), host path mapping, backup and migration, the compatibility matrix and the limits.
 
 ```bash
 docker build -t footnote:local .
 ```
-
-Everything Footnote keeps (memory DB, indexes, models) lives in `/state`; mount a named volume there so it survives `--rm`. Mount the project you work on at `/workspace`:
-
-```bash
-docker run --rm -i -v footnote-state:/state -v "${PWD}:/workspace" footnote:local status
-docker run --rm -i -v footnote-state:/state footnote:local models install bekko-a8m gte-small
-docker run --rm -i -v footnote-state:/state -v "${PWD}:/workspace" footnote:local code-index .
-```
-
-MCP entry for an agent on the host (stdio through `docker run -i`):
-
-```json
-{
-  "mcpServers": {
-    "footnote-memory": {
-      "command": "docker",
-      "args": ["run", "--rm", "-i", "-v", "footnote-state:/state", "footnote:local", "--db", "/state/memory.db", "mcp"]
-    }
-  }
-}
-```
-
-Limits: the container gives you the CLI and the MCP server. `footnote install` hooks (Memory recall, Lean shell compaction) call a `footnote` binary on the host, so they do not work from the container. To reach a service on the host (for example Ollama on port 11434), add `--add-host=host.docker.internal:host-gateway` and use `http://host.docker.internal:11434`; Footnote's embeddings still run in-process and do not use Ollama yet.
 
 ---
 
@@ -368,9 +345,9 @@ To also remove all local data, indexes, and downloaded models, delete the state 
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| `cargo build` fails with `An Application Control policy has blocked this file (os error 4551)` | Windows Smart App Control / WDAC blocks unsigned build scripts | Use Docker (Section 2, *Docker*); do not weaken the policy |
+| `cargo build` fails with `An Application Control policy has blocked this file (os error 4551)` | Windows Smart App Control / WDAC blocks unsigned build scripts (and an unsigned `footnote.exe`); self-signing does not get past it | Use Docker ([DOCKER.md](DOCKER.md)); do not weaken the policy (turning Smart App Control off cannot be undone without reinstalling Windows) |
 | `install` says config file changed while updating | Agent (e.g. Claude Code) rewrote its settings file mid-write | Close the agent session and re-run `footnote install ...` |
-| MCP host fails to spawn `footnote` | Non-interactive GUI host does not inherit shell `PATH` | Use the absolute path to `footnote` / `footnote.exe` in MCP config |
+| MCP host fails to spawn `footnote` | Non-interactive GUI host does not inherit shell `PATH` | Use the absolute path to `footnote` / `footnote.exe` (or `docker.exe` in Docker mode) in MCP config |
 | `sccache` fails with `os error 206` on Windows | Long worktree paths exceed Windows `MAX_PATH` under `sccache` | Run `$env:RUSTC_WRAPPER = ''` before `cargo` commands |
 | Linux state dir permission warning | Private state folder expects owner-only mode (`0700`) | `chmod 700 ~/.local/state/footnote` |
 | `footnote code-index` slow on first Rust run | `rust-analyzer scip` builds the workspace on first index | Expected for compiler-grade Rust graphs; tree-sitter runs in milliseconds on non-Rust projects |

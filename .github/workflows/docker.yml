@@ -2,7 +2,14 @@ name: docker
 
 on:
   pull_request:
-    paths: [Dockerfile, .dockerignore, .github/workflows/docker.yml]
+    paths:
+      - Dockerfile
+      - .dockerignore
+      - compose.yaml
+      - scripts/docker-smoke.sh
+      - scripts/docker-agents.sh
+      - scripts/docker-agents.ps1
+      - .github/workflows/docker.yml
   workflow_dispatch:
 
 permissions:
@@ -11,18 +18,15 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Build image
         run: DOCKER_BUILDKIT=1 docker build -t footnote:local .
-      - name: Smoke test CLI and MCP
-        run: |
-          docker run --rm -v fn-state:/state footnote:local status
-          docker run --rm -v fn-state:/state -v "$PWD:/workspace" footnote:local code-index .
-          docker run --rm -v fn-state:/state -v "$PWD:/workspace" footnote:local grep state_dir
-          printf '%s\n' \
-            '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"smoke","version":"1"}}}' \
-            '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}' \
-            | docker run --rm -i -v fn-state:/state footnote:local --db /state/memory.db mcp > out.jsonl
-          cat out.jsonl
-          grep -q '"id":2' out.jsonl
+      - name: Compose file
+        run: FOOTNOTE_WORKSPACES="$PWD" docker compose --profile net config --quiet
+      # Non-root user and scoped git trust, hardened one-shot CLI, code-index and grep on a read-only mount, MCP tools/list
+      # budget, memory persistence, Windows path mapping, a mounted repository's .git/config that must not run, the
+      # long-lived daemon behind `docker exec -i`, scripts/docker-agents.sh against that daemon.
+      - name: Smoke suite
+        run: bash scripts/docker-smoke.sh footnote:local

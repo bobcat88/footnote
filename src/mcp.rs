@@ -614,7 +614,7 @@ fn dispatch(db: &Path, name: &str, args: &Value) -> Result<Value> {
         #[cfg(feature = "code")]
         "footnote_code" => {
             let root = match args["root"].as_str() {
-                Some(r) => std::path::PathBuf::from(r),
+                Some(r) => std::path::PathBuf::from(footnote_core::path_map::map_host_path(r)),
                 None => std::env::current_dir()?,
             };
             // Only projects Footnote knows (hook-recorded or code-indexed), never any folder on the machine (#211, #345).

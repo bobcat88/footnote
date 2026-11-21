@@ -10,6 +10,9 @@ target/
 __pycache__/
 *.pyc
 *.pyo
+# Local settings (Docker Compose reads `.env`): they hold machine paths such as FOOTNOTE_WORKSPACES.
+.env
+.env.*
 
 # Research bulk: vendored environments, package caches, model weights.
 # These are reproducible from the pinned locks, not source.
