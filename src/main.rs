@@ -1,6 +1,7 @@
 #[cfg(feature = "memory")]
 mod activity;
 mod app;
+mod audit_prefix;
 #[cfg(feature = "library")]
 mod bundle;
 mod daemon;

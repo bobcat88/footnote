@@ -496,6 +496,21 @@ enum Action {
         #[command(subcommand)]
         action: AuditAction,
     },
+    /// Measure Turn-1 fixed prompt overhead across instruction files, skills and MCP servers (#380).
+    AuditPrefix {
+        /// Project folder to inspect for repo-level instruction files (default: current directory).
+        #[arg(long, default_value = ".")]
+        root: PathBuf,
+        /// Limit scan to one agent (`all`, `claude`, `codex`, `gemini`, `antigravity`).
+        #[arg(long, default_value = "all", value_parser = ["all", "claude", "codex", "gemini", "antigravity"])]
+        agent: String,
+        /// Opt-in: probe each configured stdio MCP server (`initialize` + `tools/list`) for exact schema bytes.
+        #[arg(long)]
+        probe_mcp: bool,
+        /// Per-server probe timeout in seconds when `--probe-mcp` is set.
+        #[arg(long, default_value_t = 5)]
+        timeout_secs: u64,
+    },
     /// Run a shell command with preservation-first output filtering and reversible local handle storage (#243).
     Run {
         /// Pass raw output through unchanged (bypass filtering and handle storage).
@@ -934,6 +949,12 @@ fn execute(cli: Cli) -> Result<Value> {
             };
         }
         Action::Gain { days, attrib } => return crate::usage::gain(*days, *attrib),
+        Action::AuditPrefix {
+            root,
+            agent,
+            probe_mcp,
+            timeout_secs,
+        } => return crate::audit_prefix::run(root, agent, *probe_mcp, *timeout_secs),
         #[cfg(feature = "library")]
         Action::Docs { action } => {
             let state = crate::state::state_dir()?;
@@ -1251,6 +1272,7 @@ fn execute(cli: Cli) -> Result<Value> {
             unreachable!("dispatched before the database is opened")
         }
         Action::Audit { .. }
+        | Action::AuditPrefix { .. }
         | Action::Options
         | Action::Config { .. }
         | Action::Models { .. }
