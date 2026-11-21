@@ -35,9 +35,9 @@ time = { version = "0.3", features = ["local-offset", "parsing"] }
 interprocess = "2.4.8"
 getrandom = "0.4.3"
 tantivy = "0.27"
-# Embeddings in-process (crates/search/src/encoder.rs): ONNX Runtime 1.31, statically linked; tokenizers 0.23.2 (same ids, type ids, masks and offsets as 0.22.2 on both default models, checked 2026-11-17).
+# Embeddings in-process (crates/search/src/encoder.rs): ONNX Runtime 1.31, statically linked; tokenizers 0.23.2 (same ids, type ids, masks and offsets as 0.22.2 on both default models, checked 2026-11-17). Regex backend fancy-regex (pure Rust, no C Oniguruma): ids, type ids, masks and offsets identical to onig on all four models, checked 2026-11-21 (#369).
 ort = { version = "=2.0.0-rc.15", default-features = false, features = ["std", "download-binaries", "tls-native", "api-31"] }
-tokenizers = { version = "=0.23.2", default-features = false, features = ["onig"] }
+tokenizers = { version = "=0.23.2", default-features = false, features = ["fancy-regex"] }
 llama-cpp-2 = { version = "=0.1.161", default-features = false, features = ["openmp"] }
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security", "Win32_System_Threading", "Win32_System_Registry", "Win32_System_SystemInformation", "Win32_System_ErrorReporting"] }
 # Model downloads (src/models.rs) and the documentation crawler (crates/library/src/crawl.rs): the only network access in the product, both on explicit commands; already in the tree through ort.
