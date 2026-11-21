@@ -4,11 +4,14 @@ use std::{fs, io::Write, path::Path};
 
 fn usage(dir: &Path) -> Value {
     let out = Command::new(assert_cmd::cargo::cargo_bin!("footnote"))
+        .env("USERPROFILE", dir)
+        .env("HOME", dir)
         .env("FOOTNOTE_STATE_DIR", dir.join("state"))
         .env("FOOTNOTE_POLICY_FILE", dir.join("no-policy.json"))
         .env("CLAUDE_CONFIG_DIR", dir.join("claude"))
         .env("CODEX_HOME", dir.join("codex"))
         .env("DSH_HOME", dir.join("dsh"))
+        .env("GEMINI_HOME", dir.join("gemini"))
         .args(["usage", "--days", "1"])
         .output()
         .unwrap();
@@ -231,4 +234,51 @@ fn one_session_file_is_priced_alone() {
         "{v}"
     );
     assert!(close(&v["totals"]["api_price_usd"], 1440e-6), "{v}"); // 600 x $2 + 400 x $0.10 + 20 x $10
+
+    // Antigravity transcript priced standalone and via provider discovery (skipping transcript_full.jsonl).
+    let agy_logs = dir.path().join(
+        ".t3/userdata/providers/antigravity/p1/antigravity-acp/brain/c1/.system_generated/logs",
+    );
+    fs::create_dir_all(&agy_logs).unwrap();
+    let today_ts = format!("{}T10:00:00Z", time::OffsetDateTime::now_utc().date());
+    let agy_line = json!({
+        "step_index": 3,
+        "source": "MODEL",
+        "type": "PLANNER_RESPONSE",
+        "status": "DONE",
+        "created_at": today_ts,
+        "model": "gemini-4-neon-medium",
+        "input_tokens": 1000,
+        "cache_read_tokens": 2000,
+        "output_tokens": 100
+    })
+    .to_string()
+        + "\n";
+    let agy_file = agy_logs.join("transcript.jsonl");
+    fs::write(&agy_file, &agy_line).unwrap();
+    fs::write(agy_logs.join("transcript_full.jsonl"), &agy_line).unwrap();
+
+    let v = price(&agy_file);
+    assert_eq!(
+        (
+            &v["agent"],
+            &v["by_model"][0]["model"],
+            &v["totals"]["requests"]
+        ),
+        (
+            &json!("antigravity"),
+            &json!("gemini-4-neon-medium"),
+            &json!(1)
+        ),
+        "{v}"
+    );
+    // 1000 * $3 + 2000 * $0.15 + 100 * $15 = 4800e-6
+    assert!(close(&v["totals"]["api_price_usd"], 4800e-6), "{v}");
+
+    let all = usage(dir.path());
+    assert_eq!(
+        all["totals"]["requests"], 1,
+        "transcript_full.jsonl must not double-count: {all}"
+    );
+    assert_eq!(all["by_agent"][0]["agent"], "antigravity", "{all}");
 }

@@ -304,11 +304,55 @@ fn gain_missed_ranks_uncovered_prefixes_without_leaking_arguments_or_payloads() 
     )
     .unwrap();
 
+    // Antigravity transcript (T3 Code provider layout): 1 covered (`git diff`) + 1 uncovered (`kubectl get`).
+    let agy_logs = home.path().join(
+        ".t3/userdata/providers/antigravity/prov1/antigravity-acp/brain/conv1/.system_generated/logs",
+    );
+    fs::create_dir_all(&agy_logs).unwrap();
+    let agy_lines = [
+        json!({
+            "step_index": 3,
+            "source": "MODEL",
+            "type": "PLANNER_RESPONSE",
+            "status": "DONE",
+            "created_at": ts,
+            "model": "gemini-4-neon-medium",
+            "input_tokens": 1200,
+            "cache_read_tokens": 8000,
+            "output_tokens": 120,
+            "tool_calls": [
+                {"name": "run_command", "args": {"CommandLine": "\"git diff\""}},
+                {"name": "run_command", "args": {"CommandLine": "\"kubectl get pods -n PRIVATE_NS_42\""}}
+            ]
+        }),
+        json!({
+            "step_index": 4,
+            "source": "MODEL",
+            "type": "GENERIC",
+            "status": "DONE",
+            "created_at": ts,
+            "content": "diff --git a/src/lib.rs b/src/lib.rs\n"
+        }),
+        json!({
+            "step_index": 5,
+            "source": "MODEL",
+            "type": "GENERIC",
+            "status": "DONE",
+            "created_at": ts,
+            "content": format!("POD_ROW_{}", "d".repeat(2400))
+        }),
+    ];
+    let agy_body: String = agy_lines.iter().map(|v| v.to_string() + "\n").collect();
+    fs::write(agy_logs.join("transcript.jsonl"), &agy_body).unwrap();
+    // Duplicate `transcript_full.jsonl` must be ignored so calls are never double-counted.
+    fs::write(agy_logs.join("transcript_full.jsonl"), &agy_body).unwrap();
+
     let out = cargo_bin_cmd!("footnote")
         .env("USERPROFILE", home.path())
         .env("HOME", home.path())
         .env("CLAUDE_CONFIG_DIR", home.path().join(".claude"))
         .env("CODEX_HOME", home.path().join(".codex"))
+        .env("GEMINI_HOME", home.path().join(".gemini"))
         .env("FOOTNOTE_STATE_DIR", state.path())
         .args(["gain", "--missed", "--days", "7"])
         .output()
@@ -317,24 +361,27 @@ fn gain_missed_ranks_uncovered_prefixes_without_leaking_arguments_or_payloads() 
     let raw_out = String::from_utf8(out.stdout).unwrap();
     let v: Value = serde_json::from_str(&raw_out).unwrap();
     let m = &v["missed"];
-    assert_eq!(m["total_shell_calls"], 5, "{v}");
-    assert_eq!(m["covered_calls"], 2, "{v}");
-    assert_eq!(m["uncovered_calls"], 3, "{v}");
+    assert_eq!(m["total_shell_calls"], 7, "{v}");
+    assert_eq!(m["covered_calls"], 3, "{v}");
+    assert_eq!(m["uncovered_calls"], 4, "{v}");
 
     let top = m["top_uncovered"].as_array().unwrap();
-    assert_eq!(top.len(), 3, "{top:?}");
+    assert_eq!(top.len(), 4, "{top:?}");
     assert_eq!(top[0]["prefix"], "gh api");
     assert_eq!(top[1]["prefix"], "docker ps");
-    assert_eq!(top[2]["prefix"], "curl");
+    assert_eq!(top[2]["prefix"], "kubectl get");
+    assert_eq!(top[3]["prefix"], "curl");
 
     // Privacy invariant: zero arguments, paths, headers, or raw payloads may appear in the report.
     for forbidden in [
         "LEAK_ARG_1",
         "LEAK_HEADER",
         "PRIVATE_CONTAINER_99",
+        "PRIVATE_NS_42",
         "SECRET_PAYLOAD_BODY",
         "RAW_HTTP_BODY",
         "CONTAINER_ROW",
+        "POD_ROW",
         "/private/secret-repo",
         "internal.example",
     ] {

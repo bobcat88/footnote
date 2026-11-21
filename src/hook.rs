@@ -33,7 +33,7 @@ struct TranscriptTail {
     last_ts_unix: Option<i64>,
 }
 
-/// The prompt size and last assistant timestamp from the tail of a Claude Code session file.
+/// The prompt size and last assistant timestamp from the tail of a Claude Code or Antigravity session file.
 /// Only the tail is read, and only numbers/timestamps are kept.
 fn transcript_tail(transcript: &Path) -> Option<TranscriptTail> {
     use std::io::{Seek, SeekFrom};
@@ -44,6 +44,28 @@ fn transcript_tail(transcript: &Path) -> Option<TranscriptTail> {
     let mut buf = Vec::new();
     f.read_to_end(&mut buf).ok()?;
     buf.split(|&b| b == b'\n').rev().find_map(|line| {
+        if line.windows(18).any(|w| w == b"\"PLANNER_RESPONSE\"") {
+            let v: Value = serde_json::from_slice(line).ok()?;
+            if v["type"] != "PLANNER_RESPONSE" {
+                return None;
+            }
+            let tokens = v["input_tokens"].as_u64().unwrap_or(0)
+                + v["cache_read_tokens"].as_u64().unwrap_or(0);
+            if tokens == 0 {
+                return None;
+            }
+            let last_ts_unix = v["created_at"]
+                .as_str()
+                .and_then(|ts| {
+                    time::OffsetDateTime::parse(ts, &time::format_description::well_known::Rfc3339)
+                        .ok()
+                })
+                .map(|dt| dt.unix_timestamp());
+            return Some(TranscriptTail {
+                tokens,
+                last_ts_unix,
+            });
+        }
         if !line.windows(7).any(|w| w == b"\"usage\"") {
             return None;
         }
@@ -1018,6 +1040,43 @@ mod tests {
 
         // Second Stop in same session must NOT ask again.
         assert!(handle(&state, &s, &stop_event).unwrap().is_none());
+    }
+
+    #[test]
+    fn antigravity_transcript_tail_reads_planner_response_tokens_and_timestamp() {
+        let t = tempfile::tempdir().unwrap();
+        let transcript = t.path().join("transcript.jsonl");
+        let ts = "2026-11-21T10:00:00Z";
+        fs::write(
+            &transcript,
+            format!(
+                "{}\n{}\n{}\n",
+                json!({"step_index": 0, "type": "USER_INPUT", "created_at": ts}),
+                json!({
+                    "step_index": 1,
+                    "type": "PLANNER_RESPONSE",
+                    "created_at": ts,
+                    "model": "gemini-4-neon-medium",
+                    "input_tokens": 12_000,
+                    "cache_read_tokens": 68_000,
+                    "output_tokens": 400
+                }),
+                json!({"step_index": 2, "type": "GENERIC", "created_at": ts, "content": "ok"}),
+            ),
+        )
+        .unwrap();
+        let tail = transcript_tail(&transcript).expect("antigravity tail");
+        assert_eq!(tail.tokens, 80_000);
+        let expected_ts =
+            time::OffsetDateTime::parse(ts, &time::format_description::well_known::Rfc3339)
+                .unwrap()
+                .unix_timestamp();
+        assert_eq!(tail.last_ts_unix, Some(expected_ts));
+        let s = Settings::default();
+        assert_eq!(
+            idle_handoff_minutes_hit(&s, tail, expected_ts + 70 * 60),
+            Some(70)
+        );
     }
 
     #[cfg(windows)]

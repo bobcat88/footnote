@@ -11,10 +11,11 @@ use std::path::{Path, PathBuf};
 /// List prices in USD per million tokens, from the providers' pricing pages, read 16 Nov 2026:
 /// https://platform.claude.com/docs/en/about-claude/pricing and https://developers.openai.com/api/docs/pricing (standard tier);
 /// gpt-6.2-sol read 18 Nov 2026 from the same OpenAI page (#223);
-/// https://api-docs.deepseek.com/quick_start/pricing read 20 Nov 2026 (standard/peak list rates; off-peak 50% discount not modelled).
+/// https://api-docs.deepseek.com/quick_start/pricing read 20 Nov 2026 (standard/peak list rates; off-peak 50% discount not modelled);
+/// https://ai.google.dev/gemini-api/docs/pricing read 21 Nov 2026 (global standard list rates; implicit cache reads at 5-10% of input).
 /// Changing a price: edit the row and `PRICES`; every file is then read again so old counts get the new prices.
 /// shortcut: batch, fast tier, US-only inference (x1.1), off-peak discounts and regional endpoints are not priced; add them when someone uses them.
-const PRICES: &str = "2026-11-20";
+const PRICES: &str = "2026-11-21";
 
 #[derive(Clone, Copy)]
 struct Price {
@@ -89,6 +90,14 @@ const TABLE: &[Row] = &[
     // DeepSeek standard/peak list rates (https://api-docs.deepseek.com/quick_start/pricing, 20 Nov 2026; off-peak 50% discount not modelled).
     ("deepseek-flash", p(0.30, 0.30, 0.30, 0.006, 1.20), None),
     ("deepseek-v4-pro", p(1.32, 1.32, 1.32, 0.044, 3.96), None),
+    // Google Gemini global standard list rates (https://ai.google.dev/gemini-api/docs/pricing, 21 Nov 2026; no cache-write fee).
+    ("gemini-4-neon", p(3.00, 3.00, 3.00, 0.15, 15.0), None),
+    ("gemini-4-hydrogen", p(1.50, 1.50, 1.50, 0.075, 7.50), None),
+    ("gemini-4-argon", p(4.00, 4.00, 4.00, 0.20, 20.0), None),
+    ("gemini-4-carbon", p(4.00, 4.00, 4.00, 0.20, 20.0), None),
+    ("gemini-3.1-pro", p(2.00, 2.00, 2.00, 0.20, 12.0), None),
+    ("gemini-2.5-pro", p(0.30, 0.30, 0.30, 0.03, 2.50), None),
+    ("gemini-2.5-flash", p(0.30, 0.30, 0.30, 0.03, 2.50), None),
 ];
 
 /// One request's tokens. `input` is uncached input only; reads and writes are the cached parts.
@@ -277,6 +286,39 @@ fn claude_line(line: &[u8], st: &mut FileState) -> Option<(String, String, Token
     ))
 }
 
+/// Antigravity (`agy` CLI / IDE / ACP / T3 Code): each `PLANNER_RESPONSE` line carries `model`, `input_tokens`
+/// (uncached input), `cache_read_tokens`, `output_tokens`, and `created_at` (RFC 3339).
+fn antigravity_line(line: &[u8], _: &mut FileState) -> Option<(String, String, Tokens)> {
+    if !line.windows(18).any(|w| w == b"\"PLANNER_RESPONSE\"") {
+        return None;
+    }
+    let v: Value = serde_json::from_slice(line).ok()?;
+    if v.get("type")?.as_str()? != "PLANNER_RESPONSE" {
+        return None;
+    }
+    let n = |k: &str| v.get(k).and_then(Value::as_u64).unwrap_or(0);
+    let (input, cache_read, output) = (
+        n("input_tokens"),
+        n("cache_read_tokens"),
+        n("output_tokens"),
+    );
+    if input == 0 && cache_read == 0 && output == 0 {
+        return None;
+    }
+    let model = v.get("model").and_then(Value::as_str).unwrap_or("unknown");
+    let t = Tokens {
+        input,
+        output,
+        cache_read,
+        ..Default::default()
+    };
+    Some((
+        v.get("created_at")?.as_str()?.get(..10)?.into(),
+        model.into(),
+        request(model, t),
+    ))
+}
+
 /// DeepSeek Harness: each `assistant/message` line carries its reply's `usage` (input excludes cache reads) and the model in
 /// `message.source.model`; `time` is in milliseconds.
 fn dsh_line(line: &[u8], _: &mut FileState) -> Option<(String, String, Tokens)> {
@@ -425,11 +467,16 @@ fn read_file(path: &Path, agent: &str, parse: Parse, st: &mut FileState) -> Resu
     Ok(whole as u64)
 }
 
-/// Price one session file (#223), Claude Code or Codex, found by which reader recognises it: tokens per category, list
-/// price, priced and unpriced requests, per model. The benchmark collector calls this instead of copying the price table.
+/// Price one session file (#223), Claude Code, Codex, DeepSeek Harness, or Antigravity, found by which reader recognises it:
+/// tokens per category, list price, priced and unpriced requests, per model. The benchmark collector calls this instead of copying the price table.
 pub fn session(path: &Path) -> Result<Value> {
     let mut best: Option<(&str, Parse, FileState)> = None;
-    for (agent, parse) in [("claude-code", claude_line as Parse), ("codex", codex_line)] {
+    for (agent, parse) in [
+        ("claude-code", claude_line as Parse),
+        ("codex", codex_line),
+        ("antigravity", antigravity_line),
+        ("deepseek-harness", dsh_line),
+    ] {
         let mut st = FileState::default();
         read_file(path, agent, parse, &mut st)?;
         if !st.rows.is_empty() {
@@ -437,7 +484,8 @@ pub fn session(path: &Path) -> Result<Value> {
             break;
         }
     }
-    let (agent, parse, st) = best.context("no Claude Code or Codex token counts in this file")?;
+    let (agent, parse, st) =
+        best.context("no Claude Code, Codex, Antigravity, or DeepSeek token counts in this file")?;
     let (mut totals, mut by_model) = (Tokens::default(), BTreeMap::<String, Tokens>::new());
     for (key, t) in &st.rows {
         totals.add(t);
@@ -484,20 +532,28 @@ fn fixed_overhead(
     (Some(prompt), floor.map(|f| (f * 1000.0).round() / 1000.0))
 }
 
-fn sessions(dir: &Path) -> Vec<PathBuf> {
+fn sessions(agent: &str, dir: &Path) -> Vec<PathBuf> {
     walkdir::WalkDir::new(dir)
         .into_iter()
         .filter_map(|e| e.ok())
         .filter(|e| {
+            if !e.file_type().is_file() {
+                return false;
+            }
             let name = e.file_name().to_string_lossy();
-            e.file_type().is_file() && (name.ends_with(".jsonl") || name.ends_with(".jsonl.zstd"))
+            if agent == "antigravity" {
+                // Antigravity writes both `transcript.jsonl` and `transcript_full.jsonl` with identical steps; count only `transcript.jsonl`.
+                return name == "transcript.jsonl";
+            }
+            name.ends_with(".jsonl") || name.ends_with(".jsonl.zstd")
         })
         .map(|e| e.into_path())
         .collect()
 }
 
 /// Where each agent keeps its sessions: Claude Code under `CLAUDE_CONFIG_DIR` (default `~/.claude`) `/projects`, Codex under
-/// `CODEX_HOME` (default `~/.codex`) `/sessions`.
+/// `CODEX_HOME` (default `~/.codex`) `/sessions`, DeepSeek Harness under `DSH_HOME` (default `~/.dsh`) `/sessions`, and
+/// Antigravity under `GEMINI_HOME` (default `~/.gemini`) `/antigravity*/brain` plus T3 Code's isolated provider roots.
 fn sources() -> Vec<(&'static str, PathBuf, Parse)> {
     let home = std::env::var_os("USERPROFILE")
         .or_else(|| std::env::var_os("HOME"))
@@ -519,6 +575,30 @@ fn sources() -> Vec<(&'static str, PathBuf, Parse)> {
     if let Some(d) = dir("DSH_HOME", ".dsh") {
         out.push(("deepseek-harness", d.join("sessions"), dsh_line));
     }
+    if let Some(d) = dir("GEMINI_HOME", ".gemini") {
+        for sub in [
+            "antigravity/brain",
+            "antigravity-cli/brain",
+            "antigravity-ide/brain",
+            "antigravity-acp/brain",
+        ] {
+            let p = d.join(sub);
+            if p.is_dir() {
+                out.push(("antigravity", p, antigravity_line));
+            }
+        }
+    }
+    if let Some(h) = &home {
+        let providers = h.join(".t3/userdata/providers/antigravity");
+        if let Ok(entries) = std::fs::read_dir(&providers) {
+            for entry in entries.flatten() {
+                let brain = entry.path().join("antigravity-acp/brain");
+                if brain.is_dir() {
+                    out.push(("antigravity", brain, antigravity_line));
+                }
+            }
+        }
+    }
     out
 }
 
@@ -539,7 +619,7 @@ pub fn usage(days: u16) -> Result<Value> {
     let (mut files, mut new_bytes) = (0, 0);
     let mut live = std::collections::BTreeSet::new();
     for (agent, dir, parse) in sources() {
-        for file in sessions(&dir) {
+        for file in sessions(agent, &dir) {
             let key = file.to_string_lossy().into_owned();
             let st = index.files.entry(key.clone()).or_default();
             match read_file(&file, agent, parse, st) {
@@ -607,7 +687,7 @@ pub fn usage(days: u16) -> Result<Value> {
         "days": days,
         "agents_not_measured": [
             "grok: keeps no token counts on this computer (only a general log)",
-            "gemini: no session folder found on this computer"
+            "gemini-cli: standalone Gemini CLI session format is not indexed yet (Antigravity transcripts are measured)"
         ],
         "note": "dates in UTC; counts only, no prompt or answer text is kept; api_price_usd is what the priced requests would cost at list API prices, not what a subscription pays, and cost_cache_read, cost_cache_write, cost_input and cost_output split it by bucket; unpriced_requests are of models without a price yet",
         "prices": PRICES,
@@ -878,10 +958,10 @@ fn missed_commands(days: u16, first: &str) -> Value {
     let mut agg: HashMap<String, MissedAgg> = HashMap::new();
 
     for (agent, dir, _) in sources() {
-        if !matches!(agent, "claude-code" | "codex") {
+        if !matches!(agent, "claude-code" | "codex" | "antigravity") {
             continue;
         }
-        for file in sessions(&dir) {
+        for file in sessions(agent, &dir) {
             if let Ok(meta) = std::fs::metadata(&file)
                 && let Ok(mtime) = meta.modified()
                 && mtime < cutoff
@@ -986,6 +1066,10 @@ fn scan_missed_file(
                         .windows(25)
                         .any(|w| w == b"\"custom_tool_call_output\"")
             }
+            "antigravity" => {
+                line.windows(12).any(|w| w == b"\"tool_calls\"")
+                    || (!pending.is_empty() && line.windows(9).any(|w| w == b"\"GENERIC\""))
+            }
             _ => false,
         };
         if !has_hint {
@@ -996,6 +1080,7 @@ fn scan_missed_file(
         };
         if let Some(d) = v
             .get("timestamp")
+            .or_else(|| v.get("created_at"))
             .and_then(Value::as_str)
             .and_then(|ts| ts.get(..10))
         {
@@ -1109,6 +1194,62 @@ fn scan_missed_file(
                     _ => {}
                 }
             }
+            "antigravity" => match v["type"].as_str().unwrap_or("") {
+                "PLANNER_RESPONSE" => {
+                    let Some(step_idx) = v["step_index"].as_u64() else {
+                        continue;
+                    };
+                    let Some(calls) = v["tool_calls"].as_array() else {
+                        continue;
+                    };
+                    for (i, tc) in calls.iter().enumerate() {
+                        let name = tc["name"].as_str().unwrap_or("");
+                        if !matches!(
+                            name.to_ascii_lowercase().as_str(),
+                            "run_command" | "run_shell_command" | "bash" | "shell"
+                        ) {
+                            continue;
+                        }
+                        let Some(raw_cmd) = tc["args"]["CommandLine"]
+                            .as_str()
+                            .or_else(|| tc["args"]["command"].as_str())
+                        else {
+                            continue;
+                        };
+                        // Antigravity transcript args encode string values as JSON string literals (`"\"git status\""`).
+                        let decoded = serde_json::from_str::<String>(raw_cmd)
+                            .unwrap_or_else(|_| raw_cmd.to_string());
+                        if let Some((prefix, covered)) = classify_shell_prefix(&decoded) {
+                            let result_step = step_idx.saturating_add(1).saturating_add(i as u64);
+                            pending.insert(result_step.to_string(), (prefix, covered, in_range));
+                        }
+                    }
+                }
+                "GENERIC" => {
+                    let Some(step_idx) = v["step_index"].as_u64() else {
+                        continue;
+                    };
+                    let Some((prefix, covered, ok_date)) = pending.remove(&step_idx.to_string())
+                    else {
+                        continue;
+                    };
+                    if !ok_date {
+                        continue;
+                    }
+                    let bytes = tool_result_bytes(&v["content"]);
+                    record_missed(
+                        prefix,
+                        covered,
+                        bytes,
+                        total_calls,
+                        covered_calls,
+                        uncovered_calls,
+                        uncovered_bytes,
+                        agg,
+                    );
+                }
+                _ => {}
+            },
             _ => {}
         }
     }
@@ -1371,6 +1512,38 @@ mod tests {
         let user =
             br#"{"type":"user/message","time":1792964444792,"data":{"usage":{"inputTokens":1}}}"#;
         assert!(dsh_line(user, &mut FileState::default()).is_none());
+    }
+
+    #[test]
+    fn antigravity_planner_responses_are_counted_with_cache_reads_apart() {
+        let line = br#"{"step_index":9,"source":"MODEL","type":"PLANNER_RESPONSE","status":"DONE","created_at":"2026-11-21T10:52:29Z","model":"gemini-4-neon-medium","input_tokens":10000,"cache_read_tokens":40000,"output_tokens":500}"#;
+        let (date, model, t) = antigravity_line(line, &mut FileState::default()).unwrap();
+        assert_eq!(
+            (date.as_str(), model.as_str()),
+            ("2026-11-21", "gemini-4-neon-medium")
+        );
+        assert_eq!(
+            (
+                t.input,
+                t.output,
+                t.cache_read,
+                t.requests,
+                t.unpriced_requests
+            ),
+            (10_000, 500, 40_000, 1, 0)
+        );
+        let approx = |a: f64, b: f64| (a - b).abs() < 1e-9;
+        // gemini-4-neon: $3.00 input, $0.15 cache read, $15.00 output per million.
+        assert!(approx(t.cost_input, 10_000.0 * 3.00 / 1e6));
+        assert!(approx(t.cost_cache_read, 40_000.0 * 0.15 / 1e6));
+        assert!(approx(t.cost_output, 500.0 * 15.00 / 1e6));
+        assert!(approx(
+            t.api_price_usd,
+            (10_000.0 * 3.00 + 40_000.0 * 0.15 + 500.0 * 15.00) / 1e6
+        ));
+        let user =
+            br#"{"step_index":0,"source":"USER_EXPLICIT","type":"USER_INPUT","status":"DONE","created_at":"2026-11-21T10:52:13Z"}"#;
+        assert!(antigravity_line(user, &mut FileState::default()).is_none());
     }
 
     #[test]
