@@ -28,7 +28,7 @@ PREVIEW=1 node site/build.mjs
 npx wrangler@latest deploy --name footnote-preview
 ```
 
-`PREVIEW=1` sets `SITE_URL` to `https://preview.footnote.example`, adds `X-Robots-Tag: noindex, nofollow` to `dist/_headers` and switches `dist/robots.txt` to `Disallow: /` (with the `llms.txt` pointer). The files in `src/` stay production-ready.
+`PREVIEW=1` adds `X-Robots-Tag: noindex, nofollow` to `dist/_headers` and switches `dist/robots.txt` to `Disallow: /` (with the `llms.txt` pointer). The files in `src/` stay production-ready.
 
 ## Production deploy (manual step)
 
@@ -42,7 +42,7 @@ Then verify live headers on `/` (HSTS, CSP, `Link: </llms.txt>; rel="llms-txt"`)
 ## Before the site is public
 
 1. **security.txt**: contact is `johan.velocity.lab@pm.me`, `Expires` is `2027-11-20`; move `Expires` forward before then.
-2. **Canonical URL**: `src/` keeps `%SITE_URL%` placeholders; `build.mjs` defaults to `https://footnote.example`. Pass `SITE_URL=https://example.com` once a custom domain exists.
+2. **Canonical URL**: `src/` keeps `%SITE_URL%` placeholders; `build.mjs` defaults to `https://footnote-preview.johanproust.workers.dev`, the canonical address until a custom domain exists. Then pass `SITE_URL=https://<domain>` (or change the default) and update the repository homepage.
 3. **HSTS preload**: `_headers` sets `max-age=63072000; includeSubDomains`. Do not add `preload` on `workers.dev`. With a custom domain, add `; preload` and submit at hstspreload.org only once every subdomain is HTTPS.
 4. **Screen-reader pass**: automated axe-core and keyboard Tab checks are verified; a manual NVDA/VoiceOver pass is still open.
 

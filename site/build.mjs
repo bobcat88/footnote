@@ -13,7 +13,8 @@ import { htmlToMd } from "./md.mjs";
 
 const root = dirname(fileURLToPath(import.meta.url)), src = join(root, "src"), out = join(root, "dist");
 const PREVIEW = !!process.env.PREVIEW;
-const SITE_URL = (process.env.SITE_URL || (PREVIEW ? "https://preview.footnote.example" : "https://footnote.example")).replace(/\/$/, "");
+// No custom domain yet (#335): the workers.dev preview is the canonical address until one exists.
+const SITE_URL = (process.env.SITE_URL || "https://footnote-preview.johanproust.workers.dev").replace(/\/$/, "");
 rmSync(out, { recursive: true, force: true });
 cpSync(src, out, { recursive: true });
 mkdirSync(join(out, "assets"));
