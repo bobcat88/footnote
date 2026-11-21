@@ -14,7 +14,7 @@ rusqlite.workspace = true
 serde_json.workspace = true
 # Tree-sitter base layer (CODE-GRAPH-DESIGN.md section 12). Reviewed 17 Nov 2026: official tree-sitter crates, MIT; build
 # scripts only compile the bundled C parsers with `cc`; wasm and bindgen stay off (default features).
-tree-sitter = { version = "=0.27.1", default-features = false, features = ["std"] }
+tree-sitter = { version = "=0.27.2", default-features = false, features = ["std"] }
 streaming-iterator = "0.1.9"
 tree-sitter-rust = "=0.24.2"
 tree-sitter-typescript = "=0.23.2"
