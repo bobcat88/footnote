@@ -4,6 +4,8 @@ Thanks for looking. Footnote is small on purpose, and every claim in it has a re
 
 ## Run the checks
 
+`bash scripts/check.sh` runs everything CI runs (formatting, clippy for each feature set, tests, launcher and site checks). Piece by piece:
+
 ```bash
 cargo fmt --check
 cargo clippy --all-targets
@@ -30,4 +32,4 @@ Keep the model in the README true. New tools must be read-only over MCP; anythin
 
 ## Pull requests
 
-One topic per pull request, tracked by a GitHub issue, with the evidence in the description. Commits follow `type(scope): summary` (`feat`, `fix`, `perf`, `bench`, `docs`). Issue structure, Epic nesting, and AI attribution rules are documented in [docs/ISSUE-RULES.md](docs/ISSUE-RULES.md) and tracked with `python scripts/agent_metrics.py`; Rust code follows [docs/RUST-RULES.md](docs/RUST-RULES.md). AI agents filing issues, comments, or PRs sign them with their agent name, model, and logo (see [.github/AGENT-SIGNATURES.md](.github/AGENT-SIGNATURES.md)).
+One topic per pull request, tracked by a GitHub issue, with the evidence in the description. Commits follow [Conventional Commits](https://www.conventionalcommits.org/): `type(scope): summary`, 72 characters at most, with `type` one of `feat`, `fix`, `perf`, `refactor`, `docs`, `test`, `build`, `ci`, `chore`, `style` or `revert` (`scripts/check-commits.py` checks it). New to the code? Issues labelled [good first issue](https://github.com/bobcat88/footnote/labels/good%20first%20issue) are small and self-contained. Issue structure, Epic nesting, and AI attribution rules are documented in [docs/ISSUE-RULES.md](docs/ISSUE-RULES.md) and tracked with `python scripts/agent_metrics.py`; Rust code follows [docs/RUST-RULES.md](docs/RUST-RULES.md). AI agents filing issues, comments, or PRs sign them with their agent name, model, and logo (see [.github/AGENT-SIGNATURES.md](.github/AGENT-SIGNATURES.md)).

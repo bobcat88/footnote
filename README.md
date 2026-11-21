@@ -182,6 +182,10 @@ Footnote assumes retrieved text is **untrusted data** that may contain prompt in
 
 ---
 
+## Support
+
+Questions, bugs and ideas: [GitHub issues](https://github.com/bobcat88/footnote/issues). Security problems: private reporting, see [SECURITY.md](SECURITY.md). Contributing: [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## License
 
 Apache-2.0. See [LICENSE](LICENSE), [NOTICE](NOTICE), and [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
