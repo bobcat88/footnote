@@ -162,7 +162,7 @@ fn notifications_never_produce_an_output_line() {
 }
 
 #[test]
-fn tools_list_returns_eight_tools_with_valid_input_schemas() {
+fn tools_list_returns_compact_tools_with_valid_input_schemas_and_within_budget() {
     let t = tmp();
     let db = fixture(&t);
     let out = session(
@@ -171,22 +171,30 @@ fn tools_list_returns_eight_tools_with_valid_input_schemas() {
     );
     let rs = responses(&out);
     assert_eq!(rs.len(), 1);
+    let bytes = serde_json::to_vec(&rs[0]["result"]).unwrap().len();
+    const BUDGET: usize = 5_000;
+    assert!(
+        bytes <= BUDGET,
+        "tools/list serialized schema is {bytes} bytes, exceeding budget of {BUDGET} bytes"
+    );
     let tools = rs[0]["result"]["tools"].as_array().unwrap();
-    assert_eq!(tools.len(), if cfg!(feature = "code") { 12 } else { 11 });
+    assert_eq!(tools.len(), if cfg!(feature = "code") { 8 } else { 7 });
     let names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
     for expected in [
         "footnote_recall",
         "footnote_get",
-        "footnote_get_record",
-        "footnote_stats",
-        "footnote_health",
+        "footnote_info",
         "footnote_wake_up",
-        "footnote_propose",
-        "footnote_export",
+        "footnote_remember",
+        "footnote_forget",
         "footnote_tag",
     ] {
         assert!(names.contains(&expected), "missing tool {expected}");
     }
+    assert!(
+        !names.contains(&"footnote_propose"),
+        "non-executable footnote_propose should not consume tools/list budget"
+    );
     for tool in tools {
         assert!(tool["description"].as_str().is_some_and(|d| !d.is_empty()));
         let schema = &tool["inputSchema"];
@@ -211,17 +219,47 @@ fn tools_list_returns_eight_tools_with_valid_input_schemas() {
         json!(["id"])
     );
     assert_eq!(
-        by_name("footnote_get_record")["inputSchema"]["required"],
-        json!(["id"])
+        by_name("footnote_get")["inputSchema"]["properties"]["kind"]["enum"],
+        json!(["chunk", "record"])
     );
     assert_eq!(
-        by_name("footnote_propose")["inputSchema"]["required"],
-        json!(["payload"])
+        by_name("footnote_info")["inputSchema"]["properties"]["op"]["enum"],
+        json!(["health", "stats", "export"])
     );
     assert_eq!(
         by_name("footnote_recall")["inputSchema"]["properties"]["mode"]["enum"],
         json!(["lexical", "hybrid"])
     );
+}
+
+#[test]
+fn footnote_info_multiplexes_health_stats_and_export() {
+    let t = tmp();
+    let db = fixture(&t);
+
+    let health = call(&db, "footnote_info", json!({}));
+    assert_eq!(health["isError"], false);
+    let health: Value = serde_json::from_str(&text(&health)).unwrap();
+    assert_eq!(health["semantic_state"], "lexical_only");
+
+    let stats = call(&db, "footnote_info", json!({"op": "stats"}));
+    assert_eq!(stats["isError"], false);
+    let stats: Value = serde_json::from_str(&text(&stats)).unwrap();
+    assert_eq!(stats["sources"], 1);
+    assert_eq!(stats["fts5"], true);
+
+    let export = call(
+        &db,
+        "footnote_info",
+        json!({"op": "export", "format": "json"}),
+    );
+    assert_eq!(export["isError"], false);
+    let export: Value = serde_json::from_str(&text(&export)).unwrap();
+    assert_eq!(export["kind"], "records_metadata");
+    assert_eq!(export["total"], 0);
+
+    let bad = call(&db, "footnote_info", json!({"op": "delete"}));
+    assert_eq!(bad["isError"], true);
 }
 
 #[test]
@@ -381,6 +419,11 @@ fn record_tools_read_structured_records_and_project_context_packs() {
     assert_eq!(record["revision"], 1);
     assert_eq!(record["trust"], "untrusted_scoped_finding");
     assert_eq!(record["payload"]["project"], "synthetic");
+
+    let record_via_get = call(&db, "footnote_get", json!({"id":id,"kind":"record"}));
+    assert_eq!(record_via_get["isError"], false);
+    let record_via_get: Value = serde_json::from_str(&text(&record_via_get)).unwrap();
+    assert_eq!(record_via_get["payload"]["project"], "synthetic");
 
     let missing = call(&db, "footnote_get_record", json!({"id":9999}));
     assert_eq!(missing["isError"], true);
