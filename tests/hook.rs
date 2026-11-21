@@ -600,3 +600,51 @@ fn antigravity_hooks_inject_steps_deduplicate_turn_and_use_continue_on_stop() {
         json!({})
     );
 }
+
+#[test]
+fn gemini_cli_hooks_handle_before_agent_and_after_agent_with_deny_and_empty_json() {
+    let t = tempfile::tempdir().unwrap();
+    let state = t.path();
+    fs::write(state.join("memory.json"), r#"{"every_turns":1}"#).unwrap();
+    seed(state, &[]);
+
+    let before = json!({
+        "hook_event_name": "BeforeAgent",
+        "session_id": "gemini-sess-1",
+        "cwd": env!("CARGO_MANIFEST_DIR"),
+        "prompt": "benchmark tables gaps",
+    });
+    let r1: Value = serde_json::from_str(&hook(state, before)).unwrap();
+    assert_eq!(r1["hookSpecificOutput"]["hookEventName"], "BeforeAgent");
+    assert!(
+        r1["hookSpecificOutput"]["additionalContext"]
+            .as_str()
+            .unwrap()
+            .contains("relative % gaps"),
+        "{r1}"
+    );
+
+    // AfterAgent on turn 1 (>= every_turns=1) emits `decision: "deny"` for Gemini CLI retry loop.
+    let after = json!({
+        "hook_event_name": "AfterAgent",
+        "session_id": "gemini-sess-1",
+        "cwd": env!("CARGO_MANIFEST_DIR"),
+        "stop_hook_active": false,
+    });
+    let ask: Value = serde_json::from_str(&hook(state, after.clone())).unwrap();
+    assert_eq!(ask["decision"], "deny", "{ask}");
+    assert!(
+        ask["reason"]
+            .as_str()
+            .unwrap()
+            .contains("footnote_remember")
+    );
+
+    // Final AfterAgent with stop_hook_active=true emits `{}`.
+    let mut after_done = after;
+    after_done["stop_hook_active"] = json!(true);
+    assert_eq!(
+        serde_json::from_str::<Value>(&hook(state, after_done)).unwrap(),
+        json!({})
+    );
+}

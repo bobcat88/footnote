@@ -73,6 +73,111 @@ fn hook_lean_rewrites_supported_bash_and_passes_through_pipes() {
 }
 
 #[test]
+fn hook_lean_rewrites_antigravity_tool_call_and_gemini_cli_before_tool() {
+    let state = TempDir::new().unwrap();
+    let bin_dir = assert_cmd::cargo::cargo_bin!("footnote")
+        .parent()
+        .unwrap()
+        .to_path_buf();
+
+    // 1. Antigravity PreToolUse sends `toolCall: { name: "run_command", args: { CommandLine } }`
+    //    and expects `{ "decision": "allow", "overwrite": { "CommandLine": ... } }`.
+    let agy_payload = json!({
+        "conversationId": "conv-123",
+        "hookEventName": "PreToolUse",
+        "toolCall": {
+            "id": "toolu_01",
+            "name": "run_command",
+            "args": {
+                "CommandLine": "cargo test --workspace",
+                "WaitMsBeforeAsync": 5000
+            }
+        }
+    });
+    let agy_out = cargo_bin_cmd!("footnote")
+        .env("FOOTNOTE_STATE_DIR", state.path())
+        .env("PATH", &bin_dir)
+        .args(["hook", "lean"])
+        .write_stdin(agy_payload.to_string())
+        .output()
+        .unwrap();
+    assert!(agy_out.status.success(), "{agy_out:?}");
+    let agy_v: Value = serde_json::from_slice(&agy_out.stdout).unwrap();
+    assert_eq!(agy_v["decision"], "allow", "{agy_v}");
+    assert_eq!(
+        agy_v["overwrite"]["CommandLine"], "footnote run -- cargo test --workspace",
+        "{agy_v}"
+    );
+    assert!(
+        agy_v.get("hookSpecificOutput").is_none(),
+        "Antigravity must not receive Claude hookSpecificOutput: {agy_v}"
+    );
+
+    // Antigravity passthrough (chained command) must emit valid empty JSON `{}`.
+    let agy_chain = json!({
+        "conversationId": "conv-123",
+        "hookEventName": "PreToolUse",
+        "toolCall": {
+            "id": "toolu_02",
+            "name": "run_command",
+            "args": { "CommandLine": "git status && git diff" }
+        }
+    });
+    let agy_pass = cargo_bin_cmd!("footnote")
+        .env("FOOTNOTE_STATE_DIR", state.path())
+        .env("PATH", &bin_dir)
+        .args(["hook", "lean"])
+        .write_stdin(agy_chain.to_string())
+        .output()
+        .unwrap();
+    assert!(agy_pass.status.success(), "{agy_pass:?}");
+    assert_eq!(
+        serde_json::from_slice::<Value>(&agy_pass.stdout).unwrap(),
+        json!({})
+    );
+
+    // 2. Gemini CLI BeforeTool sends `tool_name: "run_shell_command"`, `tool_input: { command }`
+    //    and expects `{ "hookSpecificOutput": { "tool_input": { "command": ... } } }`.
+    let gemini_payload = json!({
+        "hook_event_name": "BeforeTool",
+        "tool_name": "run_shell_command",
+        "tool_input": { "command": "git status" }
+    });
+    let gemini_out = cargo_bin_cmd!("footnote")
+        .env("FOOTNOTE_STATE_DIR", state.path())
+        .env("PATH", &bin_dir)
+        .args(["hook", "lean"])
+        .write_stdin(gemini_payload.to_string())
+        .output()
+        .unwrap();
+    assert!(gemini_out.status.success(), "{gemini_out:?}");
+    let gemini_v: Value = serde_json::from_slice(&gemini_out.stdout).unwrap();
+    assert_eq!(
+        gemini_v["hookSpecificOutput"]["tool_input"]["command"], "footnote run -- git status",
+        "{gemini_v}"
+    );
+
+    // Gemini CLI passthrough must also emit valid empty JSON `{}`.
+    let gemini_pipe = json!({
+        "hook_event_name": "BeforeTool",
+        "tool_name": "run_shell_command",
+        "tool_input": { "command": "rg foo src | head -n 5" }
+    });
+    let gemini_pass = cargo_bin_cmd!("footnote")
+        .env("FOOTNOTE_STATE_DIR", state.path())
+        .env("PATH", &bin_dir)
+        .args(["hook", "lean"])
+        .write_stdin(gemini_pipe.to_string())
+        .output()
+        .unwrap();
+    assert!(gemini_pass.status.success(), "{gemini_pass:?}");
+    assert_eq!(
+        serde_json::from_slice::<Value>(&gemini_pass.stdout).unwrap(),
+        json!({})
+    );
+}
+
+#[test]
 fn gain_reports_shell_savings_miss_rate_and_attrib() {
     let state = TempDir::new().unwrap();
     let mut noisy = String::new();
@@ -189,6 +294,35 @@ fn install_lean_remove_rtk_and_uninstall_lean_preserves_memory_hooks() {
     assert!(
         after_ins.contains("footnote hook"),
         "memory hook should stay intact: {after_ins}"
+    );
+    // Antigravity PreToolUse must use the grouped `{matcher: "run_command", hooks: [...]}` schema.
+    let agy_hooks: Value = serde_json::from_str(
+        &fs::read_to_string(home.path().join(".gemini/config/hooks.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        agy_hooks["footnote-lean"]["PreToolUse"][0]["matcher"], "run_command",
+        "{agy_hooks}"
+    );
+    assert!(
+        agy_hooks["footnote-lean"]["PreToolUse"][0]["hooks"][0]["command"]
+            .as_str()
+            .unwrap()
+            .contains("hook lean"),
+        "{agy_hooks}"
+    );
+    // Gemini CLI must use `BeforeTool` with `matcher: "run_shell_command"` and ms timeout (5000).
+    let gemini_settings: Value = serde_json::from_str(
+        &fs::read_to_string(home.path().join(".gemini/settings.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        gemini_settings["hooks"]["BeforeTool"][0]["matcher"], "run_shell_command",
+        "{gemini_settings}"
+    );
+    assert_eq!(
+        gemini_settings["hooks"]["BeforeTool"][0]["hooks"][0]["timeout"], 5000,
+        "{gemini_settings}"
     );
 
     // 3. Second install is idempotent ("already registered").

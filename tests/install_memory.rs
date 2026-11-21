@@ -348,6 +348,27 @@ fn antigravity_memory_install_status_and_uninstall_preserve_existing_config() {
         .stdout
         .clone();
     let status: Value = serde_json::from_slice(&status_out).unwrap();
+    let gem = read(&home.join(".gemini/settings.json"));
+    assert_eq!(gem["mcpServers"]["footnote-memory"]["args"][2], "mcp");
+    for (ev, ms) in [
+        ("SessionStart", 15000),
+        ("BeforeAgent", 10000),
+        ("AfterAgent", 5000),
+    ] {
+        assert_eq!(gem["hooks"][ev][0]["matcher"], "*", "{ev}: {gem}");
+        assert_eq!(
+            gem["hooks"][ev][0]["hooks"][0]["timeout"], ms,
+            "{ev}: {gem}"
+        );
+        assert!(
+            gem["hooks"][ev][0]["hooks"][0]["command"]
+                .as_str()
+                .unwrap()
+                .ends_with(" hook"),
+            "{ev}: {gem}"
+        );
+    }
+
     let agy = status["products"]["memory"]["agents"]
         .as_array()
         .unwrap()
@@ -356,6 +377,16 @@ fn antigravity_memory_install_status_and_uninstall_preserve_existing_config() {
         .unwrap();
     assert_eq!(
         (agy["mcp_server"].as_bool(), agy["hooks"].as_bool()),
+        (Some(true), Some(true))
+    );
+    let gem_st = status["products"]["memory"]["agents"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|a| a["agent"] == "gemini-cli")
+        .unwrap();
+    assert_eq!(
+        (gem_st["mcp_server"].as_bool(), gem_st["hooks"].as_bool()),
         (Some(true), Some(true))
     );
 
@@ -391,5 +422,15 @@ fn antigravity_memory_install_status_and_uninstall_preserve_existing_config() {
         !home
             .join(".gemini/config/skills/remember/SKILL.md")
             .exists()
+    );
+    // Gemini CLI (`~/.gemini/settings.json`): SessionStart, BeforeAgent, AfterAgent hooks were also removed cleanly.
+    let gem_after = read(&home.join(".gemini/settings.json"));
+    assert!(gem_after["mcpServers"].get("footnote-memory").is_none());
+    assert!(
+        gem_after
+            .get("hooks")
+            .and_then(Value::as_object)
+            .is_none_or(|h| h.is_empty()),
+        "{gem_after}"
     );
 }

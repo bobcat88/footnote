@@ -191,6 +191,8 @@ struct Event {
     stop_active: bool,
     /// True for Antigravity (`agy` CLI / IDE / ACP) payloads: `injectSteps` output and `decision: "continue"` on Stop.
     agy: bool,
+    /// True for Gemini CLI payloads (`BeforeAgent`, `AfterAgent`, `BeforeTool`): `decision: "deny"` on AfterAgent and `{}` on no-op.
+    gemini_cli: bool,
     /// Antigravity `Stop` terminationReason (e.g. "NO_TOOL_CALL", "USER_CANCELED", "ERROR").
     termination_reason: String,
 }
@@ -203,10 +205,13 @@ impl Event {
                 .unwrap_or(fallback)
                 .to_string()
         };
+        let name = text(&["hook_event_name", "hookEventName"], "");
         let agy = v.get("conversationId").is_some()
             || v["hookEventName"] == "PreInvocation"
             || v.get("continuationActive").is_some()
             || v.get("lastUserInput").is_some();
+        let gemini_cli =
+            !agy && matches!(name.as_str(), "BeforeAgent" | "AfterAgent" | "BeforeTool");
         let workspace_first = v["workspacePaths"]
             .as_array()
             .and_then(|a| a.first())
@@ -220,7 +225,7 @@ impl Event {
             .unwrap_or(".")
             .to_string();
         Self {
-            name: text(&["hook_event_name", "hookEventName"], ""),
+            name,
             session: text(&["session_id", "sessionId", "conversationId"], "unknown"),
             cwd,
             prompt: text(&["prompt", "userPrompt", "lastUserInput"], ""),
@@ -229,6 +234,7 @@ impl Event {
                 || v["stopHookActive"] == true
                 || v["continuationActive"] == true,
             agy,
+            gemini_cli,
             termination_reason: text(&["terminationReason"], ""),
         }
     }
@@ -383,7 +389,13 @@ fn context(event: &Event, text: String) -> Option<Value> {
 }
 
 fn stop_ask(event: &Event, reason: String) -> Value {
-    let decision = if event.agy { "continue" } else { "block" };
+    let decision = if event.agy {
+        "continue"
+    } else if event.gemini_cli {
+        "deny"
+    } else {
+        "block"
+    };
     json!({"decision": decision, "reason": reason})
 }
 
@@ -589,7 +601,7 @@ fn note(s: &Settings, dir: &Path, event: &str, project: &str, v: &Value) {
 
 fn handle(state: &Path, s: &Settings, event: &Value) -> Result<Option<Value>> {
     let e = Event::normalize(event);
-    if e.name == "PreToolUse" {
+    if matches!(e.name.as_str(), "PreToolUse" | "BeforeTool") {
         return Ok(crate::run::pre_tool_use_hook(event));
     }
     let project = project_of(&e.cwd);
@@ -651,7 +663,7 @@ fn handle(state: &Path, s: &Settings, event: &Value) -> Result<Option<Value>> {
                 out = context(&e, text);
             }
         }
-        "UserPromptSubmit" | "PreInvocation" => {
+        "UserPromptSubmit" | "PreInvocation" | "BeforeAgent" => {
             let same_turn = if e.name == "PreInvocation" {
                 let h = prompt_hash(&e.prompt);
                 if h.is_empty() || st.turn_prompt_hash.as_deref() == Some(h.as_str()) {
@@ -711,7 +723,7 @@ fn handle(state: &Path, s: &Settings, event: &Value) -> Result<Option<Value>> {
                 out = context(&e, combined);
             }
         }
-        "Stop" => {
+        "Stop" | "AfterAgent" => {
             let agy_non_normal =
                 e.agy && !e.termination_reason.is_empty() && e.termination_reason != "NO_TOOL_CALL";
             let tail = (!st.handoff_asked && !e.transcript.is_empty())
@@ -810,16 +822,17 @@ fn run_inner(state: &Path, embed: bool) -> Result<()> {
         serde_json::from_str(&input).context("event JSON")?
     };
     ensure!(event.is_object(), "event must be an object");
-    let agy = Event::normalize(&event).agy;
+    let norm = Event::normalize(&event);
+    let wants_empty_json = norm.agy || norm.gemini_cli;
     if !s.enabled {
-        if agy {
+        if wants_empty_json {
             println!("{{}}");
         }
         return Ok(()); // switched off: no context, no save request, no state written
     }
     if let Some(out) = handle(state, &s, &event).context("event handling")? {
         println!("{out}");
-    } else if agy {
+    } else if wants_empty_json {
         println!("{{}}");
     }
     Ok(())

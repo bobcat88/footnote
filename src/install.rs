@@ -380,6 +380,52 @@ fn add_hooks(
 }
 
 #[cfg(feature = "memory")]
+/// Add the memory hook command to every listed event of Gemini CLI's `~/.gemini/settings.json`
+/// (`matcher: "*"` and millisecond timeouts), once.
+fn add_gemini_memory_hooks(
+    path: &Path,
+    events: &[(&str, u64)],
+    command: &str,
+    dry_run: bool,
+) -> Result<&'static str> {
+    merge_json(path, dry_run, |root| {
+        let hooks = root
+            .entry("hooks".to_string())
+            .or_insert_with(|| json!({}))
+            .as_object_mut()
+            .with_context(|| format!("{}: hooks is not an object", path.display()))?;
+        let mut changed = false;
+        for (event, timeout) in events {
+            let list = hooks
+                .entry(event.to_string())
+                .or_insert_with(|| json!([]))
+                .as_array_mut()
+                .with_context(|| format!("{}: hooks.{event} is not an array", path.display()))?;
+            let mut found = false;
+            for group in list.iter_mut() {
+                for hook in group["hooks"].as_array_mut().into_iter().flatten() {
+                    if hook["command"].as_str().is_some_and(is_memory_hook) {
+                        found = true;
+                        if hook["command"] != command {
+                            hook["command"] = json!(command);
+                            changed = true;
+                        }
+                    }
+                }
+            }
+            if !found {
+                list.push(json!({
+                    "matcher": "*",
+                    "hooks": [{"type": "command", "command": command, "timeout": timeout}]
+                }));
+                changed = true;
+            }
+        }
+        Ok(changed)
+    })
+}
+
+#[cfg(feature = "memory")]
 /// Add or update the named `"footnote-memory"` hook entry in Antigravity's `~/.gemini/config/hooks.json`
 /// (flat handler arrays for `SessionStart`, `PreInvocation` and `Stop`), leaving all other named hooks untouched.
 fn add_agy_hooks(path: &Path, command: &str, dry_run: bool) -> Result<&'static str> {
@@ -667,15 +713,35 @@ pub fn lean(dry_run: bool, remove_rtk: bool) -> Result<Value> {
     let gemini = home.join(".gemini");
     if gemini.exists() {
         let hooks = gemini.join("settings.json");
+        // Migrate away from earlier broken Claude-style PreToolUse/Bash entries in Gemini CLI settings.
+        if hooks.exists() {
+            let _ = merge_json(&hooks, dry_run, |root| {
+                let mut changed = false;
+                if let Some(events) = root.get_mut("hooks").and_then(Value::as_object_mut) {
+                    if let Some(list) = events.get_mut("PreToolUse").and_then(Value::as_array_mut) {
+                        for group in list.iter_mut() {
+                            if let Some(hs) = group.get_mut("hooks").and_then(Value::as_array_mut) {
+                                let before = hs.len();
+                                hs.retain(|h| !h["command"].as_str().is_some_and(is_lean_hook));
+                                changed |= hs.len() != before;
+                            }
+                        }
+                        list.retain(|g| g["hooks"].as_array().is_none_or(|h| !h.is_empty()));
+                    }
+                    events.retain(|_, list| list.as_array().is_none_or(|l| !l.is_empty()));
+                }
+                Ok(changed)
+            });
+        }
         add(
             "gemini-cli",
-            "lean PreToolUse hook",
+            "lean BeforeTool hook",
             &hooks,
             add_matcher_hook(
                 &hooks,
-                "PreToolUse",
-                "Bash",
-                5,
+                "BeforeTool",
+                "run_shell_command",
+                5000,
                 &command,
                 is_lean_hook,
                 dry_run,
@@ -684,8 +750,12 @@ pub fn lean(dry_run: bool, remove_rtk: bool) -> Result<Value> {
     }
     if has_antigravity(&home) {
         let hooks = home.join(".gemini/config/hooks.json");
+        // Antigravity tool hooks (`PreToolUse`, `PostToolUse`) require grouped `{matcher, hooks}` entries.
         let desired = json!({
-            "PreToolUse": [{"type": "command", "command": command, "timeout": 5}],
+            "PreToolUse": [{
+                "matcher": "run_command",
+                "hooks": [{"type": "command", "command": command, "timeout": 5}],
+            }],
         });
         let st = merge_json(&hooks, dry_run, |root| {
             if root.get(LEAN_SERVER) == Some(&desired) {
@@ -1023,6 +1093,18 @@ pub fn memory(dry_run: bool) -> Result<Value> {
             &gemini,
             add_server(&gemini, MEMORY_SERVER, &entry, dry_run),
         )?;
+        // Gemini CLI uses BeforeAgent / AfterAgent / SessionStart with wildcard matcher and ms timeouts.
+        let gemini_events = [
+            ("SessionStart", 15_000),
+            ("BeforeAgent", 10_000),
+            ("AfterAgent", 5_000),
+        ];
+        add(
+            "gemini-cli",
+            "hooks",
+            &gemini,
+            add_gemini_memory_hooks(&gemini, &gemini_events, &command, dry_run),
+        )?;
     }
     if has_antigravity(&home) {
         let cfg = home.join(".gemini/config");
@@ -1215,6 +1297,7 @@ pub fn uninstall_memory(dry_run: bool) -> Result<Value> {
     )?;
     let gemini = home.join(".gemini/settings.json");
     add("gemini-cli", "mcp server", &gemini, remove_server(&gemini))?;
+    add("gemini-cli", "hooks", &gemini, remove_hooks(&gemini))?;
     let agy_cfg = home.join(".gemini/config");
     let agy_mcp = agy_cfg.join("mcp_config.json");
     add(
@@ -1301,7 +1384,10 @@ pub fn memory_registrations() -> Result<Value> {
             "hooks": has_hooks(&home.join(".dsh/footnote-memory-hooks.json"))}));
     }
     if home.join(".gemini").exists() {
-        out.push(json!({"agent": "gemini-cli", "mcp_server": has_server(&home.join(".gemini/settings.json")), "hooks": false}));
+        let g = home.join(".gemini/settings.json");
+        out.push(
+            json!({"agent": "gemini-cli", "mcp_server": has_server(&g), "hooks": has_hooks(&g)}),
+        );
     }
     if has_antigravity(&home) {
         let cfg = home.join(".gemini/config");
