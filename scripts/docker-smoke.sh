@@ -206,6 +206,8 @@ case "$1 $2" in
 esac
 EOF
 chmod +x "${stub_bin}/claude"
+# A glob in a string (Claude Code permissions) is not a JSON comment: the hooks must still be added, the rest kept.
+printf '%s\n' '{"permissions": {"allow": ["Read(src/**)"]}}' >"${agents_home}/.claude/settings.json"
 agents() {
   env -u GEMINI_HOME PATH="${stub_bin}:${PATH}" CODEX_HOME="${agents_home}/.codex" CLAUDE_CONFIG_DIR="${agents_home}/.claude" \
     bash "${REPO_ROOT}/scripts/docker-agents.sh" --home "${agents_home}" --container "${DAEMON_NAME}" "$@"
@@ -244,6 +246,7 @@ for f in (".claude/settings.json", ".codex/hooks.json"):
     hooks = load(f)["hooks"]
     got = {ev: [(h["command"], h["timeout"]) for g in hooks[ev] for h in g["hooks"]] for ev in hooks}
     assert got == {"SessionStart": [(hook, 15)], "UserPromptSubmit": [(hook, 10)], "Stop": [(hook, 5)]}, (f, got)
+assert load(".claude/settings.json")["permissions"] == {"allow": ["Read(src/**)"]}
 PY
   [ "$(agents | grep -c 'already registered')" -ge 6 ] || { echo "a second run changed the registration" >&2; exit 1; }
 fi

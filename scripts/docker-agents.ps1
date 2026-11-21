@@ -110,12 +110,29 @@ function Set-FileAtomically([string]$Path, [string]$Text, [string]$Stamp) {
     }
 }
 
+# True when the text has a `//` or `/*` comment outside a JSON string. A glob inside a string, such as a permission
+# "Read(src/**)" in Claude Code's settings.json, is not a comment.
+function Test-JsonComment([string]$Text) {
+    $inString = $false
+    for ($i = 0; $i -lt $Text.Length - 1; $i++) {
+        $c = $Text[$i]
+        if ($inString) {
+            if ($c -eq [char]'\') { $i++ } elseif ($c -eq [char]'"') { $inString = $false }
+        } elseif ($c -eq [char]'"') {
+            $inString = $true
+        } elseif ($c -eq [char]'/' -and ($Text[$i + 1] -eq [char]'/' -or $Text[$i + 1] -eq [char]'*')) {
+            return $true
+        }
+    }
+    return $false
+}
+
 # The JSON object of a settings file ({} when missing or empty), or $null when the file is left to the user (comments).
 function Read-JsonObject([string]$Agent, [string]$Path, [string]$What) {
     $raw = Get-FileText $Path
     if ($null -eq $raw -or $raw.Trim() -eq '') { return (New-Object PSObject) }
     # Rewriting would drop comments: leave such a file to the user.
-    if ($raw -match '(?m)^\s*//' -or $raw.Contains('/*')) {
+    if (Test-JsonComment $raw) {
         Add-Result $Agent $Path "skipped: the file has comments; add the $What yourself (DOCKER.md)"
         return $null
     }

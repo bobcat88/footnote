@@ -133,6 +133,24 @@ def memory_hook(command):
     exe = c[:-5].strip().strip("'\"").replace("\\", "/")
     return exe.rsplit("/", 1)[-1] in ("footnote", "footnote.exe")
 
+def has_comment(text):
+    # A `//` or `/*` comment outside a JSON string. A glob inside a string, such as a permission "Read(src/**)" in
+    # Claude Code's settings.json, is not a comment.
+    in_string = escaped = False
+    for i, ch in enumerate(text):
+        if in_string:
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == '"':
+                in_string = False
+        elif ch == '"':
+            in_string = True
+        elif ch == "/" and text[i + 1 : i + 2] in ("/", "*"):
+            return True
+    return False
+
 def done(status, root=None):
     if root is not None and not dry:
         folder = os.path.dirname(path) or "."
@@ -156,7 +174,7 @@ before = stamp()
 raw = open(path, encoding="utf-8").read() if before else ""
 if raw.strip():
     # Rewriting would drop comments: leave such a file to the user.
-    if re.search(r"(?m)^\s*//", raw) or "/*" in raw:
+    if has_comment(raw):
         done(f"skipped: the file has comments; add the {mode} entry yourself (DOCKER.md)")
     try:
         root = json.loads(raw)
