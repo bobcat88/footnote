@@ -108,7 +108,7 @@ footnote docs add https://flask.palletsprojects.com/en/stable/ --site flask
 - **Update & rollback:** `footnote update --from <new-binary>` atomically swaps binaries even while agents run; `footnote rollback` restores the previous one.
 - **Uninstall:** `footnote uninstall --memory --lean` cleanly removes hooks and MCP entries while keeping your databases and backups.
 - **Full OS & harness walkthrough:** see **[HOW-TO.md](HOW-TO.md)**.
-- **Docker (Windows App Control, shared hub):** a hardened image (`Dockerfile`), a long-lived daemon for several agents (`compose.yaml`), and one command that registers Claude Code, Codex, Gemini CLI and Antigravity with it (`scripts/docker-agents.ps1` / `.sh`). See [HOW-TO.md → Docker](HOW-TO.md#docker-when-windows-blocks-local-builds).
+- **Docker (Windows App Control, shared hub):** a hardened image (`Dockerfile`), a long-lived daemon for several agents (`compose.yaml`), and one command that registers Claude Code, Codex, Gemini CLI and Antigravity with it (`scripts/docker-agents.ps1` / `.sh`). See [DOCKER.md](DOCKER.md).
 
 ### Connect your agent
 
@@ -178,7 +178,7 @@ Footnote assumes retrieved text is **untrusted data** that may contain prompt in
 **Work in progress / known limits:**
 - **Desktop Launcher (`apps/launcher`, Tauri 2):** builds and runs on Windows from source ([apps/launcher/README.md](apps/launcher/README.md)); no Windows installer yet (`#125`).
 - **macOS prebuilt releases:** not in CI yet (build from source with Cargo).
-- **Managed Windows / App Control:** unsigned local `.exe` builds can be blocked by corporate policies; use the hardened Docker image ([HOW-TO.md](HOW-TO.md#docker-when-windows-blocks-local-builds)). In Docker, memory hooks and `footnote personal` (DPAPI) are not available.
+- **Managed Windows / App Control:** unsigned local `.exe` builds can be blocked by corporate policies; use the hardened Docker image ([DOCKER.md](DOCKER.md)). In Docker, memory hooks and `footnote personal` (DPAPI) are not available.
 - **Encrypted memory store (`--features encryption`, Windows):** experimental SQLCipher store; agent transcripts on disk remain plain text.
 - **English stemmer default:** beats per-language stemming on mixed EN/FR corpora, though a pure French corpus may prefer a French stemmer.
 

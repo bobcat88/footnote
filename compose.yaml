@@ -91,6 +91,6 @@ services:
 
 volumes:
   footnote-state:
-    # One name for the Compose daemon and the one-shot `docker run -v footnote-state:/state` commands of HOW-TO.md;
+    # One name for the Compose daemon and the one-shot `docker run -v footnote-state:/state` commands of DOCKER.md;
     # give each team or tenant stack its own (FOOTNOTE_STATE_VOLUME=footnote-state-team-a).
     name: ${FOOTNOTE_STATE_VOLUME:-footnote-state}
