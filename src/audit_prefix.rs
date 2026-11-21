@@ -92,7 +92,17 @@ fn collect_md_files(dir: &Path, filename_filter: Option<&str>) -> Vec<PathBuf> {
         return Vec::new();
     }
     let mut out = Vec::new();
-    for entry in WalkDir::new(dir).max_depth(4).into_iter().flatten() {
+    for entry in WalkDir::new(dir)
+        .max_depth(4)
+        .into_iter()
+        .filter_entry(|e| {
+            !(e.file_type().is_dir()
+                && e.file_name()
+                    .to_str()
+                    .is_some_and(|n| n == ".trash" || n == ".git"))
+        })
+        .flatten()
+    {
         if !entry.file_type().is_file() {
             continue;
         }

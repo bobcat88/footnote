@@ -12,6 +12,7 @@ fn audit_prefix_measures_instructions_skills_and_mcp_without_leaking_secrets() {
     let home = dir.path().join("home");
     let project = dir.path().join("project");
     fs::create_dir_all(home.join(".claude/skills/demo")).unwrap();
+    fs::create_dir_all(home.join(".claude/skills/.trash/deleted-skill")).unwrap();
     fs::create_dir_all(home.join(".codex")).unwrap();
     fs::create_dir_all(&project).unwrap();
 
@@ -21,6 +22,12 @@ fn audit_prefix_measures_instructions_skills_and_mcp_without_leaking_secrets() {
     fs::write(
         home.join(".claude/skills/demo/SKILL.md"),
         "---\nname: demo\ndescription: Short skill header\n---\n\nFull body that is much longer than the frontmatter.\n",
+    )
+    .unwrap();
+    // Deleted skills in `.trash` must be ignored
+    fs::write(
+        home.join(".claude/skills/.trash/deleted-skill/SKILL.md"),
+        "---\nname: deleted-skill\n---\nignored\n",
     )
     .unwrap();
 
