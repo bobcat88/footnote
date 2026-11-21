@@ -21,7 +21,7 @@ clap = { version = "4", features = ["derive"] }
 rusqlite = { version = "0.43", features = ["bundled", "backup"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-sha2 = "0.10"
+sha2 = "0.11"
 walkdir = "2"
 # Ripgrep's parallel .gitignore-aware walker & SIMD regex searcher (#355, #382); MIT OR Unlicense.
 ignore = "0.4"
