@@ -613,6 +613,73 @@ fn write(
     Ok((docs.len(), ids.len(), refs))
 }
 
+/// A symbol's 1-based inclusive line span inside a file, used to annotate search matches (#382).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SymbolSpan {
+    pub name: String,
+    pub kind: String,
+    pub line: i64,
+    pub end_line: i64,
+}
+
+/// Map normalized relative file paths to their non-module symbols (line-ordered) from an indexed code graph (#382).
+/// Returns an empty map if the code graph does not exist or cannot be queried.
+#[must_use]
+pub fn enclosing_symbols(
+    db: &Path,
+    paths: &[String],
+) -> std::collections::HashMap<String, Vec<SymbolSpan>> {
+    let mut out = std::collections::HashMap::new();
+    if paths.is_empty() || !db.is_file() {
+        return out;
+    }
+    let Ok(c) = Connection::open_with_flags(db, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY) else {
+        return out;
+    };
+    let want: std::collections::HashSet<String> =
+        paths.iter().map(|p| p.replace('\\', "/")).collect();
+    let mut id_to_path: HashMap<i64, String> = HashMap::new();
+    if let Ok(mut fs) = c.prepare("SELECT id, path FROM files")
+        && let Ok(rows) = fs.query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?)))
+    {
+        for (id, path) in rows.flatten() {
+            let norm = path.replace('\\', "/");
+            if want.contains(&norm) {
+                id_to_path.insert(id, norm);
+            }
+        }
+    }
+    if id_to_path.is_empty() {
+        return out;
+    }
+    let Ok(mut stmt) = c.prepare(
+        "SELECT file_id, name, kind, line, end_line FROM symbols WHERE kind != 'module' ORDER BY file_id, line",
+    ) else {
+        return out;
+    };
+    if let Ok(rows) = stmt.query_map([], |r| {
+        Ok((
+            r.get::<_, i64>(0)?,
+            r.get::<_, String>(1)?,
+            r.get::<_, String>(2)?,
+            r.get::<_, i64>(3)?,
+            r.get::<_, i64>(4)?,
+        ))
+    }) {
+        for (file_id, name, kind, line, end_line) in rows.flatten() {
+            if let Some(norm) = id_to_path.get(&file_id) {
+                out.entry(norm.clone()).or_default().push(SymbolSpan {
+                    name,
+                    kind,
+                    line,
+                    end_line,
+                });
+            }
+        }
+    }
+    out
+}
+
 /// A file's definitions in line order, each with kind, signature and line range (#240): what an agent reads before
 /// opening a large file, so it can read one function instead of the whole file.
 pub fn outline(db: &Path, path: &str) -> Result<Value> {

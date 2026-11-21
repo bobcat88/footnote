@@ -10,6 +10,7 @@ mod docs;
 mod find;
 #[cfg(feature = "code")]
 mod frame;
+mod grep;
 mod hardware;
 #[cfg(feature = "memory")]
 mod hook;

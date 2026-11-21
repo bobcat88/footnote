@@ -491,6 +491,29 @@ enum Action {
         #[arg(long, default_value_t = 50)]
         limit: usize,
     },
+    /// Fast native ripgrep-engine search (.gitignore-aware, symbol-annotated via Footnote Code, bounded output) (#382).
+    Grep {
+        /// Regular expression pattern (or literal with `--fixed-strings`).
+        pattern: String,
+        /// Folder or file to search (default: current directory).
+        #[arg(default_value = ".")]
+        path: PathBuf,
+        /// Optional glob filter (e.g. `*.rs`, `crates/**/*.rs`).
+        #[arg(short = 'g', long)]
+        glob: Option<String>,
+        /// Case-insensitive matching.
+        #[arg(short = 'i', long)]
+        ignore_case: bool,
+        /// Treat pattern as a literal string instead of a regular expression.
+        #[arg(short = 'F', long)]
+        fixed_strings: bool,
+        /// Max matching lines inline before spilling full output to `footnote output <id>`.
+        #[arg(long, default_value_t = 80)]
+        limit: usize,
+        /// Emit structured JSON instead of compact file-grouped text.
+        #[arg(long)]
+        json: bool,
+    },
     /// Verify an append-only audit log (no database needed).
     Audit {
         #[command(subcommand)]
@@ -949,6 +972,25 @@ fn execute(cli: Cli) -> Result<Value> {
             };
         }
         Action::Gain { days, attrib } => return crate::usage::gain(*days, *attrib),
+        Action::Grep {
+            pattern,
+            path,
+            glob,
+            ignore_case,
+            fixed_strings,
+            limit,
+            json,
+        } => {
+            return crate::grep::run(&crate::grep::Options {
+                pattern,
+                path,
+                glob: glob.as_deref(),
+                ignore_case: *ignore_case,
+                fixed_strings: *fixed_strings,
+                limit: *limit,
+                json: *json,
+            });
+        }
         Action::AuditPrefix {
             root,
             agent,
@@ -1273,6 +1315,7 @@ fn execute(cli: Cli) -> Result<Value> {
         }
         Action::Audit { .. }
         | Action::AuditPrefix { .. }
+        | Action::Grep { .. }
         | Action::Options
         | Action::Config { .. }
         | Action::Models { .. }
@@ -1581,11 +1624,12 @@ pub fn run() {
     // In MCP mode stdout belongs to the JSON-RPC transport: a serve-level
     // failure is reported on stderr instead of the CLI's JSON envelope.
     let serving = matches!(cli.command, Action::Serve { .. } | Action::Mcp);
+    let raw_stdout = serving || matches!(cli.command, Action::Grep { json: false, .. });
     let vectors = matches!(cli.command, Action::Embed { .. }); // bulk output by design: no response cap
     crate::metrics::started!(format!("cli.{}", action_name(&cli.command)));
     match crate::metrics::timed!(format!("cli.{}", action_name(&cli.command)), execute(cli)) {
         Ok(v) => {
-            if serving {
+            if raw_stdout {
                 return;
             }
             let encoded = v.to_string();

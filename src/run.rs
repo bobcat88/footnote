@@ -1235,7 +1235,7 @@ fn outputs_dir() -> Result<PathBuf> {
     Ok(dir)
 }
 
-fn store_raw_output(raw: &str) -> Result<String> {
+pub(crate) fn store_raw_output(raw: &str) -> Result<String> {
     let dir = outputs_dir()?;
     prune_handles(&dir);
     let now = SystemTime::now()
