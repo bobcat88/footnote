@@ -7,6 +7,7 @@ use anyhow::{Context, Result, bail};
 use serde_json::{Map, Value, json};
 use std::path::{Path, PathBuf};
 
+#[non_exhaustive]
 pub struct OptionSpec {
     pub key: &'static str,
     pub default: Value,
@@ -16,6 +17,7 @@ pub struct OptionSpec {
     pub cost: &'static str,
 }
 
+#[must_use]
 pub fn catalogue() -> Vec<OptionSpec> {
     vec![
         OptionSpec {
@@ -116,6 +118,7 @@ fn settings_file(state: &Path, product: &str) -> PathBuf {
     state.join(format!("{product}.json"))
 }
 
+#[must_use]
 pub fn policy_path() -> Option<PathBuf> {
     // Tests point elsewhere; an installed (release) build never lets the user move the company policy away.
     #[cfg(debug_assertions)]

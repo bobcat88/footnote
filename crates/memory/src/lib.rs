@@ -37,6 +37,7 @@ const MAX_ANCHORS: usize = 20;
 
 /// One anchor: a path or a symbol, at most 300 characters on one line; `\` becomes `/` and a leading `./` is dropped, so
 /// `src\usage.rs` and `./src/usage.rs` are the same anchor.
+#[must_use]
 pub fn anchor(a: &str) -> Option<String> {
     let a = a.trim().replace('\\', "/");
     let a = a.trim_start_matches("./");

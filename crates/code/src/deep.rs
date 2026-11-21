@@ -39,6 +39,7 @@ pub const RUST: Tool = Tool {
 };
 
 /// How `--deep` treats a missing indexer.
+#[non_exhaustive]
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum Mode {
     /// Only say what is missing and the command that installs it (the default without a terminal, and `--no-install`).
@@ -57,6 +58,7 @@ pub trait Env {
 }
 
 /// The indexer `index()` would pick for the project's top folder (same marker files, same order).
+#[must_use]
 pub fn tool_for(root: &Path) -> Option<&'static Tool> {
     let has = |f: &str| root.join(f).is_file();
     // shortcut: top folder only; a Rust crate in a subfolder is not checked here, `index()` still tries it. Upgrade when asked.

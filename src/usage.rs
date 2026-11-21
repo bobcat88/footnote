@@ -552,7 +552,9 @@ pub fn usage(days: u16) -> Result<Value> {
     }
     // shortcut: a deleted session file drops out of the totals; keep its counts instead if people prune transcripts.
     index.files.retain(|k, _| live.contains(k));
-    std::fs::create_dir_all(path.parent().unwrap())?;
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
     let tmp = path.with_extension("tmp");
     std::fs::write(&tmp, serde_json::to_vec(&index)?)?;
     std::fs::rename(&tmp, &path)?;

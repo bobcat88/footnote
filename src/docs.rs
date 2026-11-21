@@ -325,7 +325,9 @@ fn add_keyword(state: &Path, a: &Add) -> Result<Value> {
         find::register(state, &db)?;
         return Ok(json!({"site": site, "version": version, "db": db, "reused": true}));
     }
-    std::fs::create_dir_all(db.parent().unwrap())?;
+    if let Some(parent) = db.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
     // Build beside the final name and rename at the end, so a failed run never leaves a half database that counts as cached.
     let part = db.with_extension("db.part");
     let _ = std::fs::remove_file(&part);
@@ -343,7 +345,8 @@ fn add_keyword(state: &Path, a: &Add) -> Result<Value> {
             crawl::crawl(&pages, &options, &mut |_, _| {})?;
             pages.clone()
         }
-        (_, f) => f.unwrap().to_path_buf(),
+        (None, Some(f)) => f.to_path_buf(),
+        (None, None) => bail!("give a start URL or --from <folder>"),
     };
     let built = (|| {
         let mut c = crate::app::open(&part, true)?;

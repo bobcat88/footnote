@@ -10,6 +10,7 @@ pub mod metrics;
 pub mod state;
 
 pub const MAX_FILE: u64 = 16 * 1024 * 1024;
+#[must_use]
 pub fn hash(data: &[u8]) -> String {
     format!("{:x}", Sha256::digest(data))
 }
@@ -42,6 +43,7 @@ pub fn helper_env(cmd: &mut std::process::Command) {
         }
     }
 }
+#[must_use]
 pub fn is_link(p: &Path) -> bool {
     let Ok(m) = fs::symlink_metadata(p) else {
         return false;

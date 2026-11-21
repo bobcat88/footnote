@@ -505,6 +505,7 @@ pub fn crawl(out: &Path, o: &Options, progress: &mut dyn FnMut(u64, u64)) -> Res
 }
 
 /// A page seen again: what `docs refresh` learns per known page.
+#[non_exhaustive]
 pub enum Recheck {
     /// Not modified (HTTP 304) or the same body; the validators may have been renewed.
     Same(Validators),
@@ -546,6 +547,7 @@ fn text_of(body: String, last: &Url, kind: &str) -> Option<(String, Vec<Url>)> {
 
 impl Client {
     /// One conditional GET (`If-None-Match`, `If-Modified-Since`); a 200 whose body hashes the same is also `Same`.
+    #[must_use]
     pub fn recheck(&self, url: &str, v: &Validators) -> Recheck {
         let Ok(u) = Url::parse(url) else {
             return Recheck::Unreachable;

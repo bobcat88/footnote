@@ -8,6 +8,22 @@ use regex::Regex;
 use serde_json::{Value, json};
 use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
+use std::sync::OnceLock;
+
+fn version_re() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(r#"\bversion\s*=\s*"([^"]*)""#).expect("valid version regex"))
+}
+
+fn package_re() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(r#"\bpackage\s*=\s*"([^"]*)""#).expect("valid package regex"))
+}
+
+fn string_re() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(r#""([^"]+)""#).expect("valid quoted-string regex"))
+}
 
 #[derive(Clone, Debug, PartialEq)]
 struct Lib {
@@ -51,11 +67,17 @@ impl Lib {
 }
 
 fn add(libs: &mut Libs, l: Lib) {
-    let slot = libs
-        .entry((l.eco.clone(), l.name.clone()))
-        .or_insert_with(|| l.clone());
-    if slot.version.is_none() || (!slot.exact && l.exact) {
-        *slot = l;
+    use std::collections::btree_map::Entry;
+    match libs.entry((l.eco.clone(), l.name.clone())) {
+        Entry::Vacant(e) => {
+            e.insert(l);
+        }
+        Entry::Occupied(mut e) => {
+            let slot = e.get_mut();
+            if slot.version.is_none() || (!slot.exact && l.exact) {
+                *slot = l;
+            }
+        }
     }
 }
 
@@ -109,8 +131,8 @@ fn quoted(s: &str) -> Option<&str> {
 /// Dependencies of one Cargo.toml: `[dependencies]`-style sections (any prefix: dev-, build-, workspace., target.*) in the
 /// short form, the inline-table form and the `[dependencies.name]` table form. Path-only dependencies are the project's own.
 fn cargo_manifest(text: &str, lock: &HashMap<String, Vec<String>>, libs: &mut Libs) {
-    let version_re = Regex::new(r#"\bversion\s*=\s*"([^"]*)""#).unwrap();
-    let package_re = Regex::new(r#"\bpackage\s*=\s*"([^"]*)""#).unwrap();
+    let version_re = version_re();
+    let package_re = package_re();
     let mut section = String::new();
     // Table form: name, version, package, is a path dependency.
     let mut table: Option<(String, Option<String>, Option<String>, bool)> = None;
@@ -212,8 +234,8 @@ fn py_requirement(line: &str, lock: &HashMap<String, Vec<String>>, libs: &mut Li
 
 fn pyproject(text: &str, lock: &HashMap<String, Vec<String>>, libs: &mut Libs) {
     let (mut section, mut in_array) = (String::new(), false);
-    let string_re = Regex::new(r#""([^"]+)""#).unwrap();
-    let version_re = Regex::new(r#"\bversion\s*=\s*"([^"]*)""#).unwrap();
+    let string_re = string_re();
+    let version_re = version_re();
     for line in text
         .lines()
         .map(str::trim)
@@ -469,21 +491,20 @@ fn parse_line(line: &str) -> Option<Lib> {
 
 #[cfg(feature = "memory")]
 fn diff(before: &Libs, after: &Libs) -> Value {
-    let key = |l: &Lib| (l.eco.clone(), l.name.clone());
     let added: Vec<Value> = after
-        .values()
-        .filter(|l| !before.contains_key(&key(l)))
-        .map(Lib::json)
+        .iter()
+        .filter(|(k, _)| !before.contains_key(*k))
+        .map(|(_, l)| l.json())
         .collect();
     let removed: Vec<Value> = before
-        .values()
-        .filter(|l| !after.contains_key(&key(l)))
-        .map(Lib::json)
+        .iter()
+        .filter(|(k, _)| !after.contains_key(*k))
+        .map(|(_, l)| l.json())
         .collect();
     let changed: Vec<Value> = after
-        .values()
-        .filter_map(|l| {
-            let b = before.get(&key(l)).filter(|b| b.version != l.version)?;
+        .iter()
+        .filter_map(|(k, l)| {
+            let b = before.get(k).filter(|b| b.version != l.version)?;
             Some(json!({"name": l.name, "ecosystem": l.eco, "from": b.version, "to": l.version, "exact": l.exact}))
         })
         .collect();
@@ -517,13 +538,13 @@ fn previous(c: &rusqlite::Connection, scope: &str, root: &str) -> Result<(Vec<i6
 fn memory_items(root: &str, scope: &str, libs: &Libs, today: &str) -> Vec<Value> {
     let lines: Vec<String> = libs.values().map(describe).collect();
     let mut parts: Vec<String> = vec![];
-    for line in &lines {
+    for line in lines {
         match parts.last_mut() {
             Some(p) if p.len() + line.len() < 1800 => {
                 p.push('\n');
-                p.push_str(line);
+                p.push_str(&line);
             }
-            _ => parts.push(line.clone()),
+            _ => parts.push(line),
         }
     }
     let n = parts.len();

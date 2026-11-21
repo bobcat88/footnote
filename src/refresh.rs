@@ -184,12 +184,16 @@ fn one(client: &Client, judge: &dyn ChangeJudge, db: &Path) -> Result<Value> {
         match client.recheck(&rec.url, &rec.validators) {
             Recheck::Same(v) => {
                 same += 1;
-                side.pages.get_mut(&file).unwrap().validators = v;
+                if let Some(entry) = side.pages.get_mut(&file) {
+                    entry.validators = v;
+                }
             }
             Recheck::Changed(text, v, links) => {
                 seeds.extend(links);
                 let old = std::fs::read_to_string(dir.join(&file)).unwrap_or_default();
-                side.pages.get_mut(&file).unwrap().validators = v;
+                if let Some(entry) = side.pages.get_mut(&file) {
+                    entry.validators = v;
+                }
                 if judge.is_material(&old, &text) {
                     std::fs::write(dir.join(&file), text)?;
                     changed += 1;
@@ -202,7 +206,7 @@ fn one(client: &Client, judge: &dyn ChangeJudge, db: &Path) -> Result<Value> {
                 side.pages.remove(&file);
                 removed += 1;
             }
-            Recheck::Unreachable => unreachable += 1,
+            Recheck::Unreachable | _ => unreachable += 1,
         }
     }
     let known = side.known();

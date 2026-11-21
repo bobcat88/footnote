@@ -494,14 +494,20 @@ fn metric(state: &Path, on: bool, mut row: Value) {
     }
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum SpanStart {
+    Skip,
+    Emit,
+}
+
 fn timed<T>(
     state: &Path,
     on: bool,
     name: &str,
-    start: bool,
+    start: SpanStart,
     body: impl FnOnce() -> Result<T>,
 ) -> Result<T> {
-    if start {
+    if start == SpanStart::Emit {
         metric(state, on, json!({"start": name}));
     }
     let at = Instant::now();
@@ -624,7 +630,7 @@ fn handle(state: &Path, s: &Settings, event: &Value) -> Result<Option<Value>> {
                     // Search accepts at most 512 bytes, not characters. Never cut a UTF-8 code point.
                     let query = &e.prompt[..e.prompt.floor_char_boundary(500.min(e.prompt.len()))];
                     // Twice the limit, so memories already shown in this session do not leave the prompt short.
-                    let mut hits = timed(state, s.metrics, "hook.recall", false, || {
+                    let mut hits = timed(state, s.metrics, "hook.recall", SpanStart::Skip, || {
                         recall(s, &db, &project, query, (s.recall_limit * 2).min(20))
                     })?;
                     if let Some(list) = hits["memories"].as_array_mut() {
@@ -695,7 +701,7 @@ fn run_inner(state: &Path, embed: bool) -> Result<()> {
         if !s.enabled {
             return Ok(());
         }
-        return timed(state, s.metrics, "hook.embed", true, || {
+        return timed(state, s.metrics, "hook.embed", SpanStart::Emit, || {
             crate::semantic::rebuild(&mut crate::app::open(&s.db(state), true)?, &s.models)?;
             Ok(())
         })
@@ -801,9 +807,11 @@ mod tests {
     #[test]
     fn metrics_are_runtime_opt_in_and_report_errors() {
         let t = tempfile::tempdir().unwrap();
-        timed(t.path(), false, "hook.test", true, || Ok(())).unwrap();
+        timed(t.path(), false, "hook.test", SpanStart::Emit, || Ok(())).unwrap();
         assert!(!t.path().join("metrics.jsonl").exists());
-        let _: Result<()> = timed(t.path(), true, "hook.test", true, || anyhow::bail!("test"));
+        let _: Result<()> = timed(t.path(), true, "hook.test", SpanStart::Emit, || {
+            anyhow::bail!("test")
+        });
         let rows: Vec<Value> = fs::read_to_string(t.path().join("metrics.jsonl"))
             .unwrap()
             .lines()
