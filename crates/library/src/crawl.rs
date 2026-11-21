@@ -9,16 +9,20 @@ use serde_json::{Value, json};
 use std::{
     collections::{HashSet, VecDeque},
     fs,
+    net::{IpAddr, ToSocketAddrs},
     path::Path,
     thread,
     time::Duration,
 };
-use ureq::ResponseExt;
 use url::Url;
 
 const AGENT: &str =
     "FootnoteDocs/0.1 (+https://github.com/bobcat88/footnote; local documentation index)";
 const MAX_BYTES: u64 = 8 * 1024 * 1024;
+/// Most HTTP redirect hops followed manually after validating every hop against SSRF rules.
+const MAX_REDIRECTS: usize = 5;
+/// Most nested sub-sitemaps fetched from a sitemap index.
+const MAX_SUB_SITEMAPS: usize = 16;
 /// Most requests in flight to one host.
 pub const MAX_CONCURRENCY: usize = 8;
 
@@ -46,10 +50,124 @@ fn agent() -> ureq::Agent {
                 .build(),
         )
         .timeout_global(Some(Duration::from_secs(30)))
+        .max_redirects(0)
         .user_agent(AGENT)
         .http_status_as_error(false)
         .build()
         .into()
+}
+
+fn is_private_or_special_ip(ip: IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(v4) => {
+            let o = v4.octets();
+            let cgnat = o[0] == 100 && (o[1] & 0b1100_0000) == 64;
+            v4.is_loopback()
+                || v4.is_private()
+                || v4.is_link_local()
+                || v4.is_unspecified()
+                || v4.is_broadcast()
+                || v4.is_multicast()
+                || v4.is_documentation()
+                || cgnat
+        }
+        IpAddr::V6(v6) => {
+            if let Some(v4) = v6.to_ipv4_mapped() {
+                return is_private_or_special_ip(IpAddr::V4(v4));
+            }
+            let seg0 = v6.segments()[0];
+            let ula = (seg0 & 0xfe00) == 0xfc00;
+            let link_local = (seg0 & 0xffc0) == 0xfe80;
+            v6.is_loopback() || v6.is_unspecified() || v6.is_multicast() || ula || link_local
+        }
+    }
+}
+
+fn is_loopback_host(url: &Url) -> bool {
+    let Some(host) = url.host_str() else {
+        return false;
+    };
+    let h = host.trim_matches(|c| c == '[' || c == ']');
+    if h.eq_ignore_ascii_case("localhost") {
+        return true;
+    }
+    if let Ok(ip) = h.parse::<IpAddr>() {
+        return ip.is_loopback();
+    }
+    false
+}
+
+/// Reject non-http(s) URLs and any private, loopback, link-local, or cloud-metadata address unless the crawl itself
+/// started explicitly on loopback (e.g. local test servers).
+fn validate_target(url: &Url, allow_loopback: bool) -> bool {
+    if !matches!(url.scheme(), "http" | "https") {
+        return false;
+    }
+    let Some(host) = url.host_str() else {
+        return false;
+    };
+    if allow_loopback && is_loopback_host(url) {
+        return true;
+    }
+    let clean = host.trim_matches(|c| c == '[' || c == ']');
+    if let Ok(ip) = clean.parse::<IpAddr>() {
+        return !is_private_or_special_ip(ip);
+    }
+    // Literal IPv4/IPv6 in URL forms like 0x7f000001 or decimal are already normalized by `url::Url` to dotted IPv4.
+    if clean.eq_ignore_ascii_case("localhost") || clean.ends_with(".localhost") {
+        return false;
+    }
+    let port = url.port_or_known_default().unwrap_or(80);
+    let Ok(addrs) = (clean, port).to_socket_addrs() else {
+        return false;
+    };
+    let mut saw_any = false;
+    for addr in addrs {
+        saw_any = true;
+        if is_private_or_special_ip(addr.ip()) {
+            return false;
+        }
+    }
+    saw_any
+}
+
+/// Issue an HTTP GET while validating every redirect hop (max `MAX_REDIRECTS`) against SSRF rules before connecting.
+fn call_validated(
+    agent: &ureq::Agent,
+    url: &Url,
+    allow_loopback: bool,
+    etag: Option<&str>,
+    last_modified: Option<&str>,
+) -> std::result::Result<(ureq::http::Response<ureq::Body>, Url), ureq::Error> {
+    let mut cur = url.clone();
+    for hop in 0..=MAX_REDIRECTS {
+        if !validate_target(&cur, allow_loopback) {
+            return Err(ureq::Error::StatusCode(403));
+        }
+        let mut req = agent.get(cur.as_str());
+        if hop == 0 {
+            if let Some(e) = etag {
+                req = req.header("If-None-Match", e);
+            }
+            if let Some(m) = last_modified {
+                req = req.header("If-Modified-Since", m);
+            }
+        }
+        let resp = req.call()?;
+        let status = resp.status().as_u16();
+        if matches!(status, 301 | 302 | 303 | 307 | 308) {
+            let Some(loc) = resp.headers().get("location").and_then(|v| v.to_str().ok()) else {
+                return Ok((resp, cur));
+            };
+            let Ok(next) = cur.join(loc.trim()) else {
+                return Err(ureq::Error::StatusCode(400));
+            };
+            cur = next;
+            continue;
+        }
+        return Ok((resp, cur));
+    }
+    Err(ureq::Error::TooManyRedirects)
 }
 
 /// What a page looked like when it was fetched: the cheap change check of `docs refresh` compares against it.
@@ -69,9 +187,9 @@ enum Fetch {
     Failed,
 }
 
-fn fetch(agent: &ureq::Agent, url: &Url) -> Fetch {
-    let mut r = match agent.get(url.as_str()).call() {
-        Ok(r) => r,
+fn fetch(agent: &ureq::Agent, url: &Url, allow_loopback: bool) -> Fetch {
+    let (mut r, last) = match call_validated(agent, url, allow_loopback, None, None) {
+        Ok(pair) => pair,
         Err(ureq::Error::Timeout(_)) => return Fetch::SlowDown(Duration::from_secs(2)),
         Err(_) => return Fetch::Failed,
     };
@@ -86,15 +204,15 @@ fn fetch(agent: &ureq::Agent, url: &Url) -> Fetch {
             .clamp(1, 60);
         return Fetch::SlowDown(Duration::from_secs(wait));
     }
-    match page(&mut r, url) {
+    match page(&mut r, &last) {
         Some((body, last, kind, v)) => Fetch::Page(body, last, kind, v),
         None => Fetch::Failed,
     }
 }
 
 /// Body and final URL (after redirects) of a successful text response.
-fn get(agent: &ureq::Agent, url: &Url) -> Option<(String, Url, String)> {
-    match fetch(agent, url) {
+fn get(agent: &ureq::Agent, url: &Url, allow_loopback: bool) -> Option<(String, Url, String)> {
+    match fetch(agent, url, allow_loopback) {
         Fetch::Page(body, last, kind, _) => Some((body, last, kind)),
         _ => None,
     }
@@ -120,11 +238,7 @@ fn page(
         .and_then(|v| v.to_str().ok())
         .unwrap_or("")
         .to_ascii_lowercase();
-    let last = r
-        .get_uri()
-        .to_string()
-        .parse::<Url>()
-        .unwrap_or_else(|_| url.clone());
+    let last = url.clone();
     let body = r
         .body_mut()
         .with_config()
@@ -239,17 +353,26 @@ fn next_url(
     }
 }
 
-/// Page URLs listed by the sitemap (`<loc>` entries; nested sitemap indexes are followed once).
-fn sitemap(agent: &ureq::Agent, root: &Url) -> Vec<Url> {
+/// Page URLs listed by the sitemap (`<loc>` entries; nested same-host sitemap indexes are followed once, capped).
+fn sitemap(agent: &ureq::Agent, root: &Url, allow_loopback: bool) -> Vec<Url> {
     let loc = regex::Regex::new(r"<loc>\s*([^<\s]+)\s*</loc>").expect("valid pattern");
     let mut out = Vec::new();
-    let Some((xml, _, _)) = root.join("/sitemap.xml").ok().and_then(|u| get(agent, &u)) else {
+    let Some((xml, _, _)) = root
+        .join("/sitemap.xml")
+        .ok()
+        .and_then(|u| get(agent, &u, allow_loopback))
+    else {
         return out;
     };
+    let mut sub_sitemaps = 0usize;
     for c in loc.captures_iter(&xml) {
         let Ok(u) = Url::parse(&c[1]) else { continue };
         if u.path().ends_with(".xml") {
-            if let Some((inner, _, _)) = get(agent, &u) {
+            if u.host_str() != root.host_str() || sub_sitemaps >= MAX_SUB_SITEMAPS {
+                continue;
+            }
+            sub_sitemaps += 1;
+            if let Some((inner, _, _)) = get(agent, &u, allow_loopback) {
                 out.extend(
                     loc.captures_iter(&inner)
                         .filter_map(|c| Url::parse(&c[1]).ok()),
@@ -263,11 +386,15 @@ fn sitemap(agent: &ureq::Agent, root: &Url) -> Vec<Url> {
 }
 
 /// A Sphinx site's `objects.inv` beside its start page, with the folder its URIs are relative to. Fetched like the sitemap.
-fn inventory(agent: &ureq::Agent, scope: &Url) -> Option<(Vec<crate::miss::Object>, Url)> {
+fn inventory(
+    agent: &ureq::Agent,
+    scope: &Url,
+    allow_loopback: bool,
+) -> Option<(Vec<crate::miss::Object>, Url)> {
     let mut base = normalize(scope.clone());
     base.set_path(&format!("{}/", scope_dir(scope)));
     let inv = base.join("objects.inv").ok()?;
-    let mut r = agent.get(inv.as_str()).call().ok()?;
+    let (mut r, _) = call_validated(agent, &inv, allow_loopback, None, None).ok()?;
     if !r.status().is_success() {
         return None;
     }
@@ -280,10 +407,10 @@ fn inventory(agent: &ureq::Agent, scope: &Url) -> Option<(Vec<crate::miss::Objec
     crate::miss::parse(&bytes).map(|o| (o, base))
 }
 
-fn robots(agent: &ureq::Agent, site: &Url) -> Option<texting_robots::Robot> {
+fn robots(agent: &ureq::Agent, site: &Url, allow_loopback: bool) -> Option<texting_robots::Robot> {
     site.join("/robots.txt")
         .ok()
-        .and_then(|u| get(agent, &u))
+        .and_then(|u| get(agent, &u, allow_loopback))
         .filter(|(_, _, kind)| !kind.contains("html")) // some sites answer a missing robots.txt with an HTML page
         .and_then(|(txt, _, _)| texting_robots::Robot::new("FootnoteDocs", txt.as_bytes()).ok())
 }
@@ -329,10 +456,14 @@ pub fn crawl(out: &Path, o: &Options, progress: &mut dyn FnMut(u64, u64)) -> Res
     if !matches!(start.scheme(), "http" | "https") {
         bail!("only http and https URLs can be crawled");
     }
+    let allow_loopback = is_loopback_host(&start);
+    if !validate_target(&start, allow_loopback) {
+        bail!("refusing to crawl private, link-local, or loopback address: {start}");
+    }
     fs::create_dir_all(out)?;
     let agent = agent();
     let mut landing = None; // the page the start URL redirected to: it may sit outside a folder that has no page of its own
-    let start = match get(&agent, &start) {
+    let start = match get(&agent, &start, allow_loopback) {
         Some((_, last, _)) => {
             let last = normalize(last);
             landing = Some(last.clone());
@@ -340,7 +471,7 @@ pub fn crawl(out: &Path, o: &Options, progress: &mut dyn FnMut(u64, u64)) -> Res
         }
         None => start,
     };
-    let robots = robots(&agent, &start);
+    let robots = robots(&agent, &start, allow_loopback);
     let allowed = |u: &Url| robots.as_ref().is_none_or(|r| r.allowed(u.as_str()));
 
     // Discovery: llms.txt beside the start page and at the root, then the sitemap, then the start page itself.
@@ -350,7 +481,7 @@ pub fn crawl(out: &Path, o: &Options, progress: &mut dyn FnMut(u64, u64)) -> Res
         .into_iter()
         .flatten()
     {
-        if let Some((txt, _, kind)) = get(&agent, &llms)
+        if let Some((txt, _, kind)) = get(&agent, &llms, allow_loopback)
             && !kind.contains("html")
         {
             let found = links(&txt, &llms);
@@ -358,13 +489,13 @@ pub fn crawl(out: &Path, o: &Options, progress: &mut dyn FnMut(u64, u64)) -> Res
             seeds.extend(found);
         }
     }
-    let from_sitemap = sitemap(&agent, &start);
+    let from_sitemap = sitemap(&agent, &start, allow_loopback);
     let via_sitemap = from_sitemap.len();
     seeds.extend(landing);
     seeds.push(start.clone());
     seeds.extend(from_sitemap);
     // Sphinx: every documented object's page, so API pages nothing links to are still crawled.
-    if let Some((objects, base)) = inventory(&agent, &start) {
+    if let Some((objects, base)) = inventory(&agent, &start, allow_loopback) {
         seeds.extend(crate::miss::pages(
             objects.iter().map(|o| o.uri.as_str()),
             &base,
@@ -411,7 +542,10 @@ pub fn crawl(out: &Path, o: &Options, progress: &mut dyn FnMut(u64, u64)) -> Res
             }
         }
         let fetched: Vec<Fetch> = thread::scope(|s| {
-            let jobs: Vec<_> = batch.iter().map(|u| s.spawn(|| fetch(&agent, u))).collect();
+            let jobs: Vec<_> = batch
+                .iter()
+                .map(|u| s.spawn(|| fetch(&agent, u, allow_loopback)))
+                .collect();
             jobs.into_iter()
                 .map(|j| j.join().unwrap_or(Fetch::Failed))
                 .collect()
@@ -552,20 +686,20 @@ impl Client {
         let Ok(u) = Url::parse(url) else {
             return Recheck::Unreachable;
         };
-        let mut req = self.0.get(u.as_str());
-        if let Some(e) = &v.etag {
-            req = req.header("If-None-Match", e);
-        }
-        if let Some(m) = &v.last_modified {
-            req = req.header("If-Modified-Since", m);
-        }
-        let Ok(mut r) = req.call() else {
+        let allow_loopback = is_loopback_host(&u);
+        let Ok((mut r, last)) = call_validated(
+            &self.0,
+            &u,
+            allow_loopback,
+            v.etag.as_deref(),
+            v.last_modified.as_deref(),
+        ) else {
             return Recheck::Unreachable;
         };
         match r.status().as_u16() {
             304 => Recheck::Same(v.clone()),
             404 | 410 => Recheck::Gone,
-            _ => match page(&mut r, &u) {
+            _ => match page(&mut r, &last) {
                 Some((_, _, _, nv)) if nv.hash == v.hash => Recheck::Same(nv),
                 Some((body, last, kind, nv)) => match text_of(body, &normalize(last), &kind) {
                     Some((text, found)) => Recheck::Changed(text, nv, found),
@@ -589,8 +723,12 @@ impl Client {
         let Ok(scope) = Url::parse(scope) else {
             return Vec::new();
         };
-        let queue = seeds.into_iter().chain(sitemap(&self.0, &scope)).collect();
-        self.fetch_new(&scope, known, queue, room, true)
+        let allow_loopback = is_loopback_host(&scope);
+        let queue = seeds
+            .into_iter()
+            .chain(sitemap(&self.0, &scope, allow_loopback))
+            .collect();
+        self.fetch_new(&scope, known, queue, room, true, allow_loopback)
     }
 
     /// Fetch on miss: the (at most `cap`) pages most likely to answer `query` that `known` lacks, fetched live. Candidates are
@@ -606,16 +744,17 @@ impl Client {
         let Ok(scope) = Url::parse(scope) else {
             return Vec::new();
         };
+        let allow_loopback = is_loopback_host(&scope);
         let mut queue: VecDeque<Url> = VecDeque::new();
-        if let Some((objects, base)) = inventory(&self.0, &scope) {
+        if let Some((objects, base)) = inventory(&self.0, &scope, allow_loopback) {
             queue.extend(crate::miss::resolve(&objects, query, &base, cap * 4));
         }
         queue.extend(crate::miss::rank_urls(
-            &sitemap(&self.0, &scope),
+            &sitemap(&self.0, &scope, allow_loopback),
             query,
             cap * 4,
         ));
-        self.fetch_new(&scope, known, queue, cap, false)
+        self.fetch_new(&scope, known, queue, cap, false, allow_loopback)
     }
 
     fn fetch_new(
@@ -625,8 +764,9 @@ impl Client {
         mut queue: VecDeque<Url>,
         room: usize,
         expand: bool,
+        allow_loopback: bool,
     ) -> Vec<Found> {
-        let robots = robots(&self.0, scope);
+        let robots = robots(&self.0, scope, allow_loopback);
         let mut seen: HashSet<String> = known.clone();
         let mut out = Vec::new();
         while out.len() < room
@@ -639,7 +779,7 @@ impl Client {
             {
                 continue;
             }
-            let Some((body, last, kind)) = get(&self.0, &u) else {
+            let Some((body, last, kind)) = get(&self.0, &u, allow_loopback) else {
                 continue;
             };
             let last = normalize(last);
@@ -872,5 +1012,34 @@ mod tests {
                 "https://vite.dev/guide/cli.md"
             ]
         );
+    }
+
+    #[test]
+    fn blocks_private_and_metadata_ips_from_public_crawl() {
+        for bad in [
+            "http://169.254.169.254/latest/meta-data/",
+            "http://127.0.0.1:8080/admin",
+            "http://localhost:8080/",
+            "http://10.0.0.1/internal",
+            "http://172.16.0.5/internal",
+            "http://192.168.1.1/router",
+            "http://100.64.0.1/cgnat",
+            "http://[::1]:8080/",
+            "http://[::ffff:169.254.169.254]/latest/",
+            "http://[fe80::1]/",
+            "http://[fc00::1]/",
+            "file:///etc/passwd",
+        ] {
+            let u = Url::parse(bad).unwrap();
+            assert!(!validate_target(&u, false), "expected SSRF block for {bad}");
+        }
+        assert!(validate_target(
+            &Url::parse("https://1.1.1.1/").unwrap(),
+            false
+        ));
+        assert!(validate_target(
+            &Url::parse("http://127.0.0.1:8080/docs/").unwrap(),
+            true
+        ));
     }
 }

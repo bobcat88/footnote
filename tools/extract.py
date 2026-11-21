@@ -13,12 +13,14 @@ import sys
 MAX_CHARS = 1_000_000
 MAX_PAGES = 100
 MAX_PIXELS = 20_000_000
+SAFE_IMAGE_FORMATS = ('PNG', 'JPEG', 'WEBP', 'BMP', 'GIF', 'TIFF')
 
 def extract(path):
     import pypdfium2 as pdfium
     import pypdfium2.raw as pdfium_c
     from PIL import Image
     import numpy as np
+    Image.MAX_IMAGE_PIXELS = MAX_PIXELS
     engine = None
     ocr_used = False
     def ocr(image):
@@ -74,7 +76,7 @@ def extract(path):
         finally:
             doc.close()
     else:
-        with Image.open(path) as im:
+        with Image.open(path, formats=SAFE_IMAGE_FORMATS) as im:
             if im.width * im.height > MAX_PIXELS:
                 raise ValueError('image pixel limit exceeded')
             pages = [{'page': 1, 'text': ocr(im)}]

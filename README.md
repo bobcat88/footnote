@@ -128,7 +128,7 @@ Models are public, pinned to a commit and checked against a SHA-256 before every
 
 > **Full Linux & Windows setup + LLM-friendly testing guide:** see **[HOW-TO.md](HOW-TO.md)** — written so you (or your coding agent) can build, configure every harness, and run an isolated smoke test in under two minutes.
 
-Requirements: Rust 1.92 or later, about 200 MB of disk for the two default embedding models. Python 3.10+ is optional and used only for PDF extraction and OCR; building, model downloads, hybrid search, Memory, Code, and Lean need none.
+Requirements: Rust 1.92 or later, about 200 MB of disk for the two default embedding models. Python 3.11+ is optional and used only for PDF extraction and OCR; building, model downloads, hybrid search, Memory, Code, and Lean need none.
 
 ```bash
 git clone https://github.com/bobcat88/footnote && cd footnote

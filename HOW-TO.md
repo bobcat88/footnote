@@ -24,7 +24,7 @@ If you are an LLM setting up or testing Footnote on a user's machine:
 | **C toolchain / linker** | `sudo apt install build-essential` (or distro equivalent) | Visual Studio Build Tools (Desktop C++ workload) | Linking Rust + SQLite / tree-sitter |
 | **Git** | `sudo apt install git` | `winget install Git.Git` | Cloning the repo and `git` integration tests |
 | **Node.js + npm** *(optional)* | `sudo apt install nodejs npm` | `winget install OpenJS.NodeJS.LTS` | Compiler-grade Code graphs for TS/JS (`scip-typescript`) and Python (`scip-python`) |
-| **Python 3.10+** *(optional)* | `python3 --version` | `python --version` | PDF text extraction & OCR only — **not** needed to build, install models, or run Memory, Code, or Lean |
+| **Python 3.11+** *(optional)* | `python3 --version` | `python --version` | PDF text extraction & OCR only (`requirements-extract.lock`, Pillow 13.0+) — **not** needed to build, install models, or run Memory, Code, or Lean |
 
 > **Note on optional encryption builds:** default builds need no OpenSSL or Perl. Building with `--features encryption` (Windows DPAPI + SQLCipher) additionally requires Perl (e.g. Strawberry Perl) to compile vendored OpenSSL.
 
@@ -121,8 +121,9 @@ footnote install --memory
 Installs the fast SQLite-free `PreToolUse` hook (`footnote hook lean`) so eligible shell commands (`cargo`, `git`, `pytest`, `jest/vitest`, `rg/grep`, linters, `gh ... --json`) automatically run through `footnote run` with reversible handles:
 
 ```bash
-footnote install --lean --dry-run
-footnote install --lean
+# Preview, then wire Memory + Lean + User PATH in one command:
+footnote install --memory --lean --add-to-path --dry-run
+footnote install --memory --lean --add-to-path
 # If migrating from RTK, remove legacy RTK hooks/MCP entries in the same step:
 footnote install --lean --remove-rtk
 ```

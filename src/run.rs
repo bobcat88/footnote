@@ -143,10 +143,41 @@ pub fn classify_command(cmd: &[String]) -> CommandFamily {
     }
 }
 
+/// Check whether `footnote` (or `footnote.exe` on Windows) is resolvable on the current `PATH`.
+#[must_use]
+pub fn footnote_on_path() -> bool {
+    let Some(path_var) = std::env::var_os("PATH") else {
+        return false;
+    };
+    let bin_name = if cfg!(windows) {
+        "footnote.exe"
+    } else {
+        "footnote"
+    };
+    std::env::split_paths(&path_var).any(|dir| dir.join(bin_name).is_file())
+}
+
+/// Format an executable path cleanly for POSIX and Windows shells (quoting only if it contains whitespace).
+fn format_exe_for_shell(exe: &Path) -> String {
+    let norm = exe.to_string_lossy().replace('\\', "/");
+    if norm.chars().any(char::is_whitespace) {
+        format!("\"{norm}\"")
+    } else {
+        norm
+    }
+}
+
 /// Decide whether a raw shell command string is safe to rewrite to `footnote run -- <cmd>` inside a PreToolUse hook.
 /// Never touches pipes, redirects, chains, subshells, interactive tools, or commands already invoking `footnote`.
 #[must_use]
 pub fn rewrite_command(cmd: &str) -> Option<String> {
+    rewrite_command_with_bin(cmd, "footnote")
+}
+
+/// Same as `rewrite_command`, using an explicit binary invocation string (e.g. an absolute path when `footnote` is
+/// not on `PATH` in a non-interactive agent shell).
+#[must_use]
+pub fn rewrite_command_with_bin(cmd: &str, bin_cmd: &str) -> Option<String> {
     let trimmed = cmd.trim();
     if trimmed.is_empty() || trimmed.contains('\n') || trimmed.contains('\r') {
         return None;
@@ -174,7 +205,7 @@ pub fn rewrite_command(cmd: &str) -> Option<String> {
     if family == CommandFamily::Generic {
         return None;
     }
-    Some(format!("footnote run -- {trimmed}"))
+    Some(format!("{bin_cmd} run -- {trimmed}"))
 }
 
 fn split_simple_words(s: &str) -> Option<Vec<String>> {
@@ -1958,7 +1989,14 @@ pub fn pre_tool_use_hook(event: &Value) -> Option<Value> {
         let s = input.get("CommandLine").and_then(Value::as_str)?;
         ("CommandLine", s)
     };
-    let rewritten = rewrite_command(cmd_str)?;
+    let bin_cmd = if footnote_on_path() {
+        "footnote".to_string()
+    } else if let Ok(exe) = std::env::current_exe() {
+        format_exe_for_shell(&exe)
+    } else {
+        "footnote".to_string()
+    };
+    let rewritten = rewrite_command_with_bin(cmd_str, &bin_cmd)?;
     let mut updated = input.clone();
     updated.insert(cmd_key.to_string(), json!(rewritten));
     Some(json!({

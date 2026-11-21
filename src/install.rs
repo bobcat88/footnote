@@ -703,6 +703,12 @@ pub fn lean(dry_run: bool, remove_rtk: bool) -> Result<Value> {
         vec![]
     };
 
+    if !crate::run::footnote_on_path() {
+        warnings.push(
+            "`footnote` is not on PATH yet (hooks fall back to the absolute binary path; run `footnote install --add-to-path` so bare `footnote` works in every shell)".into(),
+        );
+    }
+
     Ok(json!({
         "dry_run": dry_run,
         "hook": command,
@@ -711,6 +717,97 @@ pub fn lean(dry_run: bool, remove_rtk: bool) -> Result<Value> {
         "warnings": warnings,
         "note": "restart each agent to reload hooks; `footnote uninstall --lean` removes only Lean hooks without touching Memory",
     }))
+}
+
+/// `footnote install --add-to-path`: add the folder containing this binary to the user's `PATH`
+/// (Windows User `PATH` registry entry, or POSIX `~/.profile` / `~/.bashrc` / `~/.zshrc`), idempotently.
+pub fn add_to_path(dry_run: bool) -> Result<Value> {
+    let exe = std::env::current_exe().context("locate this executable")?;
+    let dir = exe
+        .parent()
+        .context("locate parent folder of this executable")?;
+
+    #[cfg(windows)]
+    {
+        let dir_str = dir.to_string_lossy().to_string();
+        let current = std::process::Command::new("powershell")
+            .args([
+                "-NoProfile",
+                "-Command",
+                "[Environment]::GetEnvironmentVariable('Path', 'User')",
+            ])
+            .output()
+            .context("read Windows User PATH")?;
+        let cur_str = String::from_utf8_lossy(&current.stdout).trim().to_string();
+        let already = cur_str
+            .split(';')
+            .any(|p| p.trim().eq_ignore_ascii_case(dir_str.trim()));
+        if already {
+            return Ok(json!({
+                "dry_run": dry_run,
+                "directory": portable(dir),
+                "target": "Windows User PATH",
+                "status": "already present",
+            }));
+        }
+        if !dry_run {
+            let next = if cur_str.is_empty() {
+                dir_str.clone()
+            } else {
+                format!("{cur_str};{dir_str}")
+            };
+            let status = std::process::Command::new("powershell")
+                .args([
+                    "-NoProfile",
+                    "-Command",
+                    "[Environment]::SetEnvironmentVariable('Path', $env:FOOTNOTE_NEXT_PATH, 'User')",
+                ])
+                .env("FOOTNOTE_NEXT_PATH", &next)
+                .status()
+                .context("update Windows User PATH")?;
+            if !status.success() {
+                bail!("failed to update Windows User PATH (exit {status})");
+            }
+        }
+        Ok(json!({
+            "dry_run": dry_run,
+            "directory": portable(dir),
+            "target": "Windows User PATH",
+            "status": if dry_run { "would add" } else { "added" },
+            "note": "open a new terminal or restart your agent so shells pick up the updated PATH",
+        }))
+    }
+
+    #[cfg(not(windows))]
+    {
+        let home = home()?;
+        let dir_posix = portable(dir);
+        let export_line = format!("export PATH=\"{dir_posix}:$PATH\" # footnote\n");
+        let mut candidates = vec![home.join(".profile")];
+        for rc in [".bashrc", ".zshrc"] {
+            let p = home.join(rc);
+            if p.exists() {
+                candidates.push(p);
+            }
+        }
+        let mut targets = Vec::new();
+        for rc in candidates {
+            let st = append_once(&rc, &dir_posix, &export_line, dry_run)?;
+            let label = match (dry_run, st) {
+                (true, "registered") => "would add",
+                (false, "registered") => "added",
+                (_, "already registered") => "already present",
+                (_, other) => other,
+            };
+            targets.push(json!({"path": portable(&rc), "status": label}));
+        }
+        Ok(json!({
+            "dry_run": dry_run,
+            "directory": dir_posix,
+            "targets": targets,
+            "note": "open a new shell or source your profile so PATH takes effect",
+        }))
+    }
 }
 
 /// `footnote install --remove-rtk`: disconnect RTK hooks and MCP entries across detected agents (#351).

@@ -17,18 +17,41 @@ fn hook_lean_rewrites_supported_bash_and_passes_through_pipes() {
     });
     let out = cargo_bin_cmd!("footnote")
         .env("FOOTNOTE_STATE_DIR", state.path())
+        .env("PATH", "")
         .args(["hook", "lean"])
         .write_stdin(payload.to_string())
         .output()
         .unwrap();
     assert!(out.status.success(), "{out:?}");
     let v: Value = serde_json::from_slice(&out.stdout).unwrap();
-    assert_eq!(
-        v["hookSpecificOutput"]["updatedInput"]["command"],
-        "footnote run -- cargo test --workspace"
+    let rewritten = v["hookSpecificOutput"]["updatedInput"]["command"]
+        .as_str()
+        .unwrap();
+    assert!(
+        rewritten.ends_with(" run -- cargo test --workspace") && rewritten.contains("footnote"),
+        "expected absolute-path fallback rewrite when PATH is empty, got {rewritten:?}"
     );
     assert_eq!(v["hookSpecificOutput"]["updatedInput"]["timeout"], 120000);
     assert_eq!(v["hookSpecificOutput"]["permissionDecision"], "allow");
+
+    // When `footnote` IS on PATH, the hook emits the compact `footnote run -- ...` form.
+    let bin_dir = assert_cmd::cargo::cargo_bin!("footnote")
+        .parent()
+        .unwrap()
+        .to_path_buf();
+    let out_on_path = cargo_bin_cmd!("footnote")
+        .env("FOOTNOTE_STATE_DIR", state.path())
+        .env("PATH", &bin_dir)
+        .args(["hook", "lean"])
+        .write_stdin(payload.to_string())
+        .output()
+        .unwrap();
+    assert!(out_on_path.status.success(), "{out_on_path:?}");
+    let v_path: Value = serde_json::from_slice(&out_on_path.stdout).unwrap();
+    assert_eq!(
+        v_path["hookSpecificOutput"]["updatedInput"]["command"],
+        "footnote run -- cargo test --workspace"
+    );
 
     // Piped commands must pass through untouched (empty stdout).
     let piped = json!({

@@ -265,6 +265,9 @@ enum Action {
         /// Disconnect external RTK hooks and MCP entries from detected agent configs (#351).
         #[arg(long)]
         remove_rtk: bool,
+        /// Add the folder containing this `footnote` binary to the user's `PATH` (Windows User PATH or POSIX shell profile).
+        #[arg(long)]
+        add_to_path: bool,
     },
     /// Replace this binary with a newer one; the current one is kept beside it so `rollback` can put it back. Data in the state
     /// folder is not touched.
@@ -826,21 +829,38 @@ fn execute(cli: Cli) -> Result<Value> {
             memory,
             lean,
             remove_rtk,
+            add_to_path,
         } => {
-            if *lean {
-                return crate::install::lean(*dry_run, *remove_rtk);
+            if *add_to_path && !*memory && !*lean && !*remove_rtk && cli.db.is_none() {
+                return crate::install::add_to_path(*dry_run);
             }
-            if *remove_rtk && !*memory {
-                return crate::install::remove_rtk(*dry_run);
-            }
-            return if *memory {
+            let mut out = if *memory && *lean {
                 #[cfg(feature = "memory")]
-                return crate::install::memory(*dry_run);
+                {
+                    let mut m = crate::install::memory(*dry_run)?;
+                    m["lean"] = crate::install::lean(*dry_run, *remove_rtk)?;
+                    m
+                }
                 #[cfg(not(feature = "memory"))]
-                bail!("this build has no Footnote Memory");
+                bail!("this build has no Footnote Memory")
+            } else if *lean {
+                crate::install::lean(*dry_run, *remove_rtk)?
+            } else if *remove_rtk && !*memory {
+                crate::install::remove_rtk(*dry_run)?
+            } else if *memory {
+                #[cfg(feature = "memory")]
+                {
+                    crate::install::memory(*dry_run)?
+                }
+                #[cfg(not(feature = "memory"))]
+                bail!("this build has no Footnote Memory")
             } else {
-                crate::install::run(&cli.db, *dry_run)
+                crate::install::run(&cli.db, *dry_run)?
             };
+            if *add_to_path {
+                out["path"] = crate::install::add_to_path(*dry_run)?;
+            }
+            return Ok(out);
         }
         Action::Audit { action } => return audit_command(action),
         Action::Run { .. } => unreachable!("run is dispatched before JSON output"),
