@@ -1,0 +1,26 @@
+name: docker
+
+on:
+  pull_request:
+    paths: [Dockerfile, .dockerignore, .github/workflows/docker.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Build image
+        run: DOCKER_BUILDKIT=1 docker build -t footnote:local .
+      - name: Smoke test CLI and MCP
+        run: |
+          docker run --rm -v fn-state:/state footnote:local status
+          printf '%s\n' \
+            '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"smoke","version":"1"}}}' \
+            '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}' \
+            | docker run --rm -i -v fn-state:/state footnote:local --db /state/memory.db mcp > out.jsonl
+          cat out.jsonl
+          grep -q '"id":2' out.jsonl

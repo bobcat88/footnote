@@ -1,0 +1,6 @@
+# Allowlist: the build needs only the Cargo workspace.
+*
+!Cargo.toml
+!Cargo.lock
+!src
+!crates

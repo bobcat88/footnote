@@ -85,6 +85,37 @@ footnote update --from .\target\release\footnote.exe
 
 `footnote update` verifies the new binary runs, keeps the previous binary beside it (`footnote.replaced-*`), and swaps cleanly even while agents are active. Run `footnote rollback` to revert. User data lives outside the binary folder (`~/.local/state/footnote` on Linux, `%LOCALAPPDATA%\footnote` on Windows, or `$FOOTNOTE_STATE_DIR`) and is never touched by updates.
 
+### Docker (when Windows blocks local builds)
+
+Windows **Smart App Control** or a managed **WDAC / AppLocker** policy stops `cargo build` at the first build script (`os error 4551`). Run Footnote in a Linux container instead (Docker Desktop, WSL 2 backend). Build it from the repo root:
+
+```bash
+docker build -t footnote:local .
+```
+
+Everything Footnote keeps (memory DB, indexes, models) lives in `/state`; mount a named volume there so it survives `--rm`. Mount the project you work on at `/workspace`:
+
+```bash
+docker run --rm -i -v footnote-state:/state -v "${PWD}:/workspace" footnote:local status
+docker run --rm -i -v footnote-state:/state footnote:local models install bekko-a8m gte-small
+docker run --rm -i -v footnote-state:/state -v "${PWD}:/workspace" footnote:local code-index .
+```
+
+MCP entry for an agent on the host (stdio through `docker run -i`):
+
+```json
+{
+  "mcpServers": {
+    "footnote-memory": {
+      "command": "docker",
+      "args": ["run", "--rm", "-i", "-v", "footnote-state:/state", "footnote:local", "--db", "/state/memory.db", "mcp"]
+    }
+  }
+}
+```
+
+Limits: the container gives you the CLI and the MCP server. `footnote install` hooks (Memory recall, Lean shell compaction) call a `footnote` binary on the host, so they do not work from the container. To reach a service on the host (for example Ollama on port 11434), add `--add-host=host.docker.internal:host-gateway` and use `http://host.docker.internal:11434`; Footnote's embeddings still run in-process and do not use Ollama yet.
+
 ---
 
 ## 3. Install Local Embedding Models (Zero Python)
@@ -329,6 +360,7 @@ To also remove all local data, indexes, and downloaded models, delete the state 
 
 | Symptom | Cause | Fix |
 |---|---|---|
+| `cargo build` fails with `An Application Control policy has blocked this file (os error 4551)` | Windows Smart App Control / WDAC blocks unsigned build scripts | Use Docker (Section 2, *Docker*); do not weaken the policy |
 | `install` says config file changed while updating | Agent (e.g. Claude Code) rewrote its settings file mid-write | Close the agent session and re-run `footnote install ...` |
 | MCP host fails to spawn `footnote` | Non-interactive GUI host does not inherit shell `PATH` | Use the absolute path to `footnote` / `footnote.exe` in MCP config |
 | `sccache` fails with `os error 206` on Windows | Long worktree paths exceed Windows `MAX_PATH` under `sccache` | Run `$env:RUSTC_WRAPPER = ''` before `cargo` commands |
