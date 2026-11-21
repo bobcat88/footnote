@@ -587,7 +587,7 @@ fn dispatch(db: &Path, name: &str, args: &Value) -> Result<Value> {
         #[cfg(feature = "memory")]
         "footnote_remember" => {
             let models = if args["model"].is_null() {
-                vec![]
+                configured_memory_models()?
             } else {
                 model_args(db, args)?
             };
@@ -725,6 +725,19 @@ fn is_memory_store(db: &Path, c: &Connection) -> Result<bool> {
         let _ = (db, c);
         Ok(false)
     }
+}
+
+#[cfg(feature = "memory")]
+/// Configured embedding models (`footnote models use`) that are currently installed on disk. None configured or installed
+/// is a normal outcome (memories are saved for lexical recall); an unreadable state folder or `memory.json` is an error, so a
+/// broken configuration never silently saves memories without their vectors.
+fn configured_memory_models() -> Result<Vec<PathBuf>> {
+    let state = crate::state::state_dir()?;
+    Ok(crate::models::in_use(&state)?
+        .into_iter()
+        .map(PathBuf::from)
+        .filter(|p| p.join("manifest.json").is_file())
+        .collect())
 }
 
 /// Read-only connection. Read tools never create a database.

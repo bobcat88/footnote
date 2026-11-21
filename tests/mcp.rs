@@ -640,3 +640,66 @@ fn memory_wake_up_returns_the_memory_pack() {
     assert_eq!(mems[0]["kind"], "preference", "preferences first: {wake}");
     assert_eq!(mems[1]["kind"], "fact");
 }
+
+#[cfg(feature = "memory")]
+#[test]
+fn footnote_remember_uses_configured_memory_models_when_model_omitted() {
+    let t = tmp();
+    let state = t.path().join("state");
+    let fake_model = state.join("models/test-configured-model");
+    fs::create_dir_all(&fake_model).unwrap();
+    fs::write(
+        fake_model.join("manifest.json"),
+        json!({
+            "runtime": "unsupported-test-runtime",
+            "files": {},
+            "pooling": "attention-mask-mean-l2",
+            "query_prefix": "",
+            "passage_prefix": "",
+            "max_length": 512,
+            "dimension": 384
+        })
+        .to_string(),
+    )
+    .unwrap();
+    fs::write(
+        state.join("memory.json"),
+        json!({"models": [fake_model]}).to_string(),
+    )
+    .unwrap();
+    let db = state.join("memory.db");
+    let req = json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "tools/call",
+        "params": {
+            "name": "footnote_remember",
+            "arguments": {
+                "memories": [{
+                    "kind": "fact",
+                    "scope": "demo",
+                    "text": "Configured models must be picked up automatically",
+                    "observed_at": "2026-11-21"
+                }]
+            }
+        }
+    });
+    let out = cmd(&db)
+        .env("FOOTNOTE_STATE_DIR", &state)
+        .args(["serve", "--mcp"])
+        .write_stdin(format!("{req}\n"))
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let reply: Value = serde_json::from_str(String::from_utf8(out).unwrap().trim()).unwrap();
+    // Attempting to load the configured dummy runtime proves footnote_remember picked up
+    // `memory.json` models automatically when `model` was omitted.
+    assert_eq!(reply["result"]["isError"], json!(true));
+    let msg = reply["result"]["content"][0]["text"].as_str().unwrap();
+    assert!(
+        msg.contains("unsupported embedding runtime: unsupported-test-runtime"),
+        "expected configured model load attempt, got: {msg}"
+    );
+}
