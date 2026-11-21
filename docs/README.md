@@ -16,6 +16,7 @@ The product README is [../README.md](../README.md). This folder holds architectu
 | [`ISSUE-RULES.md`](ISSUE-RULES.md) | Issue structure, label taxonomy, Epic nesting, and AI ownership tracking |
 | [`RUST-RULES.md`](RUST-RULES.md) | Rust API, error handling, store discipline, and performance rules |
 | [`security/AUDIT-2026-11-18.md`](security/AUDIT-2026-11-18.md) | Internal security audit findings and fixes |
+| [`roadmap/PRIORITY-QUEUE.md`](roadmap/PRIORITY-QUEUE.md) | Value-ordered implementation queue across open GitHub issues (`scripts/pmo_queue.py`) |
 | [`roadmap/BACKLOG.md`](roadmap/BACKLOG.md) | Planned features and open research tracks |
 | [`roadmap/EPICS.md`](roadmap/EPICS.md) | Epic structure matching GitHub Issues |
 | [`roadmap/EDITIONS.md`](roadmap/EDITIONS.md) | Footnote One (Apache-2.0) vs Enterprise boundaries |

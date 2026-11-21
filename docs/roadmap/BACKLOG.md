@@ -1,7 +1,7 @@
 # Footnote backlog
 
 Last updated 17 November 2026. Since 17 Nov the authority for tracked work is GitHub Issues: 12 epics and their stories, built from
-[EPICS.md](EPICS.md), done per the [Definition of done](../DEFINITION-OF-DONE.md). This page keeps the context and the reasons. Order inside a tier is the order of work.
+[EPICS.md](EPICS.md), done per the [Definition of done](../DEFINITION-OF-DONE.md). For the current value-ordered execution queue across all open issues, see [PRIORITY-QUEUE.md](PRIORITY-QUEUE.md) (synced via `python scripts/pmo_queue.py --next 10`). This page keeps the context and the reasons. Order inside a tier is the order of work.
 
 Every item belongs to the free or the commercial edition ([EDITIONS.md](EDITIONS.md), decided 16 Nov): company-only features
 (sign-on, rights, hierarchy, many team indexes, compliance) go into a separate commercial crate, never into the free engine.
