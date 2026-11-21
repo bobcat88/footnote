@@ -1,0 +1,198 @@
+// Footnote One architecture model (LikeC4 1.61.0).
+// Every component maps to shipped crates/modules in this repository.
+// Icon note: `tech:rust` represents the single Rust binary and its 4 toggleable modules;
+// `tech:sqlite` represents SQLite + derived Tantivy indexes; `tech:tauri` represents apps/launcher.
+specification {
+  element person {
+    style {
+      shape person
+      color green
+    }
+  }
+  element system
+  element component
+  element database {
+    style {
+      shape storage
+      color green
+    }
+  }
+  element cache {
+    style {
+      shape storage
+      color amber
+    }
+  }
+}
+
+model {
+  dev = person 'Developer' {
+    description 'Single dev or small team working locally'
+  }
+
+  agents = system 'AI Coding Agents' {
+    description 'External agent hosts connected over MCP stdio and lifecycle hooks'
+    style {
+      color muted
+    }
+    claude = component 'Claude Code' {
+      technology 'MCP + Hooks'
+      style {
+        icon tech:claude
+        shape component
+        color muted
+      }
+    }
+    codex = component 'Codex CLI' {
+      technology 'MCP + Hooks'
+      style {
+        icon tech:openai
+        shape component
+        color muted
+      }
+    }
+    antigravity = component 'Antigravity & Gemini' {
+      technology 'MCP + Hooks'
+      style {
+        icon tech:google-gemini
+        shape component
+        color muted
+      }
+    }
+  }
+
+  footnote = system 'Footnote One (Local Engine)' {
+    description 'Single Apache-2.0 Rust binary — all processing stays on your machine'
+    style {
+      color indigo
+    }
+
+    cli_mcp = component 'CLI, MCP Server & Hooks' {
+      technology 'Rust · MCP stdio · Hooks'
+      description 'Single entrypoint (8 tools, <5 KB); docs stay read-only'
+      style {
+        icon tech:rust
+        shape component
+        color primary
+      }
+    }
+
+    library = component 'Footnote Library' {
+      technology 'Tantivy BM25 + int8 ONNX'
+      description 'Cited hybrid search over local notes, PDFs, and docs cache'
+      style {
+        icon tech:rust
+        shape component
+        color primary
+      }
+    }
+
+    memory = component 'Footnote Memory' {
+      technology 'SQLite + HMAC Daemon'
+      description 'Scoped preferences, decisions, fixes, and session handoffs'
+      style {
+        icon tech:rust
+        shape component
+        color primary
+      }
+    }
+
+    code = component 'Footnote Code' {
+      technology 'SCIP + Tree-sitter + rg'
+      description 'Definitions, callers/callees, impact radius, code-map, grep'
+      style {
+        icon tech:rust
+        shape component
+        color primary
+      }
+    }
+
+    lean = component 'Footnote Lean' {
+      technology 'Shell Filter + Telemetry'
+      description 'Compacts noisy CLI output, keeps handles, tracks usage/gain'
+      style {
+        icon tech:rust
+        shape component
+        color amber
+      }
+    }
+
+    launcher = component 'Desktop Launcher (Preview)' {
+      technology 'Tauri 2 (Windows)'
+      description 'Tray panel, product toggles, unified search, code map, usage'
+      style {
+        icon tech:tauri
+        shape browser
+        color secondary
+      }
+    }
+
+    stores = database 'Local State & Indexes' {
+      technology 'SQLite + Tantivy'
+      description 'memory.db, docs/, code/, corpora; SHA-256 & freshness per chunk'
+      style {
+        icon tech:sqlite
+        shape storage
+        color green
+      }
+    }
+
+    audit = cache 'Audit Log & Output Handles' {
+      technology 'Hash-Chained HMAC JSONL + outputs/'
+      description 'Tamper-evident MCP log, lean.jsonl ledger, reversible raw outputs'
+      style {
+        shape storage
+        color amber
+      }
+    }
+
+    cli_mcp -> library 'Hybrid search & docs cache'
+    cli_mcp -> memory 'Pack, recall, remember'
+    cli_mcp -> code 'Lookup, impact, map, grep'
+    cli_mcp -> lean 'Run filter, usage, gain'
+    launcher -> cli_mcp 'Read-only CLI & toggles'
+    library -> stores 'Read/write corpora & vectors'
+    memory -> stores 'Read/write memory.db'
+    code -> stores 'Read/write code/*.db'
+    lean -> audit 'Raw handles & lean.jsonl'
+    cli_mcp -> audit 'HMAC-chained MCP audit'
+  }
+
+  network = system 'On-Demand Network' {
+    description 'Touched only on explicit install/docs commands or optional fetch-on-miss'
+    style {
+      color muted
+    }
+    models = component 'Model Manifests' {
+      technology 'SHA-256 Verified ONNX'
+      style {
+        shape component
+        color muted
+      }
+    }
+    docs_sites = component 'Docs Sites & Signed Bundles' {
+      technology 'HTTPS · robots.txt · objects.inv'
+      style {
+        shape component
+        color muted
+      }
+    }
+  }
+
+  dev -> agents 'Prompts & reviews'
+  dev -> footnote.cli_mcp 'CLI commands'
+  dev -> footnote.launcher 'Tray & overview'
+  agents.claude -> footnote.cli_mcp 'MCP stdio & hooks'
+  agents.codex -> footnote.cli_mcp 'MCP stdio & hooks'
+  agents.antigravity -> footnote.cli_mcp 'MCP stdio & hooks'
+  footnote.library -> network.models 'models install only'
+  footnote.library -> network.docs_sites 'docs add / refresh / miss'
+}
+
+views {
+  view index {
+    title 'Footnote One — Local Architecture'
+    include dev, agents, agents.*, footnote, footnote.*, network, network.*
+    autoLayout LeftRight
+  }
+}

@@ -1,0 +1,142 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="LikeC4" modified="2026-11-21T11:45:14.818Z" agent="LikeC4" version="1.0" etag="" type="device">
+  <diagram name="Footnote One — Local Architecture" id="likec4-index"><mxGraphModel dx="800" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;strokeColor=none;likec4ViewTitle=Footnote%20One%20%E2%80%94%20Local%20Architecture;" vertex="1" parent="0">
+  <mxGeometry x="0" y="0" width="800" height="600" as="geometry" />
+</mxCell>
+<mxCell id="3" value="" style="align=left;verticalAlign=top;overflow=fill;whiteSpace=wrap;html=1;shape=rectangle;rounded=0;container=1;collapsible=0;startSize=0;fillColor=#64748b;strokeColor=#475569;fontColor=#f8fafc;strokeWidth=1;dashed=1;fillOpacity=15;likec4Description=External%20agent%20hosts%20connected%20over%20MCP%20stdio%20and%20lifecycle%20hooks;likec4Opacity=15;likec4StrokeWidth=1;likec4ColorName=muted;likec4Size=md;likec4StrokeColor=%23475569;" vertex="1" parent="1">
+  
+  <mxGeometry height="861" width="410" x="-496" y="572" as="geometry" />
+</mxCell>
+<mxCell id="10000" value="AI Coding Agents" style="shape=text;html=1;fillColor=none;strokeColor=none;align=left;verticalAlign=top;fontSize=13;fontStyle=1;fontColor=#74c0fc;fontFamily='IBM%20Plex%20Sans%20Variable'%2Cui-sans-serif%2Csystem-ui%2Csans-serif;" vertex="1" parent="3">
+  <mxGeometry x="8" y="8" width="128" height="18" as="geometry" />
+</mxCell>
+<mxCell id="4" value="" style="align=left;verticalAlign=top;overflow=fill;whiteSpace=wrap;html=1;shape=rectangle;rounded=0;container=1;collapsible=0;startSize=0;fillColor=#6366f1;strokeColor=#4f46e5;fontColor=#eef2ff;strokeWidth=1;dashed=1;fillOpacity=15;likec4Description=Single%20Apache-2.0%20Rust%20binary%20%E2%80%94%20all%20processing%20stays%20on%20your%20machine;likec4Opacity=15;likec4StrokeWidth=1;likec4ColorName=indigo;likec4Size=md;likec4StrokeColor=%234f46e5;" vertex="1" parent="1">
+  
+  <mxGeometry height="1396" width="2295" x="-491" y="-832" as="geometry" />
+</mxCell>
+<mxCell id="10001" value="Footnote One (Local Engine)" style="shape=text;html=1;fillColor=none;strokeColor=none;align=left;verticalAlign=top;fontSize=13;fontStyle=1;fontColor=#74c0fc;fontFamily='IBM%20Plex%20Sans%20Variable'%2Cui-sans-serif%2Csystem-ui%2Csans-serif;" vertex="1" parent="4">
+  <mxGeometry x="8" y="8" width="216" height="18" as="geometry" />
+</mxCell>
+<mxCell id="5" value="" style="align=left;verticalAlign=top;overflow=fill;whiteSpace=wrap;html=1;shape=rectangle;rounded=0;container=1;collapsible=0;startSize=0;fillColor=#64748b;strokeColor=#475569;fontColor=#f8fafc;strokeWidth=1;dashed=1;fillOpacity=15;likec4Description=Touched%20only%20on%20explicit%20install%2Fdocs%20commands%20or%20optional%20fetch-on-miss;likec4Opacity=15;likec4StrokeWidth=1;likec4ColorName=muted;likec4Size=md;likec4StrokeColor=%23475569;" vertex="1" parent="1">
+  
+  <mxGeometry height="571" width="410" x="1399" y="572" as="geometry" />
+</mxCell>
+<mxCell id="10002" value="On-Demand Network" style="shape=text;html=1;fillColor=none;strokeColor=none;align=left;verticalAlign=top;fontSize=13;fontStyle=1;fontColor=#74c0fc;fontFamily='IBM%20Plex%20Sans%20Variable'%2Cui-sans-serif%2Csystem-ui%2Csans-serif;" vertex="1" parent="5">
+  <mxGeometry x="8" y="8" width="136" height="18" as="geometry" />
+</mxCell>
+<mxCell id="2" value="&lt;div style=&quot;box-sizing:border-box;width:100%;min-height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;color:#f8fafc;font-family:&apos;IBM Plex Sans Variable&apos;,ui-sans-serif,system-ui,sans-serif;&quot;&gt;&lt;b style=&quot;font-size:19.2px;&quot;&gt;Developer&lt;/b&gt;&lt;br/&gt;&lt;span style=&quot;font-weight:normal;font-size:19.2px;&quot;&gt;Single dev or small team working locally&lt;/span&gt;&lt;/div&gt;" style="align=center;verticalAlign=middle;verticalLabelPosition=middle;labelPosition=center;fontSize=19.2;fontStyle=1;spacingTop=4;spacingLeft=2;spacingRight=2;spacingBottom=2;overflow=fill;whiteSpace=wrap;html=1;fontFamily='IBM%20Plex%20Sans%20Variable'%2Cui-sans-serif%2Csystem-ui%2Csans-serif;shape=actor;fillColor=#428a4f;strokeColor=#2d5d39;fontColor=#f8fafc;likec4Description=Single%20dev%20or%20small%20team%20working%20locally;likec4ColorName=green;likec4Size=md;likec4StrokeColor=%232d5d39;" vertex="1" parent="1">
+  
+  <mxGeometry height="180" width="320" x="-1008" y="633" as="geometry" />
+</mxCell>
+<mxCell id="6" value="&lt;div style=&quot;box-sizing:border-box;width:100%;min-height:100%;display:flex;align-items:center;justify-content:center;text-align:center;color:#f8fafc;font-family:&apos;IBM Plex Sans Variable&apos;,ui-sans-serif,system-ui,sans-serif;&quot;&gt;&lt;b style=&quot;font-size:19.2px;&quot;&gt;Claude Code&lt;/b&gt;&lt;/div&gt;" style="align=center;verticalAlign=middle;verticalLabelPosition=middle;labelPosition=center;fontSize=19.2;fontStyle=1;spacingTop=4;spacingLeft=2;spacingRight=2;spacingBottom=2;overflow=fill;whiteSpace=wrap;html=1;fontFamily='IBM%20Plex%20Sans%20Variable'%2Cui-sans-serif%2Csystem-ui%2Csans-serif;shape=component;fillColor=#64748b;strokeColor=#475569;fontColor=#f8fafc;likec4Technology=MCP%20%2B%20Hooks;likec4Icon=tech%3Aclaude;likec4ColorName=muted;likec4Size=md;likec4StrokeColor=%23475569;" vertex="1" parent="3">
+  
+  <mxGeometry height="180" width="330" x="40" y="61" as="geometry" />
+</mxCell>
+<mxCell id="7" value="&lt;div style=&quot;box-sizing:border-box;width:100%;min-height:100%;display:flex;align-items:center;justify-content:center;text-align:center;color:#f8fafc;font-family:&apos;IBM Plex Sans Variable&apos;,ui-sans-serif,system-ui,sans-serif;&quot;&gt;&lt;b style=&quot;font-size:19.2px;&quot;&gt;Codex CLI&lt;/b&gt;&lt;/div&gt;" style="align=center;verticalAlign=middle;verticalLabelPosition=middle;labelPosition=center;fontSize=19.2;fontStyle=1;spacingTop=4;spacingLeft=2;spacingRight=2;spacingBottom=2;overflow=fill;whiteSpace=wrap;html=1;fontFamily='IBM%20Plex%20Sans%20Variable'%2Cui-sans-serif%2Csystem-ui%2Csans-serif;shape=component;fillColor=#64748b;strokeColor=#475569;fontColor=#f8fafc;likec4Technology=MCP%20%2B%20Hooks;likec4Icon=tech%3Aopenai;likec4ColorName=muted;likec4Size=md;likec4StrokeColor=%23475569;" vertex="1" parent="3">
+  
+  <mxGeometry height="180" width="330" x="40" y="351" as="geometry" />
+</mxCell>
+<mxCell id="8" value="&lt;div style=&quot;box-sizing:border-box;width:100%;min-height:100%;display:flex;align-items:center;justify-content:center;text-align:center;color:#f8fafc;font-family:&apos;IBM Plex Sans Variable&apos;,ui-sans-serif,system-ui,sans-serif;&quot;&gt;&lt;b style=&quot;font-size:19.2px;&quot;&gt;Antigravity &amp;amp; Gemini&lt;/b&gt;&lt;/div&gt;" style="align=center;verticalAlign=middle;verticalLabelPosition=middle;labelPosition=center;fontSize=19.2;fontStyle=1;spacingTop=4;spacingLeft=2;spacingRight=2;spacingBottom=2;overflow=fill;whiteSpace=wrap;html=1;fontFamily='IBM%20Plex%20Sans%20Variable'%2Cui-sans-serif%2Csystem-ui%2Csans-serif;shape=component;fillColor=#64748b;strokeColor=#475569;fontColor=#f8fafc;likec4Technology=MCP%20%2B%20Hooks;likec4Icon=tech%3Agoogle-gemini;likec4ColorName=muted;likec4Size=md;likec4StrokeColor=%23475569;" vertex="1" parent="3">
+  
+  <mxGeometry height="180" width="330" x="40" y="641" as="geometry" />
+</mxCell>
+<mxCell id="9" value="&lt;div style=&quot;box-sizing:border-box;width:100%;min-height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;color:#f0f9ff;font-family:&apos;IBM Plex Sans Variable&apos;,ui-sans-serif,system-ui,sans-serif;&quot;&gt;&lt;b style=&quot;font-size:19.2px;&quot;&gt;Desktop Launcher (Preview)&lt;/b&gt;&lt;br/&gt;&lt;span style=&quot;font-weight:normal;font-size:19.2px;&quot;&gt;Tray panel, product toggles, unified search, code map, usage&lt;/span&gt;&lt;/div&gt;" style="align=center;verticalAlign=middle;verticalLabelPosition=middle;labelPosition=center;fontSize=19.2;fontStyle=1;spacingTop=4;spacingLeft=2;spacingRight=2;spacingBottom=2;overflow=fill;whiteSpace=wrap;html=1;fontFamily='IBM%20Plex%20Sans%20Variable'%2Cui-sans-serif%2Csystem-ui%2Csans-serif;shape=rectangle;rounded=1;arcSize=12;fillColor=#0284c7;strokeColor=#0369a1;fontColor=#f0f9ff;likec4Description=Tray%20panel%2C%20product%20toggles%2C%20unified%20search%2C%20code%20map%2C%20usage;likec4Technology=Tauri%202%20(Windows);likec4Icon=tech%3Atauri;likec4ColorName=secondary;likec4Size=md;likec4StrokeColor=%230369a1;" vertex="1" parent="4">
+  
+  <mxGeometry height="190" width="320" x="40" y="881" as="geometry" />
+</mxCell>
+<mxCell id="10" value="&lt;div style=&quot;box-sizing:border-box;width:100%;min-height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;color:#eff6ff;font-family:&apos;IBM Plex Sans Variable&apos;,ui-sans-serif,system-ui,sans-serif;&quot;&gt;&lt;b style=&quot;font-size:19.2px;&quot;&gt;CLI, MCP Server &amp;amp; Hooks&lt;/b&gt;&lt;br/&gt;&lt;span style=&quot;font-weight:normal;font-size:19.2px;&quot;&gt;Single entrypoint (8 tools, &amp;lt;5 KB); docs stay read-only&lt;/span&gt;&lt;/div&gt;" style="align=center;verticalAlign=middle;verticalLabelPosition=middle;labelPosition=center;fontSize=19.2;fontStyle=1;spacingTop=4;spacingLeft=2;spacingRight=2;spacingBottom=2;overflow=fill;whiteSpace=wrap;html=1;fontFamily='IBM%20Plex%20Sans%20Variable'%2Cui-sans-serif%2Csystem-ui%2Csans-serif;shape=component;fillColor=#3b82f6;strokeColor=#2563eb;fontColor=#eff6ff;likec4Description=Single%20entrypoint%20(8%20tools%2C%20%3C5%20KB)%3B%20docs%20stay%20read-only;likec4Technology=Rust%20%C2%B7%20MCP%20stdio%20%C2%B7%20Hooks;likec4Icon=tech%3Arust;likec4ColorName=primary;likec4Size=md;likec4StrokeColor=%232563eb;" vertex="1" parent="4">
+  
+  <mxGeometry height="180" width="330" x="648" y="886" as="geometry" />
+</mxCell>
+<mxCell id="11" value="&lt;div style=&quot;box-sizing:border-box;width:100%;min-height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;color:#eff6ff;font-family:&apos;IBM Plex Sans Variable&apos;,ui-sans-serif,system-ui,sans-serif;&quot;&gt;&lt;b style=&quot;font-size:19.2px;&quot;&gt;Footnote Library&lt;/b&gt;&lt;br/&gt;&lt;span style=&quot;font-weight:normal;font-size:19.2px;&quot;&gt;Cited hybrid search over local notes, PDFs, and docs cache&lt;/span&gt;&lt;/div&gt;" style="align=center;verticalAlign=middle;verticalLabelPosition=middle;labelPosition=center;fontSize=19.2;fontStyle=1;spacingTop=4;spacingLeft=2;spacingRight=2;spacingBottom=2;overflow=fill;whiteSpace=wrap;html=1;fontFamily='IBM%20Plex%20Sans%20Variable'%2Cui-sans-serif%2Csystem-ui%2Csans-serif;shape=component;fillColor=#3b82f6;strokeColor=#2563eb;fontColor=#eff6ff;likec4Description=Cited%20hybrid%20search%20over%20local%20notes%2C%20PDFs%2C%20and%20docs%20cache;likec4Technology=Tantivy%20BM25%20%2B%20int8%20ONNX;likec4Icon=tech%3Arust;likec4ColorName=primary;likec4Size=md;likec4StrokeColor=%232563eb;" vertex="1" parent="4">
+  
+  <mxGeometry height="180" width="330" x="1284" y="1176" as="geometry" />
+</mxCell>
+<mxCell id="12" value="&lt;div style=&quot;box-sizing:border-box;width:100%;min-height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;color:#eff6ff;font-family:&apos;IBM Plex Sans Variable&apos;,ui-sans-serif,system-ui,sans-serif;&quot;&gt;&lt;b style=&quot;font-size:19.2px;&quot;&gt;Footnote Memory&lt;/b&gt;&lt;br/&gt;&lt;span style=&quot;font-weight:normal;font-size:19.2px;&quot;&gt;Scoped preferences, decisions, fixes, and session handoffs&lt;/span&gt;&lt;/div&gt;" style="align=center;verticalAlign=middle;verticalLabelPosition=middle;labelPosition=center;fontSize=19.2;fontStyle=1;spacingTop=4;spacingLeft=2;spacingRight=2;spacingBottom=2;overflow=fill;whiteSpace=wrap;html=1;fontFamily='IBM%20Plex%20Sans%20Variable'%2Cui-sans-serif%2Csystem-ui%2Csans-serif;shape=component;fillColor=#3b82f6;strokeColor=#2563eb;fontColor=#eff6ff;likec4Description=Scoped%20preferences%2C%20decisions%2C%20fixes%2C%20and%20session%20handoffs;likec4Technology=SQLite%20%2B%20HMAC%20Daemon;likec4Icon=tech%3Arust;likec4ColorName=primary;likec4Size=md;likec4StrokeColor=%232563eb;" vertex="1" parent="4">
+  
+  <mxGeometry height="180" width="330" x="1284" y="886" as="geometry" />
+</mxCell>
+<mxCell id="13" value="&lt;div style=&quot;box-sizing:border-box;width:100%;min-height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;color:#eff6ff;font-family:&apos;IBM Plex Sans Variable&apos;,ui-sans-serif,system-ui,sans-serif;&quot;&gt;&lt;b style=&quot;font-size:19.2px;&quot;&gt;Footnote Code&lt;/b&gt;&lt;br/&gt;&lt;span style=&quot;font-weight:normal;font-size:19.2px;&quot;&gt;Definitions, callers/callees, impact radius, code-map, grep&lt;/span&gt;&lt;/div&gt;" style="align=center;verticalAlign=middle;verticalLabelPosition=middle;labelPosition=center;fontSize=19.2;fontStyle=1;spacingTop=4;spacingLeft=2;spacingRight=2;spacingBottom=2;overflow=fill;whiteSpace=wrap;html=1;fontFamily='IBM%20Plex%20Sans%20Variable'%2Cui-sans-serif%2Csystem-ui%2Csans-serif;shape=component;fillColor=#3b82f6;strokeColor=#2563eb;fontColor=#eff6ff;likec4Description=Definitions%2C%20callers%2Fcallees%2C%20impact%20radius%2C%20code-map%2C%20grep;likec4Technology=SCIP%20%2B%20Tree-sitter%20%2B%20rg;likec4Icon=tech%3Arust;likec4ColorName=primary;likec4Size=md;likec4StrokeColor=%232563eb;" vertex="1" parent="4">
+  
+  <mxGeometry height="180" width="330" x="1284" y="596" as="geometry" />
+</mxCell>
+<mxCell id="14" value="&lt;div style=&quot;box-sizing:border-box;width:100%;min-height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;color:#FFE0C2;font-family:&apos;IBM Plex Sans Variable&apos;,ui-sans-serif,system-ui,sans-serif;&quot;&gt;&lt;b style=&quot;font-size:19.2px;&quot;&gt;Footnote Lean&lt;/b&gt;&lt;br/&gt;&lt;span style=&quot;font-weight:normal;font-size:19.2px;&quot;&gt;Compacts noisy CLI output, keeps handles, tracks usage/gain&lt;/span&gt;&lt;/div&gt;" style="align=center;verticalAlign=middle;verticalLabelPosition=middle;labelPosition=center;fontSize=19.2;fontStyle=1;spacingTop=4;spacingLeft=2;spacingRight=2;spacingBottom=2;overflow=fill;whiteSpace=wrap;html=1;fontFamily='IBM%20Plex%20Sans%20Variable'%2Cui-sans-serif%2Csystem-ui%2Csans-serif;shape=component;fillColor=#A35829;strokeColor=#7E451D;fontColor=#FFE0C2;likec4Description=Compacts%20noisy%20CLI%20output%2C%20keeps%20handles%2C%20tracks%20usage%2Fgain;likec4Technology=Shell%20Filter%20%2B%20Telemetry;likec4Icon=tech%3Arust;likec4ColorName=amber;likec4Size=md;likec4StrokeColor=%237E451D;" vertex="1" parent="4">
+  
+  <mxGeometry height="180" width="330" x="1284" y="306" as="geometry" />
+</mxCell>
+<mxCell id="15" value="&lt;div style=&quot;box-sizing:border-box;width:100%;min-height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;color:#f8fafc;font-family:&apos;IBM Plex Sans Variable&apos;,ui-sans-serif,system-ui,sans-serif;&quot;&gt;&lt;b style=&quot;font-size:19.2px;&quot;&gt;Local State &amp;amp; Indexes&lt;/b&gt;&lt;br/&gt;&lt;span style=&quot;font-weight:normal;font-size:19.2px;&quot;&gt;memory.db, docs/, code/, corpora; SHA-256 &amp;amp; freshness per chunk&lt;/span&gt;&lt;/div&gt;" style="align=center;verticalAlign=middle;verticalLabelPosition=middle;labelPosition=center;fontSize=19.2;fontStyle=1;spacingTop=4;spacingLeft=2;spacingRight=2;spacingBottom=2;overflow=fill;whiteSpace=wrap;html=1;fontFamily='IBM%20Plex%20Sans%20Variable'%2Cui-sans-serif%2Csystem-ui%2Csans-serif;shape=cylinder3;whiteSpace=wrap;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#428a4f;strokeColor=#2d5d39;fontColor=#f8fafc;likec4Description=memory.db%2C%20docs%2F%2C%20code%2F%2C%20corpora%3B%20SHA-256%20%26%20freshness%20per%20chunk;likec4Technology=SQLite%20%2B%20Tantivy;likec4Icon=tech%3Asqlite;likec4ColorName=green;likec4Size=md;likec4StrokeColor=%232d5d39;" vertex="1" parent="4">
+  
+  <mxGeometry height="180" width="320" x="1935" y="1156" as="geometry" />
+</mxCell>
+<mxCell id="16" value="&lt;div style=&quot;box-sizing:border-box;width:100%;min-height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;color:#FFE0C2;font-family:&apos;IBM Plex Sans Variable&apos;,ui-sans-serif,system-ui,sans-serif;&quot;&gt;&lt;b style=&quot;font-size:19.2px;&quot;&gt;Audit Log &amp;amp; Output Handles&lt;/b&gt;&lt;br/&gt;&lt;span style=&quot;font-weight:normal;font-size:19.2px;&quot;&gt;Tamper-evident MCP log, lean.jsonl ledger, reversible raw outputs&lt;/span&gt;&lt;/div&gt;" style="align=center;verticalAlign=middle;verticalLabelPosition=middle;labelPosition=center;fontSize=19.2;fontStyle=1;spacingTop=4;spacingLeft=2;spacingRight=2;spacingBottom=2;overflow=fill;whiteSpace=wrap;html=1;fontFamily='IBM%20Plex%20Sans%20Variable'%2Cui-sans-serif%2Csystem-ui%2Csans-serif;shape=cylinder3;whiteSpace=wrap;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#A35829;strokeColor=#7E451D;fontColor=#FFE0C2;likec4Description=Tamper-evident%20MCP%20log%2C%20lean.jsonl%20ledger%2C%20reversible%20raw%20outputs;likec4Technology=Hash-Chained%20HMAC%20JSONL%20%2B%20outputs%2F;likec4ColorName=amber;likec4Size=md;likec4StrokeColor=%237E451D;" vertex="1" parent="4">
+  
+  <mxGeometry height="180" width="320" x="1935" y="61" as="geometry" />
+</mxCell>
+<mxCell id="17" value="&lt;div style=&quot;box-sizing:border-box;width:100%;min-height:100%;display:flex;align-items:center;justify-content:center;text-align:center;color:#f8fafc;font-family:&apos;IBM Plex Sans Variable&apos;,ui-sans-serif,system-ui,sans-serif;&quot;&gt;&lt;b style=&quot;font-size:19.2px;&quot;&gt;Model Manifests&lt;/b&gt;&lt;/div&gt;" style="align=center;verticalAlign=middle;verticalLabelPosition=middle;labelPosition=center;fontSize=19.2;fontStyle=1;spacingTop=4;spacingLeft=2;spacingRight=2;spacingBottom=2;overflow=fill;whiteSpace=wrap;html=1;fontFamily='IBM%20Plex%20Sans%20Variable'%2Cui-sans-serif%2Csystem-ui%2Csans-serif;shape=component;fillColor=#64748b;strokeColor=#475569;fontColor=#f8fafc;likec4Technology=SHA-256%20Verified%20ONNX;likec4ColorName=muted;likec4Size=md;likec4StrokeColor=%23475569;" vertex="1" parent="5">
+  
+  <mxGeometry height="180" width="330" x="40" y="61" as="geometry" />
+</mxCell>
+<mxCell id="18" value="&lt;div style=&quot;box-sizing:border-box;width:100%;min-height:100%;display:flex;align-items:center;justify-content:center;text-align:center;color:#f8fafc;font-family:&apos;IBM Plex Sans Variable&apos;,ui-sans-serif,system-ui,sans-serif;&quot;&gt;&lt;b style=&quot;font-size:19.2px;&quot;&gt;Docs Sites &amp;amp; Signed Bundles&lt;/b&gt;&lt;/div&gt;" style="align=center;verticalAlign=middle;verticalLabelPosition=middle;labelPosition=center;fontSize=19.2;fontStyle=1;spacingTop=4;spacingLeft=2;spacingRight=2;spacingBottom=2;overflow=fill;whiteSpace=wrap;html=1;fontFamily='IBM%20Plex%20Sans%20Variable'%2Cui-sans-serif%2Csystem-ui%2Csans-serif;shape=component;fillColor=#64748b;strokeColor=#475569;fontColor=#f8fafc;likec4Technology=HTTPS%20%C2%B7%20robots.txt%20%C2%B7%20objects.inv;likec4ColorName=muted;likec4Size=md;likec4StrokeColor=%23475569;" vertex="1" parent="5">
+  
+  <mxGeometry height="180" width="330" x="40" y="351" as="geometry" />
+</mxCell>
+<mxCell id="19" value="CLI commands" style="endArrow=block;startArrow=none;html=1;rounded=0;exitX=1;exitY=0.5;entryX=0;entryY=0.5;strokeColor=#8D8D8D;strokeWidth=2;dashed=1;fontColor=#C9C9C9;fontSize=12;align=center;verticalAlign=middle;labelBackgroundColor=none;fontFamily='IBM%20Plex%20Sans%20Variable'%2Cui-sans-serif%2Csystem-ui%2Csans-serif;" edge="1" parent="1" source="2" target="10">
+  <mxGeometry relative="1" as="geometry" />
+</mxCell>
+<mxCell id="20" value="Tray &amp; overview" style="endArrow=block;startArrow=none;html=1;rounded=0;exitX=0.5;exitY=0;entryX=0.5;entryY=1;strokeColor=#8D8D8D;strokeWidth=2;dashed=1;fontColor=#C9C9C9;fontSize=12;align=center;verticalAlign=middle;labelBackgroundColor=none;fontFamily='IBM%20Plex%20Sans%20Variable'%2Cui-sans-serif%2Csystem-ui%2Csans-serif;" edge="1" parent="1" source="2" target="9">
+  <mxGeometry relative="1" as="geometry" />
+</mxCell>
+<mxCell id="21" value="MCP stdio &amp; hooks" style="endArrow=block;startArrow=none;html=1;rounded=0;exitX=1;exitY=0.5;entryX=0;entryY=0.5;strokeColor=#8D8D8D;strokeWidth=2;dashed=1;fontColor=#C9C9C9;fontSize=12;align=center;verticalAlign=middle;labelBackgroundColor=none;fontFamily='IBM%20Plex%20Sans%20Variable'%2Cui-sans-serif%2Csystem-ui%2Csans-serif;" edge="1" parent="1" source="6" target="10">
+  <mxGeometry relative="1" as="geometry" />
+</mxCell>
+<mxCell id="22" value="MCP stdio &amp; hooks" style="endArrow=block;startArrow=none;html=1;rounded=0;exitX=0.5;exitY=0;entryX=0.5;entryY=1;strokeColor=#8D8D8D;strokeWidth=2;dashed=1;fontColor=#C9C9C9;fontSize=12;align=center;verticalAlign=middle;labelBackgroundColor=none;fontFamily='IBM%20Plex%20Sans%20Variable'%2Cui-sans-serif%2Csystem-ui%2Csans-serif;" edge="1" parent="1" source="7" target="10">
+  <mxGeometry relative="1" as="geometry" />
+</mxCell>
+<mxCell id="23" value="MCP stdio &amp; hooks" style="endArrow=block;startArrow=none;html=1;rounded=0;exitX=0.5;exitY=0;entryX=0.5;entryY=1;strokeColor=#8D8D8D;strokeWidth=2;dashed=1;fontColor=#C9C9C9;fontSize=12;align=center;verticalAlign=middle;labelBackgroundColor=none;fontFamily='IBM%20Plex%20Sans%20Variable'%2Cui-sans-serif%2Csystem-ui%2Csans-serif;" edge="1" parent="1" source="8" target="10">
+  <mxGeometry relative="1" as="geometry" />
+</mxCell>
+<mxCell id="24" value="Hybrid search &amp; docs cache" style="endArrow=block;startArrow=none;html=1;rounded=0;exitX=1;exitY=0.5;entryX=0;entryY=0.5;strokeColor=#8D8D8D;strokeWidth=2;dashed=1;fontColor=#C9C9C9;fontSize=12;align=center;verticalAlign=middle;labelBackgroundColor=none;fontFamily='IBM%20Plex%20Sans%20Variable'%2Cui-sans-serif%2Csystem-ui%2Csans-serif;" edge="1" parent="1" source="10" target="11">
+  <mxGeometry relative="1" as="geometry" />
+</mxCell>
+<mxCell id="25" value="Pack, recall, remember" style="endArrow=block;startArrow=none;html=1;rounded=0;exitX=1;exitY=0.5;entryX=0;entryY=0.5;strokeColor=#8D8D8D;strokeWidth=2;dashed=1;fontColor=#C9C9C9;fontSize=12;align=center;verticalAlign=middle;labelBackgroundColor=none;fontFamily='IBM%20Plex%20Sans%20Variable'%2Cui-sans-serif%2Csystem-ui%2Csans-serif;" edge="1" parent="1" source="10" target="12">
+  <mxGeometry relative="1" as="geometry" />
+</mxCell>
+<mxCell id="26" value="Lookup, impact, map, grep" style="endArrow=block;startArrow=none;html=1;rounded=0;exitX=1;exitY=0.5;entryX=0;entryY=0.5;strokeColor=#8D8D8D;strokeWidth=2;dashed=1;fontColor=#C9C9C9;fontSize=12;align=center;verticalAlign=middle;labelBackgroundColor=none;fontFamily='IBM%20Plex%20Sans%20Variable'%2Cui-sans-serif%2Csystem-ui%2Csans-serif;" edge="1" parent="1" source="10" target="13">
+  <mxGeometry relative="1" as="geometry" />
+</mxCell>
+<mxCell id="27" value="Run filter, usage, gain" style="endArrow=block;startArrow=none;html=1;rounded=0;exitX=1;exitY=0.5;entryX=0;entryY=0.5;strokeColor=#8D8D8D;strokeWidth=2;dashed=1;fontColor=#C9C9C9;fontSize=12;align=center;verticalAlign=middle;labelBackgroundColor=none;fontFamily='IBM%20Plex%20Sans%20Variable'%2Cui-sans-serif%2Csystem-ui%2Csans-serif;" edge="1" parent="1" source="10" target="14">
+  <mxGeometry relative="1" as="geometry" />
+</mxCell>
+<mxCell id="28" value="HMAC-chained MCP audit" style="endArrow=block;startArrow=none;html=1;rounded=0;exitX=1;exitY=0.5;entryX=0;entryY=0.5;strokeColor=#8D8D8D;strokeWidth=2;dashed=1;fontColor=#C9C9C9;fontSize=12;align=center;verticalAlign=middle;labelBackgroundColor=none;fontFamily='IBM%20Plex%20Sans%20Variable'%2Cui-sans-serif%2Csystem-ui%2Csans-serif;" edge="1" parent="1" source="10" target="16">
+  <mxGeometry relative="1" as="geometry" />
+</mxCell>
+<mxCell id="29" value="Read-only CLI &amp; toggles" style="endArrow=block;startArrow=none;html=1;rounded=0;exitX=1;exitY=0.5;entryX=0;entryY=0.5;strokeColor=#8D8D8D;strokeWidth=2;dashed=1;fontColor=#C9C9C9;fontSize=12;align=center;verticalAlign=middle;labelBackgroundColor=none;fontFamily='IBM%20Plex%20Sans%20Variable'%2Cui-sans-serif%2Csystem-ui%2Csans-serif;" edge="1" parent="1" source="9" target="10">
+  <mxGeometry relative="1" as="geometry" />
+</mxCell>
+<mxCell id="30" value="Read/write corpora &amp; vectors" style="endArrow=block;startArrow=none;html=1;rounded=0;exitX=1;exitY=0.5;entryX=0;entryY=0.5;strokeColor=#8D8D8D;strokeWidth=2;dashed=1;fontColor=#C9C9C9;fontSize=12;align=center;verticalAlign=middle;labelBackgroundColor=none;fontFamily='IBM%20Plex%20Sans%20Variable'%2Cui-sans-serif%2Csystem-ui%2Csans-serif;" edge="1" parent="1" source="11" target="15">
+  <mxGeometry relative="1" as="geometry" />
+</mxCell>
+<mxCell id="31" value="Read/write memory.db" style="endArrow=block;startArrow=none;html=1;rounded=0;exitX=1;exitY=0.5;entryX=0;entryY=0.5;strokeColor=#8D8D8D;strokeWidth=2;dashed=1;fontColor=#C9C9C9;fontSize=12;align=center;verticalAlign=middle;labelBackgroundColor=none;fontFamily='IBM%20Plex%20Sans%20Variable'%2Cui-sans-serif%2Csystem-ui%2Csans-serif;" edge="1" parent="1" source="12" target="15">
+  <mxGeometry relative="1" as="geometry" />
+</mxCell>
+<mxCell id="32" value="Read/write code/*.db" style="endArrow=block;startArrow=none;html=1;rounded=0;exitX=1;exitY=0.5;entryX=0;entryY=0.5;strokeColor=#8D8D8D;strokeWidth=2;dashed=1;fontColor=#C9C9C9;fontSize=12;align=center;verticalAlign=middle;labelBackgroundColor=none;fontFamily='IBM%20Plex%20Sans%20Variable'%2Cui-sans-serif%2Csystem-ui%2Csans-serif;" edge="1" parent="1" source="13" target="15">
+  <mxGeometry relative="1" as="geometry" />
+</mxCell>
+<mxCell id="33" value="Raw handles &amp; lean.jsonl" style="endArrow=block;startArrow=none;html=1;rounded=0;exitX=1;exitY=0.5;entryX=0;entryY=0.5;strokeColor=#8D8D8D;strokeWidth=2;dashed=1;fontColor=#C9C9C9;fontSize=12;align=center;verticalAlign=middle;labelBackgroundColor=none;fontFamily='IBM%20Plex%20Sans%20Variable'%2Cui-sans-serif%2Csystem-ui%2Csans-serif;" edge="1" parent="1" source="14" target="16">
+  <mxGeometry relative="1" as="geometry" />
+</mxCell>
+<mxCell id="34" value="models install only" style="endArrow=block;startArrow=none;html=1;rounded=0;exitX=1;exitY=0.5;entryX=0;entryY=0.5;strokeColor=#8D8D8D;strokeWidth=2;dashed=1;fontColor=#C9C9C9;fontSize=12;align=center;verticalAlign=middle;labelBackgroundColor=none;fontFamily='IBM%20Plex%20Sans%20Variable'%2Cui-sans-serif%2Csystem-ui%2Csans-serif;" edge="1" parent="1" source="11" target="17">
+  <mxGeometry relative="1" as="geometry" />
+</mxCell>
+<mxCell id="35" value="docs add / refresh / miss" style="endArrow=block;startArrow=none;html=1;rounded=0;exitX=1;exitY=0.5;entryX=0;entryY=0.5;strokeColor=#8D8D8D;strokeWidth=2;dashed=1;fontColor=#C9C9C9;fontSize=12;align=center;verticalAlign=middle;labelBackgroundColor=none;fontFamily='IBM%20Plex%20Sans%20Variable'%2Cui-sans-serif%2Csystem-ui%2Csans-serif;" edge="1" parent="1" source="11" target="18">
+  <mxGeometry relative="1" as="geometry" />
+</mxCell>
+<mxCell id="36" value="Prompts &amp; reviews" style="endArrow=block;startArrow=none;html=1;rounded=0;exitX=1;exitY=0.5;entryX=0;entryY=0.5;strokeColor=#8D8D8D;strokeWidth=2;dashed=1;fontColor=#C9C9C9;fontSize=12;align=center;verticalAlign=middle;labelBackgroundColor=none;fontFamily='IBM%20Plex%20Sans%20Variable'%2Cui-sans-serif%2Csystem-ui%2Csans-serif;" edge="1" parent="1" source="2" target="3">
+  <mxGeometry relative="1" as="geometry" />
+</mxCell>
+      </root>
+    </mxGraphModel></diagram>
+</mxfile>
